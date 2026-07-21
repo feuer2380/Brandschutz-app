@@ -132,6 +132,15 @@
   .stat .l{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
   .statrow{display:flex; gap:10px; margin-bottom:16px;}
 
+  .status-badge{display:inline-block; padding:4px 10px; border-radius:12px; font-weight:bold; font-size:.85rem; color:#fff;}
+  .status-gruen{background-color:#2e7d32;}
+  .status-gelb{background-color:#f57f17;}
+  .status-rot{background-color:#c62828;}
+
+  .filter-bar{display:flex; gap:8px; margin-bottom:15px; flex-wrap:wrap;}
+  .filter-btn{padding:8px 12px; border:1px solid var(--line); border-radius:6px; background-color:#f5f5f5; cursor:pointer; font-size:13px; font-family:inherit; color:var(--ink);}
+  .filter-btn.active{background-color:var(--ember-dark); color:#fff; border-color:var(--ember-dark);}
+
   .bericht-brief{background:#fff;}
   .bericht-kopf{
     background:var(--ink); border-radius:8px; padding:14px 16px; margin-bottom:6px;
@@ -242,7 +251,9 @@ var state = {
   kunden: [],
   geraete: [],
   pruefungen: [],
-  kundenSuche: ''
+  kundenSuche: '',
+  pruefungFilter: 'alle',
+  geraeteFilter: 'alle'
 };
 
 function loadAll(cb){
@@ -359,6 +370,38 @@ function renderDashboard(){
       html += '</div>';
     });
   }
+
+  html += '<div class="section-title">Alle Geräte</div>';
+  var geraeteFilter = state.geraeteFilter || 'alle';
+  html += '<div class="filter-bar">';
+  html += '<button class="filter-btn' + (geraeteFilter === 'alle' ? ' active' : '') + '" data-geraetefilter="alle">Alle Geräte</button>';
+  html += '<button class="filter-btn' + (geraeteFilter === 'faellig' ? ' active' : '') + '" data-geraetefilter="faellig">&#9888; Fällige Löscher</button>';
+  html += '<button class="filter-btn' + (geraeteFilter === 'ok' ? ' active' : '') + '" data-geraetefilter="ok">&#10003; Aktuell</button>';
+  html += '</div>';
+
+  var alleGeraete = state.geraete.filter(function(g){ return !g.ausgeschieden; });
+  var gefiltert = alleGeraete.filter(function(g){
+    var st = statusForDate(g.naechstePruefung);
+    if(geraeteFilter === 'alle') return true;
+    if(geraeteFilter === 'faellig') return st.cls === 'warn' || st.cls === 'soon';
+    if(geraeteFilter === 'ok') return st.cls === 'ok';
+    return true;
+  });
+
+  if(gefiltert.length === 0){
+    html += '<div class="empty">Keine Geräte in dieser Kategorie</div>';
+  } else {
+    gefiltert.forEach(function(g){
+      var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+      var st = statusForDate(g.naechstePruefung);
+      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
+      html += '<div class="row"><h3>' + escapeHtml(g.typ) + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+      html += '<div class="meta">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+      html += '<div class="meta">Letzte Prüfung: ' + (g.letztePruefung ? fmtDate(g.letztePruefung) : 'Unbekannt') + '</div>';
+      html += '</div>';
+    });
+  }
+
   return html;
 }
 
@@ -477,6 +520,13 @@ function renderGeraetCheck(geraetId){
   return html;
 }
 
+function naechsterTerminNach(datumIso, intervallMonate){
+  var basis = datumIso ? new Date(datumIso) : new Date();
+  var monate = intervallMonate || 24;
+  basis.setMonth(basis.getMonth() + monate);
+  return basis.toISOString().substring(0,10);
+}
+
 function checkAbschliessen(geraetId, ergebnis){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   var bemerkungEl = document.getElementById('checkBemerkung');
@@ -504,7 +554,15 @@ function checkAbschliessen(geraetId, ergebnis){
         loadAll(function(){ state.tab = 'berichte'; render(); toast('Gerät ausgeschieden und Prüfung dokumentiert'); });
       });
     } else {
-      loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); });
+      if(ergebnis === 'in_ordnung'){
+        g.letztePruefung = jetztIso.substring(0,10);
+        g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+        dbPut('geraete', g, function(){
+          loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
+        });
+      } else {
+        loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); });
+      }
     }
   });
 }
@@ -593,12 +651,30 @@ function renderKundeDetail(kundeId){
 function renderPruefungen(){
   var html = '';
   var sorted = state.pruefungen.slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
-  var offen = sorted.filter(function(p){ return !p.erledigt; });
+  var offenAlle = sorted.filter(function(p){ return !p.erledigt; });
   var erledigt = sorted.filter(function(p){ return p.erledigt; });
+
+  var filter = state.pruefungFilter || 'alle';
+  var filterOptionen = [
+    {key:'alle', label:'Alle'},
+    {key:'warn', label:'Überfällig'},
+    {key:'soon', label:'Bald fällig'},
+    {key:'ok', label:'In Ordnung'}
+  ];
+  html += '<div class="filter-bar">';
+  filterOptionen.forEach(function(f){
+    html += '<button class="filter-btn' + (filter === f.key ? ' active' : '') + '" data-filter="' + f.key + '">' + f.label + '</button>';
+  });
+  html += '</div>';
+
+  var offen = offenAlle.filter(function(p){
+    if(filter === 'alle') return true;
+    return statusForDate(p.datum).cls === filter;
+  });
 
   html += '<div class="section-title">Offen</div>';
   if(offen.length === 0){
-    html += '<div class="empty">Keine offenen Prüfungen</div>';
+    html += '<div class="empty">Keine offenen Prüfungen' + (filter !== 'alle' ? ' in dieser Kategorie' : '') + '</div>';
   } else {
     offen.forEach(function(p){
       var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
@@ -877,6 +953,12 @@ function modalGeraetBearbeiten(geraetId){
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
+  html += '<label>Prüfintervall (bei "In Ordnung" im Scan wird der naechste Termin automatisch so weit vorgesetzt)</label>';
+  html += '<select id="fIntervall">';
+  [12,24,36].forEach(function(m){
+    html += '<option value="' + m + '"' + ((g.intervallMonate||24) === m ? ' selected' : '') + '>' + m + ' Monate</option>';
+  });
+  html += '</select>';
   var bjStatus = baujahrStatus(g.baujahr);
   if(bjStatus){
     html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Innenrevisionen: ' + (g.baujahr+6) + ', ' + (g.baujahr+12) + ', ' + (g.baujahr+18) + ' &middot; Ausscheiden: ' + bjStatus.ausscheideJahr + '</div></div>';
@@ -899,6 +981,7 @@ function modalGeraetBearbeiten(geraetId){
     var alteDatum = g.naechstePruefung;
     g.typ = typ;
     g.baujahr = baujahrVal ? parseInt(baujahrVal, 10) : null;
+    g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
     g.standort = document.getElementById('fStandort').value.trim();
     g.naechstePruefung = datum || null;
@@ -1019,6 +1102,8 @@ function modalNeuesGeraet(kundeId){
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date">';
+  html += '<label>Prüfintervall</label>';
+  html += '<select id="fIntervall"><option value="12">12 Monate</option><option value="24" selected>24 Monate</option><option value="36">36 Monate</option></select>';
   html += '<button class="btn block" id="fSave">Gerät speichern</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -1032,6 +1117,7 @@ function modalNeuesGeraet(kundeId){
       kundeId: kundeId,
       typ: typ,
       baujahr: baujahrVal ? parseInt(baujahrVal, 10) : null,
+      intervallMonate: parseInt(document.getElementById('fIntervall').value, 10),
       seriennummer: document.getElementById('fSeriennr').value.trim(),
       standort: document.getElementById('fStandort').value.trim(),
       naechstePruefung: datum || null
@@ -1257,6 +1343,17 @@ function bindDynamic(){
 
   var addGeraet = document.getElementById('addGeraetBtn');
   if(addGeraet) addGeraet.onclick = function(){ modalNeuesGeraet(state.activeKundeId); };
+
+  document.querySelectorAll('.filter-btn').forEach(function(b){
+    b.onclick = function(){
+      if(b.hasAttribute('data-geraetefilter')){
+        state.geraeteFilter = b.getAttribute('data-geraetefilter');
+      } else {
+        state.pruefungFilter = b.getAttribute('data-filter');
+      }
+      render();
+    };
+  });
 
   var exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportAlleDaten;
