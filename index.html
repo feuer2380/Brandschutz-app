@@ -828,7 +828,7 @@ function qrMitRand(targetId){
     if(!qrDiv) return;
     var innerCanvas = qrDiv.querySelector('canvas');
     if(!innerCanvas) return;
-    var rand = 28;
+    var rand = Math.round(innerCanvas.width * 0.14);
     var bordered = document.createElement('canvas');
     bordered.width = innerCanvas.width + rand*2;
     bordered.height = innerCanvas.height + rand*2;
@@ -836,10 +836,13 @@ function qrMitRand(targetId){
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, bordered.width, bordered.height);
     ctx.drawImage(innerCanvas, rand, rand);
-    bordered.style.maxWidth = '100%';
-    bordered.style.height = 'auto';
+    var img = document.createElement('img');
+    img.src = bordered.toDataURL('image/png');
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.display = 'block';
     qrDiv.innerHTML = '';
-    qrDiv.appendChild(bordered);
+    qrDiv.appendChild(img);
   }, 60);
 }
 
@@ -856,8 +859,9 @@ function modalQrGeraet(geraetId){
   try{
     new QRCode(document.getElementById('qrTarget'), {
       text: 'BSV-GERAET:' + g.id,
-      width: 200,
-      height: 200
+      width: 500,
+      height: 500,
+      correctLevel: QRCode.CorrectLevel.H
     });
     qrMitRand('qrTarget');
   } catch(e){
@@ -1193,8 +1197,9 @@ function modalQrKunde(kundeId){
   try{
     new QRCode(document.getElementById('qrTarget'), {
       text: 'BSV-KUNDE:' + k.id,
-      width: 200,
-      height: 200
+      width: 500,
+      height: 500,
+      correctLevel: QRCode.CorrectLevel.H
     });
     qrMitRand('qrTarget');
   } catch(e){
