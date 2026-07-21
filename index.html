@@ -11,7 +11,7 @@
 <title>Brandschutzverwaltung</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='38' fill='%231a1410'/%3E%3Cpath d='M90 30 C60 65 55 85 55 105 C55 128 70 145 90 145 C110 145 125 128 125 105 C125 92 118 80 108 68 C110 82 105 90 98 92 C102 78 95 60 90 30 Z' fill='%23e8541f'/%3E%3Cpath d='M90 70 C78 90 76 100 76 110 C76 121 82 129 90 129 C98 129 104 121 104 110 C104 104 101 98 96 92 C97 99 94 103 90 104 C93 96 89 84 90 70 Z' fill='%23f5a623'/%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
     --ink:#1a1410;
@@ -124,7 +124,9 @@
     font-size:14px; cursor:pointer;
   }
   .device-item:last-child{border-bottom:none;}
-  .qr-box{background:#fff; padding:14px; border-radius:8px; display:flex; justify-content:center; margin:10px 0;}
+  .qr-box{background:#fff; padding:14px; border-radius:8px; display:flex; justify-content:center; margin:18px 0 10px 0;}
+  .qr-hinweis{-webkit-user-select:none; user-select:none;}
+  .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center;}
   .stat .n{font-size:26px; font-family:Georgia,serif; color:var(--ember-dark);}
   .stat .l{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
@@ -361,15 +363,13 @@ function renderDashboard(){
 }
 
 // ---------- Scan ----------
-var scannerAktiv = false;
-var scannerStream = null;
-var scannerRaf = null;
+var scannerInstance = null;
+var scannerLaeuft = false;
 
 function renderScan(){
   var html = '';
   html += '<div class="card" style="text-align:center; padding:10px;">';
-  html += '<video id="scanVideo" playsinline autoplay muted style="width:100%; border-radius:8px; background:#000; max-height:340px; object-fit:cover;"></video>';
-  html += '<canvas id="scanCanvas" style="display:none;"></canvas>';
+  html += '<div id="reader" style="width:100%; border-radius:8px; overflow:hidden;"></div>';
   html += '<div class="meta" id="scanStatus" style="margin-top:10px;">Kamera wird gestartet...</div>';
   html += '</div>';
   html += '<div class="section-title">Oder Code manuell eingeben</div>';
@@ -379,48 +379,45 @@ function renderScan(){
 }
 
 function stopScanner(){
-  scannerAktiv = false;
-  if(scannerRaf) cancelAnimationFrame(scannerRaf);
-  scannerRaf = null;
-  if(scannerStream){
-    scannerStream.getTracks().forEach(function(t){ t.stop(); });
-    scannerStream = null;
+  if(scannerInstance && scannerLaeuft){
+    scannerLaeuft = false;
+    scannerInstance.stop().then(function(){
+      scannerInstance.clear();
+      scannerInstance = null;
+    }).catch(function(){
+      scannerInstance = null;
+    });
   }
 }
 
 function startScanner(){
-  var video = document.getElementById('scanVideo');
   var statusEl = document.getElementById('scanStatus');
-  if(!video) return;
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  var readerDiv = document.getElementById('reader');
+  if(!readerDiv || typeof Html5Qrcode === 'undefined'){
     if(statusEl) statusEl.textContent = 'Kamera in dieser Umgebung nicht verfügbar - bitte Code manuell eingeben.';
     return;
   }
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream){
-    scannerStream = stream;
-    video.srcObject = stream;
-    scannerAktiv = true;
-    if(statusEl) statusEl.textContent = 'Halte den QR-Code auf dem Gerät vor die Kamera';
-    var canvas = document.getElementById('scanCanvas');
-    var ctx = canvas.getContext('2d');
-    function tick(){
-      if(!scannerAktiv) return;
-      if(video.readyState === video.HAVE_ENOUGH_DATA){
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        var code = null;
-        try{ code = jsQR(imgData.data, imgData.width, imgData.height); } catch(e){}
-        if(code && code.data){
-          verarbeiteScan(code.data);
-          return;
-        }
+  scannerInstance = new Html5Qrcode('reader');
+  scannerInstance.start(
+    { facingMode: 'environment' },
+    {
+      fps: 15,
+      qrbox: { width: 250, height: 250 },
+      videoConstraints: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'environment'
       }
-      scannerRaf = requestAnimationFrame(tick);
-    }
-    scannerRaf = requestAnimationFrame(tick);
-  }).catch(function(err){
+    },
+    function(decodedText){
+      if(!scannerLaeuft) return;
+      verarbeiteScan(decodedText);
+    },
+    function(){ /* noch nicht erkannt, ignorieren */ }
+  ).then(function(){
+    scannerLaeuft = true;
+    if(statusEl) statusEl.textContent = 'Halte den QR-Code auf dem Gerät vor die Kamera';
+  }).catch(function(){
     if(statusEl) statusEl.textContent = 'Kein Kamerazugriff möglich. Bitte Code unten manuell eingeben.';
   });
 }
@@ -442,7 +439,7 @@ function verarbeiteScan(text){
   var g = state.geraete.filter(function(x){ return x.id === id; })[0];
   if(!g){
     toast('Kein Gerät mit diesem Code gefunden');
-    startScanner();
+    setTimeout(startScanner, 400);
     return;
   }
   state.activeGeraetId = g.id;
@@ -852,7 +849,7 @@ function modalQrGeraet(geraetId){
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
-  html += '<div class="meta" style="margin-bottom:6px;">Beim Speichern/Drucken: weißen Rand nicht wegschneiden, sonst erkennt die Kamera den Code nicht.</div>';
+  html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Weißen Rand beim Zuschneiden nicht wegschneiden.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -1190,7 +1187,7 @@ function modalQrKunde(kundeId){
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(k.name) + '</div>';
-  html += '<div class="meta" style="margin-bottom:6px;">Beim Speichern/Drucken: weißen Rand nicht wegschneiden, sonst erkennt die Kamera den Code nicht.</div>';
+  html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Weißen Rand beim Zuschneiden nicht wegschneiden.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
