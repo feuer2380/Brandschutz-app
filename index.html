@@ -328,7 +328,7 @@ function renderDashboard(){
   html += '<div class="stat"><div class="n" style="color:' + (ueberfaellig.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaellig.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
 
-  html += '<div class="section-title">Diesen Monat zu pruefen (' + monatNamen[jetzt.getMonth()] + ')</div>';
+  html += '<div class="section-title">Diesen Monat zu prüfen (' + monatNamen[jetzt.getMonth()] + ')</div>';
   if(diesenMonat.length === 0){
     html += '<div class="empty"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
   } else {
@@ -663,7 +663,59 @@ function renderBerichte(){
       html += '</div>';
     });
   }
+
+  html += '<div class="section-title">Daten sichern &amp; übertragen</div>';
+  html += '<div class="card">';
+  html += '<div class="meta" style="margin-bottom:10px;">Beim Wechsel auf eine neue Adresse (z.B. neue Web-Version) werden gespeicherte Daten nicht automatisch mitgenommen. Hier kannst du sie exportieren und auf der neuen Adresse wieder einspielen.</div>';
+  html += '<button class="btn block secondary" id="exportBtn">Daten sichern (Backup-Datei erstellen)</button>';
+  html += '<button class="btn block secondary" id="importBtn" style="margin-top:10px;">Backup-Datei wiederherstellen</button>';
+  html += '<input type="file" id="importFile" accept="application/json" style="display:none;">';
+  html += '</div>';
+
   return html;
+}
+
+function exportAlleDaten(){
+  var daten = { kunden: state.kunden, geraete: state.geraete, pruefungen: state.pruefungen, exportDatum: new Date().toISOString() };
+  var json = JSON.stringify(daten, null, 2);
+  var blob = new Blob([json], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'brandschutz-backup-' + new Date().toISOString().substring(0,10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+}
+
+function importAlleDaten(file){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var daten;
+    try{
+      daten = JSON.parse(e.target.result);
+    } catch(err){
+      toast('Datei konnte nicht gelesen werden');
+      return;
+    }
+    var aufgaben = [];
+    (daten.kunden || []).forEach(function(k){ aufgaben.push({ store:'kunden', obj:k }); });
+    (daten.geraete || []).forEach(function(g){ aufgaben.push({ store:'geraete', obj:g }); });
+    (daten.pruefungen || []).forEach(function(p){ aufgaben.push({ store:'pruefungen', obj:p }); });
+    var i = 0;
+    function next(){
+      if(i >= aufgaben.length){
+        loadAll(function(){ render(); toast('Backup eingespielt: ' + aufgaben.length + ' Eintraege'); });
+        return;
+      }
+      var a = aufgaben[i];
+      i++;
+      dbPut(a.store, a.obj, next);
+    }
+    next();
+  };
+  reader.readAsText(file);
 }
 
 function escapeHtml(s){
@@ -770,12 +822,34 @@ function modalKundeBearbeiten(kundeId){
   };
 }
 
+function qrMitRand(targetId){
+  setTimeout(function(){
+    var qrDiv = document.getElementById(targetId);
+    if(!qrDiv) return;
+    var innerCanvas = qrDiv.querySelector('canvas');
+    if(!innerCanvas) return;
+    var rand = 28;
+    var bordered = document.createElement('canvas');
+    bordered.width = innerCanvas.width + rand*2;
+    bordered.height = innerCanvas.height + rand*2;
+    var ctx = bordered.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, bordered.width, bordered.height);
+    ctx.drawImage(innerCanvas, rand, rand);
+    bordered.style.maxWidth = '100%';
+    bordered.style.height = 'auto';
+    qrDiv.innerHTML = '';
+    qrDiv.appendChild(bordered);
+  }, 60);
+}
+
 function modalQrGeraet(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+  html += '<div class="meta" style="margin-bottom:6px;">Beim Speichern/Drucken: weißen Rand nicht wegschneiden, sonst erkennt die Kamera den Code nicht.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -785,6 +859,7 @@ function modalQrGeraet(geraetId){
       width: 200,
       height: 200
     });
+    qrMitRand('qrTarget');
   } catch(e){
     document.getElementById('qrTarget').innerHTML = '<div class="meta">QR-Code konnte nicht geladen werden (offline)</div>';
   }
@@ -1111,6 +1186,7 @@ function modalQrKunde(kundeId){
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(k.name) + '</div>';
+  html += '<div class="meta" style="margin-bottom:6px;">Beim Speichern/Drucken: weißen Rand nicht wegschneiden, sonst erkennt die Kamera den Code nicht.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -1120,6 +1196,7 @@ function modalQrKunde(kundeId){
       width: 200,
       height: 200
     });
+    qrMitRand('qrTarget');
   } catch(e){
     document.getElementById('qrTarget').innerHTML = '<div class="meta">QR-Code konnte nicht geladen werden (offline)</div>';
   }
@@ -1178,6 +1255,22 @@ function bindDynamic(){
 
   var addGeraet = document.getElementById('addGeraetBtn');
   if(addGeraet) addGeraet.onclick = function(){ modalNeuesGeraet(state.activeKundeId); };
+
+  var exportBtn = document.getElementById('exportBtn');
+  if(exportBtn) exportBtn.onclick = exportAlleDaten;
+
+  var importBtn = document.getElementById('importBtn');
+  var importFile = document.getElementById('importFile');
+  if(importBtn && importFile){
+    importBtn.onclick = function(){ importFile.click(); };
+    importFile.onchange = function(){
+      if(importFile.files && importFile.files[0]){
+        customConfirm('Backup einspielen? Vorhandene Eintraege mit gleicher ID werden ueberschrieben, alles andere bleibt erhalten.', function(){
+          importAlleDaten(importFile.files[0]);
+        });
+      }
+    };
+  }
 
   var editKunde = document.getElementById('editKundeBtn');
   if(editKunde) editKunde.onclick = function(){ modalKundeBearbeiten(state.activeKundeId); };
