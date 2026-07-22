@@ -192,7 +192,7 @@ var LOGO_DATA = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAYABgAAD/4QDsRXhpZgAA
 
 // ---------- DB ----------
 var DB_NAME = 'bsv_db';
-var DB_VERSION = 1;
+var DB_VERSION = 2;
 var db = null;
 
 function openDb(cb){
@@ -209,6 +209,10 @@ function openDb(cb){
     if(!d.objectStoreNames.contains('pruefungen')){
       var ps = d.createObjectStore('pruefungen', {keyPath:'id'});
       ps.createIndex('kundeId', 'kundeId', {unique:false});
+    }
+    if(!d.objectStoreNames.contains('sammelberichte')){
+      var ss = d.createObjectStore('sammelberichte', {keyPath:'id'});
+      ss.createIndex('kundeId', 'kundeId', {unique:false});
     }
   };
   req.onsuccess = function(e){
@@ -251,6 +255,7 @@ var state = {
   kunden: [],
   geraete: [],
   pruefungen: [],
+  sammelberichte: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
   geraeteFilter: 'alle'
@@ -263,7 +268,10 @@ function loadAll(cb){
       state.geraete = g;
       dbGetAll('pruefungen', function(p){
         state.pruefungen = p;
-        cb();
+        dbGetAll('sammelberichte', function(s){
+          state.sammelberichte = s;
+          cb();
+        });
       });
     });
   });
@@ -637,12 +645,15 @@ function renderKundeDetail(kundeId){
   if(geraete.length === 0){
     html += '<div class="empty">Keine Geräte erfasst</div>';
   } else {
+    var geraeteSortiert = geraete.slice().sort(function(a,b){
+      return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
+    });
     html += '<div class="card">';
-    geraete.forEach(function(g){
+    geraeteSortiert.forEach(function(g, idx){
       var st = statusForDate(g.naechstePruefung);
       var bj = baujahrStatus(g.baujahr);
       html += '<div class="device-item" data-gid="' + g.id + '">';
-      html += '<div><strong>' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
       html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
       if(bj) html += '<span class="badge ' + bj.cls + '">' + bj.label + '</span>';
@@ -653,7 +664,8 @@ function renderKundeDetail(kundeId){
     html += '</div>';
   }
 
-  html += '<button class="btn block secondary" style="margin-top:14px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
+  html += '<button class="btn block" style="margin-top:14px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
   return html;
 }
@@ -730,6 +742,21 @@ function renderBerichte(){
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>' + (p.ergebnis ? '<span class="badge ' + ergCls + '">' + escapeHtml(p.ergebnis) + '</span>' : '') + '</div>';
       html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
       html += '<button class="btn small secondary" style="margin-top:8px;" data-viewbericht="' + p.id + '">Bericht ansehen</button>';
+      html += '</div>';
+    });
+  }
+
+  html += '<div class="section-title">Sammelberichte</div>';
+  var sammelSortiert = state.sammelberichte.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+  if(sammelSortiert.length === 0){
+    html += '<div class="empty">Noch keine Sammelberichte erstellt</div>';
+  } else {
+    sammelSortiert.forEach(function(sb){
+      var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
+      html += '<div class="card">';
+      html += '<h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
+      html += '<div class="meta">' + (sb.geraeteSnapshot ? sb.geraeteSnapshot.length : 0) + ' Geräte &middot; ' + fmtDate(sb.datum) + '</div>';
+      html += '<button class="btn small secondary" style="margin-top:8px;" data-viewsammelbericht="' + sb.id + '">Bericht ansehen</button>';
       html += '</div>';
     });
   }
@@ -1129,6 +1156,7 @@ function modalNeuesGeraet(kundeId){
       typ: typ,
       baujahr: baujahrVal ? parseInt(baujahrVal, 10) : null,
       intervallMonate: parseInt(document.getElementById('fIntervall').value, 10),
+      erstelltAm: new Date().toISOString(),
       seriennummer: document.getElementById('fSeriennr').value.trim(),
       standort: document.getElementById('fStandort').value.trim(),
       naechstePruefung: datum || null
@@ -1305,6 +1333,138 @@ function modalBerichtAnsicht(pruefungId){
   };
 }
 
+function modalSammelbericht(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var geraeteAlle = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+  var geraeteSortiert = geraeteAlle.slice().sort(function(a,b){
+    return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
+  });
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+
+  if(geraeteSortiert.length === 0){
+    html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
+  } else {
+    html += '<div class="card">';
+    geraeteSortiert.forEach(function(g, idx){
+      var st = statusForDate(g.naechstePruefung);
+      html += '<div class="device-item">';
+      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '<label style="margin-top:12px;">Allgemeine Bemerkung (optional)</label><textarea id="sbBemerkung" rows="2" placeholder="z.B. Alle Geräte kontrolliert, keine Auffälligkeiten"></textarea>';
+  html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
+  html += '<canvas class="sig" id="sbSigKunde"></canvas>';
+  html += '<button class="btn secondary small" id="sbSigClearKunde" style="margin-top:6px;">Löschen</button>';
+  html += '<label style="margin-top:14px;">Unterschrift Techniker</label>';
+  html += '<canvas class="sig" id="sbSigTechniker"></canvas>';
+  html += '<button class="btn secondary small" id="sbSigClearTechniker" style="margin-top:6px;">Löschen</button>';
+  html += '<button class="btn block" id="sbSpeichern" style="margin-top:16px;">Sammelbericht erstellen</button>';
+
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+
+  var sigKunde = initSigPad('sbSigKunde');
+  var sigTechniker = initSigPad('sbSigTechniker');
+  document.getElementById('sbSigClearKunde').onclick = function(){
+    sigKunde.getContext('2d').clearRect(0,0,sigKunde.width,sigKunde.height);
+  };
+  document.getElementById('sbSigClearTechniker').onclick = function(){
+    sigTechniker.getContext('2d').clearRect(0,0,sigTechniker.width,sigTechniker.height);
+  };
+
+  document.getElementById('sbSpeichern').onclick = function(){
+    var jetztIso = new Date().toISOString();
+    var snapshot = geraeteSortiert.map(function(g, idx){
+      return {
+        nr: idx+1,
+        typ: g.typ,
+        standort: g.standort || '',
+        baujahr: g.baujahr || null,
+        seriennummer: g.seriennummer || '',
+        status: statusForDate(g.naechstePruefung).label
+      };
+    });
+    var sb = {
+      id: uid(),
+      kundeId: kundeId,
+      datum: jetztIso,
+      geraeteSnapshot: snapshot,
+      bemerkung: document.getElementById('sbBemerkung').value.trim(),
+      unterschriftKunde: sigKunde.toDataURL('image/png'),
+      unterschriftTechniker: sigTechniker.toDataURL('image/png')
+    };
+    dbPut('sammelberichte', sb, function(){
+      loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast('Sammelbericht erstellt'); });
+    });
+  };
+}
+
+function buildSammelberichtHtml(sb, k){
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="bericht-kopf"><img src="' + LOGO_DATA + '" class="bericht-logo-img"></div>';
+  html += '<div class="bericht-tagline">Seit ueber 20 Jahren Ihr Brandschutzprofi</div>';
+  html += '<h2 style="font-size:18px; margin:16px 0 14px 0;">Sammelbericht</h2>';
+  html += '<div class="bericht-feld"><div class="l">Kunde</div><div class="w">' + (k ? escapeHtml(k.name) : '-') + '</div></div>';
+  if(k && k.kundennummer){
+    html += '<div class="bericht-feld"><div class="l">Kundennummer</div><div class="w">' + escapeHtml(k.kundennummer) + '</div></div>';
+  }
+  html += '<div class="bericht-feld"><div class="l">Adresse</div><div class="w">' + (k ? escapeHtml(k.adresse||'-') : '-') + '</div></div>';
+  html += '<div class="bericht-feld"><div class="l">Datum</div><div class="w">' + fmtDate(sb.datum) + '</div></div>';
+
+  html += '<div class="bericht-feld"><div class="l">Geräte</div></div>';
+  (sb.geraeteSnapshot || []).forEach(function(g){
+    html += '<div style="border-top:1px solid var(--line); padding:8px 0;">';
+    html += '<div class="w" style="font-weight:600;">Nr. ' + g.nr + ' &middot; ' + escapeHtml(g.typ) + '</div>';
+    html += '<div class="meta">' + escapeHtml(g.standort||'') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + ' &middot; ' + escapeHtml(g.status) + '</div>';
+    html += '</div>';
+  });
+
+  if(sb.bemerkung){
+    html += '<div class="bericht-feld" style="margin-top:10px;"><div class="l">Bemerkung</div><div class="w">' + escapeHtml(sb.bemerkung) + '</div></div>';
+  }
+  if(sb.unterschriftKunde){
+    html += '<div class="bericht-feld"><div class="l">Unterschrift Kunde</div>';
+    html += '<img src="' + sb.unterschriftKunde + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
+    html += '</div>';
+  }
+  if(sb.unterschriftTechniker){
+    html += '<div class="bericht-feld"><div class="l">Unterschrift Techniker</div>';
+    html += '<img src="' + sb.unterschriftTechniker + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
+    html += '</div>';
+  }
+  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
+  html += '</div>';
+  return html;
+}
+
+function modalSammelberichtAnsicht(sbId){
+  var sb = state.sammelberichte.filter(function(x){ return x.id === sbId; })[0];
+  if(!sb) return;
+  var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
+  html += buildSammelberichtHtml(sb, k);
+  html += '<div class="no-print" style="margin-top:16px;">';
+  html += '<button class="btn block" id="druckBtnSb">Drucken / Als PDF teilen</button>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('druckBtnSb').onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildSammelberichtHtml(sb, k);
+    window.print();
+  };
+}
+
 function modalQrKunde(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   var html = '';
@@ -1437,6 +1597,9 @@ function bindDynamic(){
     };
   });
 
+  var sammelberichtBtn = document.getElementById('sammelberichtBtn');
+  if(sammelberichtBtn) sammelberichtBtn.onclick = function(){ modalSammelbericht(state.activeKundeId); };
+
   var qrBtn = document.getElementById('qrKundeBtn');
   if(qrBtn) qrBtn.onclick = function(){ modalQrKunde(state.activeKundeId); };
 
@@ -1446,6 +1609,10 @@ function bindDynamic(){
 
   document.querySelectorAll('[data-viewbericht]').forEach(function(b){
     b.onclick = function(){ modalBerichtAnsicht(b.getAttribute('data-viewbericht')); };
+  });
+
+  document.querySelectorAll('[data-viewsammelbericht]').forEach(function(b){
+    b.onclick = function(){ modalSammelberichtAnsicht(b.getAttribute('data-viewsammelbericht')); };
   });
 }
 
