@@ -1239,8 +1239,18 @@ function modalErledigt(pruefungId){
     p.unterschriftTechniker = canvasTechniker.toDataURL('image/png');
     p.bericht = true;
     p.erledigtAm = new Date().toISOString();
+    p.ergebnis = p.ergebnis || 'In Ordnung';
     dbPut('pruefungen', p, function(){
-      loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen'); });
+      var gZu = p.geraetId ? state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] : null;
+      if(gZu){
+        gZu.letztePruefung = p.erledigtAm.substring(0,10);
+        gZu.naechstePruefung = naechsterTerminNach(p.erledigtAm, gZu.intervallMonate);
+        dbPut('geraete', gZu, function(){
+          loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen'); });
+        });
+      } else {
+        loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen'); });
+      }
     });
   };
 }
