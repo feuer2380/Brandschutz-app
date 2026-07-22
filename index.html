@@ -1508,40 +1508,102 @@ function modalSammelbericht(kundeId){
 
 function buildSammelberichtHtml(sb, k){
   var html = '';
-  html += '<div class="bericht-brief">';
-  html += '<div class="bericht-kopf"><img src="' + LOGO_DATA + '" class="bericht-logo-img"></div>';
-  html += '<div class="bericht-tagline">Seit ueber 20 Jahren Ihr Brandschutzprofi</div>';
-  html += '<h2 style="font-size:18px; margin:16px 0 14px 0;">Sammelbericht</h2>';
-  html += '<div class="bericht-feld"><div class="l">Kunde</div><div class="w">' + (k ? escapeHtml(k.name) : '-') + '</div></div>';
-  if(k && k.kundennummer){
-    html += '<div class="bericht-feld"><div class="l">Kundennummer</div><div class="w">' + escapeHtml(k.kundennummer) + '</div></div>';
-  }
-  html += '<div class="bericht-feld"><div class="l">Adresse</div><div class="w">' + (k ? escapeHtml(k.adresse||'-') : '-') + '</div></div>';
-  html += '<div class="bericht-feld"><div class="l">Datum</div><div class="w">' + fmtDate(sb.datum) + '</div></div>';
+  html += '<div class="bericht-brief" style="font-family:-apple-system,Helvetica,sans-serif;max-width:680px;margin:0 auto;">';
 
-  html += '<div class="bericht-feld"><div class="l">Geräte</div></div>';
-  (sb.geraeteSnapshot || []).forEach(function(g){
-    html += '<div style="border-top:1px solid var(--line); padding:8px 0;">';
-    html += '<div class="w" style="font-weight:600;">Nr. ' + g.nr + ' &middot; ' + escapeHtml(g.typ) + '</div>';
-    html += '<div class="meta">' + escapeHtml(g.standort||'') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + ' &middot; ' + escapeHtml(g.status) + '</div>';
+  // ===== HEADER =====
+  html += '<div style="background:#1a1a1a;padding:18px 20px 14px 20px;border-radius:10px;margin-bottom:0;">';
+  html += '<img src="' + LOGO_DATA + '" style="width:100%;max-width:340px;display:block;margin:0 auto;">';
+  html += '</div>';
+
+  // ===== ORANGE STRIPE =====
+  html += '<div style="background:#c23f12;height:4px;margin-bottom:18px;"></div>';
+
+  // ===== TITLE ROW =====
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding:0 2px;">';
+  html += '<div>';
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:#888;text-transform:uppercase;margin-bottom:4px;">Prüfbericht</div>';
+  html += '<div style="font-size:22px;font-weight:800;color:#1a1a1a;letter-spacing:-0.5px;">Sammelbericht</div>';
+  html += '</div>';
+  html += '<div style="text-align:right;">';
+  html += '<div style="font-size:10px;color:#888;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Datum</div>';
+  html += '<div style="font-size:15px;font-weight:700;color:#1a1a1a;">' + fmtDate(sb.datum) + '</div>';
+  if(k && k.kundennummer){
+    html += '<div style="font-size:10px;color:#888;margin-top:4px;">Kunden-Nr. <strong>' + escapeHtml(k.kundennummer) + '</strong></div>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // ===== KUNDENDATEN BOX =====
+  html += '<div style="background:#f7f3ef;border-radius:10px;padding:14px 16px;margin-bottom:16px;">';
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.2px;color:#888;text-transform:uppercase;margin-bottom:8px;">Kundendaten</div>';
+  html += '<div style="font-size:16px;font-weight:700;color:#1a1a1a;margin-bottom:2px;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+  html += '<div style="font-size:13px;color:#555;">' + (k ? escapeHtml(k.adresse||'-') : '-') + '</div>';
+  if(k && k.telefon) html += '<div style="font-size:13px;color:#555;">Tel: ' + escapeHtml(k.telefon) + '</div>';
+  html += '</div>';
+
+  // ===== GERAETE =====
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.2px;color:#888;text-transform:uppercase;margin-bottom:8px;">Geprüfte Geräte</div>';
+
+  var geraete = sb.geraeteSnapshot || [];
+  geraete.forEach(function(g, idx){
+    var isOk = (g.status === 'In Ordnung');
+    var statusColor = isOk ? '#2f7a4f' : '#c23f12';
+    var statusBg = isOk ? '#e8f5ee' : '#fbe6dc';
+    html += '<div style="border:1px solid #e8e0d8;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+    html += '<div>';
+    html += '<div style="font-size:11px;color:#888;font-weight:600;margin-bottom:2px;">Nr. ' + g.nr + '</div>';
+    html += '<div style="font-size:15px;font-weight:700;color:#1a1a1a;">' + escapeHtml(g.typ) + '</div>';
+    html += '<div style="font-size:12px;color:#666;margin-top:3px;">';
+    if(g.standort) html += escapeHtml(g.standort) + ' &nbsp;|&nbsp; ';
+    if(g.baujahr) html += 'Bj. ' + g.baujahr + ' &nbsp;|&nbsp; ';
+    if(g.seriennummer) html += 'SN ' + escapeHtml(g.seriennummer);
+    html += '</div>';
+    html += '</div>';
+    html += '<div style="background:' + statusBg + ';color:' + statusColor + ';font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;margin-left:8px;margin-top:2px;">' + escapeHtml(g.status) + '</div>';
+    html += '</div>';
     html += '</div>';
   });
 
+  // ===== BEMERKUNG =====
   if(sb.bemerkung){
-    html += '<div class="bericht-feld" style="margin-top:10px;"><div class="l">Bemerkung</div><div class="w">' + escapeHtml(sb.bemerkung) + '</div></div>';
+    html += '<div style="background:#fff8e1;border-left:3px solid #f5a623;border-radius:6px;padding:12px 14px;margin-bottom:16px;">';
+    html += '<div style="font-size:10px;font-weight:700;letter-spacing:1px;color:#888;text-transform:uppercase;margin-bottom:4px;">Bemerkung</div>';
+    html += '<div style="font-size:14px;color:#333;">' + escapeHtml(sb.bemerkung) + '</div>';
+    html += '</div>';
   }
+
+  // ===== UNTERSCHRIFTEN =====
+  html += '<div style="display:flex;gap:12px;margin-top:16px;margin-bottom:16px;">';
+  // Kunde
+  html += '<div style="flex:1;">';
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1px;color:#888;text-transform:uppercase;margin-bottom:6px;">Unterschrift Kunde</div>';
   if(sb.unterschriftKunde){
-    html += '<div class="bericht-feld"><div class="l">Unterschrift Kunde</div>';
-    html += '<img src="' + sb.unterschriftKunde + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
-    html += '</div>';
+    html += '<img src="' + sb.unterschriftKunde + '" style="width:100%;border:1px solid #e4dcd0;border-radius:8px;background:#fff;">';
+  } else {
+    html += '<div style="height:80px;border:1.5px dashed #d0c8be;border-radius:8px;background:#fafafa;"></div>';
   }
-  if(sb.unterschriftTechniker){
-    html += '<div class="bericht-feld"><div class="l">Unterschrift Techniker</div>';
-    html += '<img src="' + sb.unterschriftTechniker + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
-    html += '</div>';
-  }
-  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
   html += '</div>';
+  // Techniker
+  html += '<div style="flex:1;">';
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1px;color:#888;text-transform:uppercase;margin-bottom:6px;">Unterschrift Techniker</div>';
+  if(sb.unterschriftTechniker){
+    html += '<img src="' + sb.unterschriftTechniker + '" style="width:100%;border:1px solid #e4dcd0;border-radius:8px;background:#fff;">';
+  } else {
+    html += '<div style="height:80px;border:1.5px dashed #d0c8be;border-radius:8px;background:#fafafa;"></div>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // ===== FOOTER =====
+  html += '<div style="border-top:1px solid #e8e0d8;padding-top:12px;margin-top:4px;">';
+  html += '<div style="font-size:11px;color:#888;text-align:center;line-height:1.6;">';
+  html += 'Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf<br>';
+  html += 'Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>'; // bericht-brief
   return html;
 }
 
