@@ -991,6 +991,11 @@ function modalGeraetBearbeiten(geraetId){
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
+  html += '<div style="display:flex; gap:8px; margin:-4px 0 10px 0;">';
+  html += '<button type="button" class="btn secondary small" id="btnDatumHeute">Heute</button>';
+  html += '<button type="button" class="btn secondary small" id="btnDatum1J">+1 Jahr</button>';
+  html += '<button type="button" class="btn secondary small" id="btnDatum2J">+2 Jahre</button>';
+  html += '</div>';
   html += '<label>Prüfintervall (bei "In Ordnung" im Scan wird der naechste Termin automatisch so weit vorgesetzt)</label>';
   html += '<select id="fIntervall">';
   [12,24,36].forEach(function(m){
@@ -1012,6 +1017,19 @@ function modalGeraetBearbeiten(geraetId){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   bindTypChips();
+
+  document.getElementById('btnDatumHeute').onclick = function(){
+    document.getElementById('fDatum').value = new Date().toISOString().substring(0,10);
+  };
+  document.getElementById('btnDatum1J').onclick = function(){
+    var d = new Date(); d.setFullYear(d.getFullYear()+1);
+    document.getElementById('fDatum').value = d.toISOString().substring(0,10);
+  };
+  document.getElementById('btnDatum2J').onclick = function(){
+    var d = new Date(); d.setFullYear(d.getFullYear()+2);
+    document.getElementById('fDatum').value = d.toISOString().substring(0,10);
+  };
+
   document.getElementById('fSave').onclick = function(){
     var typ = document.getElementById('fTyp').value;
     var datum = document.getElementById('fDatum').value;
