@@ -250,6 +250,8 @@ function uid(){
 }
 
 // ---------- State ----------
+var APP_VERSION = '2.1.0';
+
 var state = {
   tab: 'dashboard',
   kunden: [],
@@ -792,6 +794,14 @@ function renderBerichte(){
     });
   }
 
+  html += '<div class="section-title">App-Version</div>';
+  html += '<div class="card">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+  html += '<div><strong>Aktuelle Version</strong><div class="meta">v' + APP_VERSION + '</div></div>';
+  html += '<button class="btn" id="btnNeuLaden" style="flex-shrink:0;">&#8635; Neu laden</button>';
+  html += '</div>';
+  html += '<div class="meta" style="margin-top:8px;">Wenn du eine neue index.html erhalten hast, tippe auf "Neu laden" um die App zu aktualisieren. Deine Daten bleiben dabei erhalten.</div>';
+  html += '</div>';
   html += '<div class="section-title">Daten sichern &amp; übertragen</div>';
   html += '<div class="card">';
   html += '<div class="meta" style="margin-bottom:10px;">Beim Wechsel auf eine neue Adresse (z.B. neue Web-Version) werden gespeicherte Daten nicht automatisch mitgenommen. Hier kannst du sie exportieren und auf der neuen Adresse wieder einspielen.</div>';
@@ -1661,6 +1671,13 @@ function bindDynamic(){
       render();
     };
   });
+
+  var btnNeuLaden = document.getElementById('btnNeuLaden');
+  if(btnNeuLaden) btnNeuLaden.onclick = function(){
+    customConfirm('App neu laden? Deine gespeicherten Daten bleiben erhalten.', function(){
+      window.location.reload(true);
+    });
+  };
 
   var exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportAlleDaten;
