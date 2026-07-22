@@ -179,6 +179,7 @@
     <button class="tabbtn" data-tab="kunden"><span class="ic">&#128100;</span>Kunden</button>
     <button class="tabbtn" data-tab="scan"><span class="ic">&#128247;</span>Scan</button>
     <button class="tabbtn" data-tab="pruefungen"><span class="ic">&#128197;</span>Prüfungen</button>
+    <button class="tabbtn" data-tab="statistik"><span class="ic">&#128202;</span>Statistik</button>
     <button class="tabbtn" data-tab="berichte"><span class="ic">&#128196;</span>Berichte</button>
   </nav>
 </div>
@@ -320,6 +321,7 @@ function render(){
   if(state.tab === 'dashboard') m.innerHTML = renderDashboard();
   else if(state.tab === 'kunden') m.innerHTML = renderKunden();
   else if(state.tab === 'pruefungen') m.innerHTML = renderPruefungen();
+  else if(state.tab === 'statistik') m.innerHTML = renderStatistik();
   else if(state.tab === 'berichte') m.innerHTML = renderBerichte();
   else if(state.tab === 'kundeDetail') m.innerHTML = renderKundeDetail(state.activeKundeId);
   else if(state.tab === 'scan') m.innerHTML = renderScan();
@@ -348,48 +350,86 @@ function renderDashboard(){
   });
   diesenMonat.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
 
+  var aktiveKunden = state.kunden.filter(function(k){ return !k.stillgelegt; }).length;
+  var aktiveGeraete = state.geraete.filter(function(g){ return !g.ausgeschieden; }).length;
+
   var html = '';
-  html += '<div class="statrow">';
-  html += '<div class="stat"><div class="n">' + state.kunden.length + '</div><div class="l">Kunden</div></div>';
-  html += '<div class="stat"><div class="n">' + state.geraete.length + '</div><div class="l">Geräte</div></div>';
-  html += '<div class="stat"><div class="n" style="color:' + (ueberfaellig.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaellig.length + '</div><div class="l">Überfällig</div></div>';
+
+  // ===== STAT CARDS =====
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">';
+
+  // Kunden
+  html += '<div style="background:#fff;border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid #ede7df;">';
+  html += '<div style="font-size:26px;font-weight:800;color:#c23f12;line-height:1.1;">' + aktiveKunden + '</div>';
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.2px;color:#999;text-transform:uppercase;margin-top:4px;">Kunden</div>';
   html += '</div>';
 
-  html += '<div class="section-title">Diesen Monat zu prüfen (' + monatNamen[jetzt.getMonth()] + ')</div>';
+  // Geraete
+  html += '<div style="background:#fff;border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid #ede7df;">';
+  html += '<div style="font-size:26px;font-weight:800;color:#c23f12;line-height:1.1;">' + aktiveGeraete + '</div>';
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.2px;color:#999;text-transform:uppercase;margin-top:4px;">Geräte</div>';
+  html += '</div>';
+
+  // Ueberfaellig
+  var uColor = ueberfaellig.length ? '#c23f12' : '#2f7a4f';
+  var uBg = ueberfaellig.length ? '#fbe6dc' : '#e8f5ee';
+  html += '<div style="background:' + uBg + ';border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid ' + uBg + ';">';
+  html += '<div style="font-size:26px;font-weight:800;color:' + uColor + ';line-height:1.1;">' + ueberfaellig.length + '</div>';
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.2px;color:' + uColor + ';text-transform:uppercase;margin-top:4px;">Fällig</div>';
+  html += '</div>';
+
+  html += '</div>';
+
+  // ===== DIESEN MONAT =====
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#888;text-transform:uppercase;margin-bottom:8px;">Diesen Monat (' + monatNamen[jetzt.getMonth()] + ')</div>';
   if(diesenMonat.length === 0){
-    html += '<div class="empty"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
+    html += '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;border:1px solid #ede7df;">';
+    html += '<div style="font-size:22px;color:#b5a898;margin-bottom:6px;">&#10003;</div>';
+    html += '<div style="font-size:13px;color:#aaa;">Keine Prüfungen diesen Monat</div>';
+    html += '</div>';
   } else {
+    html += '<div style="margin-bottom:16px;">';
     diesenMonat.forEach(function(p){
       var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
       var st = statusForDate(p.datum);
-      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
+      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '" style="margin-bottom:8px;border-left:3px solid #c23f12;">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
       html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
       if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
       html += '</div>';
     });
+    html += '</div>';
   }
 
-  html += '<div class="section-title">Bald fällig (30 Tage)</div>';
+  // ===== BALD FAELLIG =====
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#888;text-transform:uppercase;margin-bottom:8px;">Bald fällig (30 Tage)</div>';
   if(bald.length === 0 && ueberfaellig.length === 0){
-    html += '<div class="empty"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
+    html += '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;border:1px solid #ede7df;">';
+    html += '<div style="font-size:22px;color:#b5a898;margin-bottom:6px;">&#10003;</div>';
+    html += '<div style="font-size:13px;color:#aaa;">Keine anstehenden Prüfungen</div>';
+    html += '</div>';
   } else {
+    html += '<div style="margin-bottom:16px;">';
     var list = ueberfaellig.concat(bald);
     list.forEach(function(p){
       var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
       var st = statusForDate(p.datum);
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? k.name : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-      html += '<div class="meta">' + (p.typ || 'Prüfung') + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
+      var leftColor = st.cls === 'warn' ? '#c23f12' : '#f5a623';
+      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '" style="margin-bottom:8px;border-left:3px solid ' + leftColor + ';">';
+      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+      html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
+      if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
       html += '</div>';
     });
+    html += '</div>';
   }
 
-  html += '<div class="section-title">Alle Geräte</div>';
+  // ===== ALLE GERAETE =====
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#888;text-transform:uppercase;margin-bottom:8px;">Alle Geräte</div>';
   var geraeteFilter = state.geraeteFilter || 'alle';
-  html += '<div class="filter-bar">';
-  html += '<button class="filter-btn' + (geraeteFilter === 'alle' ? ' active' : '') + '" data-geraetefilter="alle">Alle Geräte</button>';
-  html += '<button class="filter-btn' + (geraeteFilter === 'faellig' ? ' active' : '') + '" data-geraetefilter="faellig">&#9888; Fällige Löscher</button>';
+  html += '<div class="filter-bar" style="margin-bottom:10px;">';
+  html += '<button class="filter-btn' + (geraeteFilter === 'alle' ? ' active' : '') + '" data-geraetefilter="alle">Alle</button>';
+  html += '<button class="filter-btn' + (geraeteFilter === 'faellig' ? ' active' : '') + '" data-geraetefilter="faellig">&#9888; Fällig</button>';
   html += '<button class="filter-btn' + (geraeteFilter === 'ok' ? ' active' : '') + '" data-geraetefilter="ok">&#10003; Aktuell</button>';
   html += '</div>';
 
@@ -403,15 +443,18 @@ function renderDashboard(){
   });
 
   if(gefiltert.length === 0){
-    html += '<div class="empty">Keine Geräte in dieser Kategorie</div>';
+    html += '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;border:1px solid #ede7df;">';
+    html += '<div style="font-size:13px;color:#aaa;">Keine Geräte in dieser Kategorie</div>';
+    html += '</div>';
   } else {
     gefiltert.forEach(function(g){
       var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
       var st = statusForDate(g.naechstePruefung);
-      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
+      var leftColor = st.cls === 'ok' ? '#2f7a4f' : (st.cls === 'warn' ? '#c23f12' : '#f5a623');
+      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '" style="margin-bottom:8px;border-left:3px solid ' + leftColor + ';">';
       html += '<div class="row"><h3>' + escapeHtml(g.typ) + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-      html += '<div class="meta">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
-      html += '<div class="meta">Letzte Prüfung: ' + (g.letztePruefung ? fmtDate(g.letztePruefung) : 'Unbekannt') + '</div>';
+      html += '<div class="meta" style="font-weight:600;color:#555;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+      html += '<div class="meta">Letzte Prüfung: ' + (g.letztePruefung ? fmtDate(g.letztePruefung) : 'Noch keine') + '</div>';
       html += '</div>';
     });
   }
@@ -744,6 +787,201 @@ function renderPruefungen(){
 }
 
 // ---------- Berichte ----------
+function renderStatistik(){
+  var jetzt = new Date();
+  var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var heuteStr = jetzt.toISOString().substring(0,10);
+  var monat = jetzt.getMonth();
+  var jahr = jetzt.getFullYear();
+
+  // Alle erledigten Pruefungen
+  var alle = state.pruefungen.filter(function(p){ return p.erledigt; });
+
+  // Heute
+  var heute = alle.filter(function(p){
+    var d = (p.erledigtAm || p.datum || '').substring(0,10);
+    return d === heuteStr;
+  });
+
+  // Diesen Monat
+  var diesenMonat = alle.filter(function(p){
+    var d = new Date(p.erledigtAm || p.datum);
+    return d.getMonth() === monat && d.getFullYear() === jahr;
+  });
+
+  // Dieses Jahr
+  var diesesJahr = alle.filter(function(p){
+    var d = new Date(p.erledigtAm || p.datum);
+    return d.getFullYear() === jahr;
+  });
+
+  // Gruppiere Heute nach Kunde + Zeit
+  var heuteGruppe = {};
+  heute.forEach(function(p){
+    var kid = p.kundeId || 'unbekannt';
+    if(!heuteGruppe[kid]) heuteGruppe[kid] = { pruefungen: [], zeiten: [] };
+    heuteGruppe[kid].pruefungen.push(p);
+    if(p.erledigtAm){
+      var t = new Date(p.erledigtAm);
+      var hh = ('0'+t.getHours()).slice(-2);
+      var mm = ('0'+t.getMinutes()).slice(-2);
+      heuteGruppe[kid].zeiten.push(hh + ':' + mm);
+    }
+  });
+
+  // Monatsstatistik nach Tag
+  var tage = {};
+  diesenMonat.forEach(function(p){
+    var tag = (p.erledigtAm || p.datum || '').substring(0,10);
+    if(!tage[tag]) tage[tag] = 0;
+    tage[tag]++;
+  });
+  var tageSortiert = Object.keys(tage).sort().reverse();
+
+  // Jahresstatistik nach Monat
+  var monate = {};
+  diesesJahr.forEach(function(p){
+    var d = new Date(p.erledigtAm || p.datum);
+    var key = d.getMonth();
+    if(!monate[key]) monate[key] = 0;
+    monate[key]++;
+  });
+
+  var html = '';
+
+  // ===== HEADER STATS =====
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">';
+
+  html += '<div style="background:#fff;border-radius:12px;padding:14px 8px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid #ede7df;">';
+  html += '<div style="font-size:26px;font-weight:800;color:#c23f12;">' + heute.length + '</div>';
+  html += '<div style="font-size:9px;font-weight:700;letter-spacing:1px;color:#999;text-transform:uppercase;margin-top:4px;">Heute</div>';
+  html += '</div>';
+
+  html += '<div style="background:#fff;border-radius:12px;padding:14px 8px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid #ede7df;">';
+  html += '<div style="font-size:26px;font-weight:800;color:#c23f12;">' + diesenMonat.length + '</div>';
+  html += '<div style="font-size:9px;font-weight:700;letter-spacing:1px;color:#999;text-transform:uppercase;margin-top:4px;">' + monatNamen[monat].substring(0,3) + '</div>';
+  html += '</div>';
+
+  html += '<div style="background:#fff;border-radius:12px;padding:14px 8px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid #ede7df;">';
+  html += '<div style="font-size:26px;font-weight:800;color:#c23f12;">' + diesesJahr.length + '</div>';
+  html += '<div style="font-size:9px;font-weight:700;letter-spacing:1px;color:#999;text-transform:uppercase;margin-top:4px;">' + jahr + '</div>';
+  html += '</div>';
+
+  html += '</div>';
+
+  // ===== HEUTE DETAIL =====
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#888;text-transform:uppercase;margin-bottom:8px;">Heute geprüft</div>';
+
+  if(heute.length === 0){
+    html += '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;border:1px solid #ede7df;">';
+    html += '<div style="font-size:13px;color:#aaa;">Heute noch keine Prüfungen durchgeführt</div>';
+    html += '</div>';
+  } else {
+    var kundeIds = Object.keys(heuteGruppe);
+    kundeIds.forEach(function(kid){
+      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+      var gr = heuteGruppe[kid];
+      var frueh = gr.zeiten.length ? gr.zeiten.sort()[0] : null;
+      var spaet = gr.zeiten.length > 1 ? gr.zeiten.sort().slice(-1)[0] : null;
+      html += '<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:8px;border:1px solid #ede7df;border-left:3px solid #c23f12;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+      html += '<div>';
+      html += '<div style="font-size:15px;font-weight:700;color:#1a1a1a;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</div>';
+      if(k && k.adresse) html += '<div style="font-size:12px;color:#888;margin-top:2px;">' + escapeHtml(k.adresse) + '</div>';
+      html += '</div>';
+      html += '<div style="text-align:right;flex-shrink:0;margin-left:8px;">';
+      html += '<div style="background:#fbe6dc;color:#c23f12;font-size:13px;font-weight:800;padding:4px 10px;border-radius:20px;">' + gr.pruefungen.length + ' Löscher</div>';
+      if(frueh) html += '<div style="font-size:11px;color:#888;margin-top:4px;">' + (spaet ? frueh + ' – ' + spaet : frueh + ' Uhr') + '</div>';
+      html += '</div>';
+      html += '</div>';
+      // Einzelne Löscher
+      html += '<div style="margin-top:10px;border-top:1px solid #f0e8e0;padding-top:8px;">';
+      gr.pruefungen.forEach(function(p){
+        var zeit = '';
+        if(p.erledigtAm){
+          var t = new Date(p.erledigtAm);
+          zeit = ('0'+t.getHours()).slice(-2) + ':' + ('0'+t.getMinutes()).slice(-2);
+        }
+        var ergCls = p.ergebnis === 'In Ordnung' ? '#2f7a4f' : '#c23f12';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f7f3ef;">';
+        html += '<div style="font-size:12px;color:#444;">' + escapeHtml(p.typ || 'Prüfung') + '</div>';
+        html += '<div style="display:flex;gap:8px;align-items:center;">';
+        if(zeit) html += '<div style="font-size:11px;color:#888;">' + zeit + '</div>';
+        html += '<div style="font-size:11px;font-weight:600;color:' + ergCls + ';">' + escapeHtml(p.ergebnis || '-') + '</div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      html += '</div>';
+    });
+  }
+
+  // ===== MONATSSTATISTIK =====
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#888;text-transform:uppercase;margin-bottom:8px;margin-top:4px;">' + monatNamen[monat] + ' ' + jahr + ' – Tagesübersicht</div>';
+
+  if(tageSortiert.length === 0){
+    html += '<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;border:1px solid #ede7df;">';
+    html += '<div style="font-size:13px;color:#aaa;">Diesen Monat noch keine Prüfungen</div>';
+    html += '</div>';
+  } else {
+    html += '<div style="background:#fff;border-radius:12px;overflow:hidden;margin-bottom:16px;border:1px solid #ede7df;">';
+    // Header
+    html += '<div style="display:grid;grid-template-columns:1fr 80px 100px;background:#f7f3ef;padding:8px 14px;">';
+    html += '<div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;">Datum</div>';
+    html += '<div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;text-align:center;">Löscher</div>';
+    html += '<div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;text-align:right;">Kunden</div>';
+    html += '</div>';
+    tageSortiert.forEach(function(tag, i){
+      var anzahl = tage[tag];
+      var kundenHeute = {};
+      diesenMonat.filter(function(p){ return (p.erledigtAm||p.datum||'').substring(0,10) === tag; }).forEach(function(p){ kundenHeute[p.kundeId] = 1; });
+      var kundenAnz = Object.keys(kundenHeute).length;
+      var bg = i % 2 === 0 ? '#fff' : '#fafaf8';
+      var d = new Date(tag);
+      var tagName = ['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
+      var isHeute = tag === heuteStr;
+      html += '<div style="display:grid;grid-template-columns:1fr 80px 100px;padding:10px 14px;background:' + (isHeute ? '#fef3ee' : bg) + ';border-top:1px solid #f0e8e0;">';
+      html += '<div style="font-size:13px;font-weight:' + (isHeute ? '700' : '400') + ';color:' + (isHeute ? '#c23f12' : '#333') + ';">' + tagName + ', ' + fmtDate(tag) + (isHeute ? ' ★' : '') + '</div>';
+      html += '<div style="font-size:14px;font-weight:700;color:#c23f12;text-align:center;">' + anzahl + '</div>';
+      html += '<div style="font-size:13px;color:#666;text-align:right;">' + kundenAnz + ' Kunde' + (kundenAnz !== 1 ? 'n' : '') + '</div>';
+      html += '</div>';
+    });
+    // Summe
+    html += '<div style="display:grid;grid-template-columns:1fr 80px 100px;padding:10px 14px;background:#f7f3ef;border-top:2px solid #ede7df;">';
+    html += '<div style="font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;">Gesamt ' + monatNamen[monat] + '</div>';
+    html += '<div style="font-size:14px;font-weight:800;color:#c23f12;text-align:center;">' + diesenMonat.length + '</div>';
+    html += '<div style="font-size:13px;color:#666;text-align:right;"></div>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  // ===== JAHRESSTATISTIK =====
+  html += '<div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:#888;text-transform:uppercase;margin-bottom:8px;">' + jahr + ' – Monatsübersicht</div>';
+  html += '<div style="background:#fff;border-radius:12px;overflow:hidden;margin-bottom:16px;border:1px solid #ede7df;">';
+  var maxVal = 0;
+  for(var mi = 0; mi < 12; mi++){ if((monate[mi]||0) > maxVal) maxVal = monate[mi]||0; }
+  for(var mi = 0; mi < 12; mi++){
+    var anzM = monate[mi] || 0;
+    var istAkt = mi === monat;
+    var barW = maxVal > 0 ? Math.round((anzM / maxVal) * 100) : 0;
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #f0e8e0;background:' + (istAkt ? '#fef3ee' : '#fff') + ';">';
+    html += '<div style="width:30px;font-size:11px;font-weight:' + (istAkt ? '700' : '400') + ';color:' + (istAkt ? '#c23f12' : '#888') + ';flex-shrink:0;">' + monatNamen[mi].substring(0,3) + '</div>';
+    html += '<div style="flex:1;background:#f0e8e0;border-radius:4px;height:8px;overflow:hidden;">';
+    if(barW > 0) html += '<div style="width:' + barW + '%;background:' + (istAkt ? '#c23f12' : '#d4907a') + ';height:100%;border-radius:4px;"></div>';
+    html += '</div>';
+    html += '<div style="width:32px;text-align:right;font-size:12px;font-weight:700;color:' + (istAkt ? '#c23f12' : '#555') + ';">' + (anzM > 0 ? anzM : '') + '</div>';
+    html += '</div>';
+  }
+  // Jahressumme
+  html += '<div style="display:flex;justify-content:space-between;padding:10px 14px;background:#f7f3ef;border-top:2px solid #ede7df;">';
+  html += '<div style="font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;">Gesamt ' + jahr + '</div>';
+  html += '<div style="font-size:14px;font-weight:800;color:#c23f12;">' + diesesJahr.length + ' Löscher</div>';
+  html += '</div>';
+  html += '</div>';
+
+  return html;
+}
+
 function renderBerichte(){
   var berichte = state.pruefungen.filter(function(p){ return p.erledigt && p.bericht; });
   var ausgeschieden = state.geraete.filter(function(g){ return g.ausgeschieden; });
