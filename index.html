@@ -330,7 +330,11 @@ function render(){
 
 // ---------- Dashboard ----------
 function renderDashboard(){
-  var offen = state.pruefungen.filter(function(p){ return !p.erledigt; });
+  var offen = state.pruefungen.filter(function(p){
+    if(p.erledigt) return false;
+    var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+    return k && !k.stillgelegt;
+  });
   var ueberfaellig = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
   var bald = offen.filter(function(p){ return daysUntil(p.datum) >= 0 && daysUntil(p.datum) <= 30; });
 
@@ -589,7 +593,10 @@ function checkAbschliessen(geraetId, ergebnis){
 // ---------- Kunden ----------
 function renderKundenListe(query){
   var q = (query || '').trim().toLowerCase();
-  var liste = state.kunden;
+  var zeigeStillgelegt = state.zeigeStillgelegt || false;
+  var liste = state.kunden.filter(function(k){
+    return zeigeStillgelegt ? k.stillgelegt : !k.stillgelegt;
+  });
   if(q){
     liste = liste.filter(function(k){
       var num = (k.kundennummer || '').toLowerCase();
@@ -601,6 +608,8 @@ function renderKundenListe(query){
   if(liste.length === 0){
     if(q){
       html += '<div class="empty">Kein Kunde gefunden</div>';
+    } else if(zeigeStillgelegt){
+      html += '<div class="empty">Keine stillgelegten Kunden</div>';
     } else {
       html += '<div class="empty"><span class="ic">&#128100;</span>Noch keine Kunden angelegt.<br>Tippe unten rechts auf + zum Hinzufügen.</div>';
     }
@@ -609,21 +618,29 @@ function renderKundenListe(query){
   liste.forEach(function(k){
     var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id; }).length;
     html += '<div class="card kunde-card" data-id="' + k.id + '">';
-    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>';
+    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">';
+    if(k.kundennummer) html += '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>';
+    if(k.stillgelegt) html += '<span class="badge warn">Stillgelegt</span>';
+    html += '</div></div>';
     html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
-    html += '<div class="meta">' + geraeteAnz + ' Gerät(e)</div>';
+    html += '<div class="meta">' + geraeteAnz + ' Gerät(e)' + (k.stillgelegtAm ? ' &middot; stillgelegt am ' + fmtDate(k.stillgelegtAm) : '') + '</div>';
     html += '</div>';
   });
   return html;
 }
 
 function renderKunden(){
+  var zeigeStillgelegt = state.zeigeStillgelegt || false;
   var html = '';
   html += '<input id="kundenSuchInput" type="text" placeholder="Suche nach Name oder Kundennummer..." value="' + escapeHtml(state.kundenSuche || '') + '">';
+  html += '<div style="display:flex;gap:8px;margin-bottom:12px;">';
+  html += '<button class="filter-btn' + (!zeigeStillgelegt ? ' active' : '') + '" id="btnAktiveKunden">Aktive Kunden</button>';
+  html += '<button class="filter-btn' + (zeigeStillgelegt ? ' active' : '') + '" id="btnStillgelegte">Stillgelegt</button>';
+  html += '</div>';
   html += '<div id="kundenListContainer">' + renderKundenListe(state.kundenSuche) + '</div>';
   return html;
 }
-
 function renderKundeDetail(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return '<div class="empty">Kunde nicht gefunden</div>';
@@ -891,6 +908,9 @@ function modalKundeBearbeiten(kundeId){
   if(!k) return;
   var html = '';
   html += '<div class="modal-head"><h3>Kunde bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
+  if(k.stillgelegt){
+    html += '<div class="card" style="background:#fbe6dc;border-color:#e6b19d;padding:10px 12px;margin-bottom:10px;"><strong>Stillgelegt</strong> am ' + fmtDate(k.stillgelegtAm) + (k.stillgelegtGrund ? '<br><span class="meta">' + escapeHtml(k.stillgelegtGrund) + '</span>' : '') + '</div>';
+  }
   html += '<label>Name / Firma</label><input id="fName" type="text" value="' + escapeHtml(k.name || '') + '">';
   html += '<label>Kundennummer</label><input id="fKundennr" type="text" value="' + escapeHtml(k.kundennummer || '') + '">';
   html += '<label>Straße und Hausnummer</label><input id="fStrasse" type="text" value="' + escapeHtml(k.strasse || '') + '">';
@@ -901,6 +921,11 @@ function modalKundeBearbeiten(kundeId){
   html += '<label>Telefon</label><input id="fTelefon" type="tel" value="' + escapeHtml(k.telefon || '') + '">';
   html += '<label>E-Mail</label><input id="fEmail" type="email" value="' + escapeHtml(k.email || '') + '">';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
+  if(!k.stillgelegt){
+    html += '<button class="btn block secondary" id="fStillgelegen" style="margin-top:10px;color:#c23f12;border-color:#e6b19d;">Kunde stilllegen</button>';
+  } else {
+    html += '<button class="btn block secondary" id="fReaktivieren" style="margin-top:10px;color:#2f7a4f;border-color:#a8d5b5;">Kunde reaktivieren</button>';
+  }
   html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde löschen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -924,11 +949,47 @@ function modalKundeBearbeiten(kundeId){
       loadAll(function(){ render(); closeModal(); toast('Änderungen gespeichert'); });
     });
   };
+  if(!k.stillgelegt){
+    document.getElementById('fStillgelegen').onclick = function(){
+      modalStilllegenGrund(k);
+    };
+  } else {
+    document.getElementById('fReaktivieren').onclick = function(){
+      customConfirm('Kunde wieder aktivieren?', function(){
+        k.stillgelegt = false;
+        k.stillgelegtAm = null;
+        k.stillgelegtGrund = null;
+        dbPut('kunden', k, function(){
+          loadAll(function(){ render(); closeModal(); toast('Kunde reaktiviert'); });
+        });
+      });
+    };
+  }
   document.getElementById('fDelete').onclick = function(){
     customConfirm('Kunde wirklich löschen? Zugehörige Geräte und Prüfungen bleiben bestehen.', function(){
       dbDelete('kunden', kundeId, function(){
         loadAll(function(){ state.tab = 'kunden'; render(); toast('Kunde gelöscht'); });
       });
+    });
+  };
+}
+
+function modalStilllegenGrund(k){
+  var html = '';
+  html += '<div class="modal-head"><h3>Kunde stilllegen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Der Kunde scheint dann nicht mehr in der aktiven Liste auf. Du kannst ihn jederzeit unter "Stillgelegt" wieder reaktivieren.</div>';
+  html += '<label>Grund (optional)</label><input id="fGrund" type="text" placeholder="z.B. Kein Interesse an Verlängerung">';
+  html += '<button class="btn block" id="fOkStill" style="margin-top:4px;">Jetzt stilllegen</button>';
+  html += '<button class="btn block secondary" id="fAbbrechen" style="margin-top:10px;">Abbrechen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('fAbbrechen').onclick = closeModal;
+  document.getElementById('fOkStill').onclick = function(){
+    k.stillgelegt = true;
+    k.stillgelegtAm = new Date().toISOString().substring(0,10);
+    k.stillgelegtGrund = document.getElementById('fGrund').value.trim();
+    dbPut('kunden', k, function(){
+      loadAll(function(){ state.tab = 'kunden'; render(); closeModal(); toast('Kunde stillgelegt'); });
     });
   };
 }
@@ -1538,6 +1599,12 @@ function bindDynamic(){
       bindKundenCards(container);
     };
   }
+
+  var btnAktive = document.getElementById('btnAktiveKunden');
+  if(btnAktive) btnAktive.onclick = function(){ state.zeigeStillgelegt = false; render(); };
+
+  var btnStill = document.getElementById('btnStillgelegte');
+  if(btnStill) btnStill.onclick = function(){ state.zeigeStillgelegt = true; render(); };
 
   var back = document.getElementById('backToKunden');
   if(back) back.onclick = function(){ state.tab = 'kunden'; render(); };
