@@ -500,6 +500,7 @@ function renderGeraetCheck(geraetId){
   html += '<button class="btn secondary small" id="backToScan">&larr; Zurück</button>';
   html += '<div class="card" style="margin-top:12px;">';
   html += '<div class="meta">Kunde</div><h3>' + (k ? escapeHtml(k.name) : '-') + '</h3>';
+  if(k && k.kundennummer) html += '<div class="meta">Kundennummer: ' + escapeHtml(k.kundennummer) + '</div>';
   if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
   html += '<div class="section-title" style="margin-top:12px;">Gerät</div>';
   html += '<div class="w" style="font-size:15px; font-weight:600;">' + escapeHtml(g.typ) + '</div>';
@@ -512,7 +513,13 @@ function renderGeraetCheck(geraetId){
 
   if(!g.ausgeschieden){
     html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
-    html += '<button class="btn block" id="btnOk" style="background:var(--ok); margin-top:6px;">&#10003; In Ordnung - Prüfung abschließen</button>';
+    html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
+    html += '<canvas class="sig" id="checkSigKunde"></canvas>';
+    html += '<button class="btn secondary small" id="checkSigClearKunde" style="margin-top:6px;">Löschen</button>';
+    html += '<label style="margin-top:14px;">Unterschrift Techniker</label>';
+    html += '<canvas class="sig" id="checkSigTechniker"></canvas>';
+    html += '<button class="btn secondary small" id="checkSigClearTechniker" style="margin-top:6px;">Löschen</button>';
+    html += '<button class="btn block" id="btnOk" style="background:var(--ok); margin-top:16px;">&#10003; In Ordnung - Prüfung abschließen</button>';
     html += '<button class="btn block" id="btnReparatur" style="background:#c98a1c; margin-top:10px;">&#9881; Reparatur nötig</button>';
     html += '<button class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Gerät ausscheiden (zu alt / defekt)</button>';
   }
@@ -535,6 +542,8 @@ function checkAbschliessen(geraetId, ergebnis){
     if(ergebnis === 'reparatur') bemerkung = 'Reparatur erforderlich';
     if(ergebnis === 'in_ordnung') bemerkung = '';
   }
+  var sigKundeCanvas = document.getElementById('checkSigKunde');
+  var sigTechnikerCanvas = document.getElementById('checkSigTechniker');
   var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
   var jetztIso = new Date().toISOString();
   var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
@@ -546,6 +555,8 @@ function checkAbschliessen(geraetId, ergebnis){
   offenePruefung.bericht = true;
   offenePruefung.ergebnis = ergebnisLabel;
   offenePruefung.bemerkung = bemerkung;
+  if(sigKundeCanvas) offenePruefung.unterschriftKunde = sigKundeCanvas.toDataURL('image/png');
+  if(sigTechnikerCanvas) offenePruefung.unterschriftTechniker = sigTechnikerCanvas.toDataURL('image/png');
   dbPut('pruefungen', offenePruefung, function(){
     if(ergebnis === 'ausscheiden'){
       g.ausgeschieden = true;
@@ -1135,21 +1146,9 @@ function modalNeuesGeraet(kundeId){
   };
 }
 
-function modalErledigt(pruefungId){
-  var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
-  var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
-  var html = '';
-  html += '<div class="modal-head"><h3>Prüfung abschließen</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta">' + (k ? escapeHtml(k.name) : '') + ' &middot; ' + escapeHtml(p.typ || '') + '</div>';
-  html += '<label style="margin-top:10px;">Bemerkung</label><textarea id="fBemerkung" rows="3" placeholder="Befund, Maßnahmen..."></textarea>';
-  html += '<label>Unterschrift Kunde</label>';
-  html += '<canvas class="sig" id="sigPad"></canvas>';
-  html += '<button class="btn secondary small" id="sigClear" style="margin-top:8px;">Unterschrift löschen</button>';
-  html += '<button class="btn block" id="fSave" style="margin-top:14px;">Prüfung abschließen &amp; Bericht erstellen</button>';
-  openModal(html);
-  document.getElementById('mClose').onclick = closeModal;
-
-  var canvas = document.getElementById('sigPad');
+function initSigPad(canvasId){
+  var canvas = document.getElementById(canvasId);
+  if(!canvas) return null;
   var ctx = canvas.getContext('2d');
   canvas.width = canvas.offsetWidth * 2;
   canvas.height = canvas.offsetHeight * 2;
@@ -1158,7 +1157,6 @@ function modalErledigt(pruefungId){
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
   var drawing = false;
-
   function pos(e){
     var rect = canvas.getBoundingClientRect();
     var clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -1167,24 +1165,50 @@ function modalErledigt(pruefungId){
   }
   function start(e){ drawing = true; var p2 = pos(e); ctx.beginPath(); ctx.moveTo(p2.x, p2.y); e.preventDefault(); }
   function move(e){ if(!drawing) return; var p2 = pos(e); ctx.lineTo(p2.x, p2.y); ctx.stroke(); e.preventDefault(); }
-  function end(e){ drawing = false; }
-
+  function end(){ drawing = false; }
   canvas.addEventListener('mousedown', start);
   canvas.addEventListener('mousemove', move);
   canvas.addEventListener('mouseup', end);
   canvas.addEventListener('touchstart', start, {passive:false});
   canvas.addEventListener('touchmove', move, {passive:false});
   canvas.addEventListener('touchend', end);
+  return canvas;
+}
 
-  document.getElementById('sigClear').onclick = function(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+function modalErledigt(pruefungId){
+  var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
+  var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+  var html = '';
+  html += '<div class="modal-head"><h3>Prüfung abschließen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + (k ? escapeHtml(k.name) : '') + ' &middot; ' + escapeHtml(p.typ || '') + '</div>';
+  html += '<label style="margin-top:10px;">Bemerkung</label><textarea id="fBemerkung" rows="3" placeholder="Befund, Maßnahmen..."></textarea>';
+  html += '<label>Unterschrift Kunde</label>';
+  html += '<canvas class="sig" id="sigPadKunde"></canvas>';
+  html += '<button class="btn secondary small" id="sigClearKunde" style="margin-top:8px;">Unterschrift löschen</button>';
+  html += '<label style="margin-top:14px;">Unterschrift Techniker</label>';
+  html += '<canvas class="sig" id="sigPadTechniker"></canvas>';
+  html += '<button class="btn secondary small" id="sigClearTechniker" style="margin-top:8px;">Unterschrift löschen</button>';
+  html += '<button class="btn block" id="fSave" style="margin-top:14px;">Prüfung abschließen &amp; Bericht erstellen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+
+  var canvasKunde = initSigPad('sigPadKunde');
+  var canvasTechniker = initSigPad('sigPadTechniker');
+  var ctxKunde = canvasKunde.getContext('2d');
+  var ctxTechniker = canvasTechniker.getContext('2d');
+
+  document.getElementById('sigClearKunde').onclick = function(){
+    ctxKunde.clearRect(0,0,canvasKunde.width,canvasKunde.height);
+  };
+  document.getElementById('sigClearTechniker').onclick = function(){
+    ctxTechniker.clearRect(0,0,canvasTechniker.width,canvasTechniker.height);
   };
 
   document.getElementById('fSave').onclick = function(){
-    var sigData = canvas.toDataURL('image/png');
     p.erledigt = true;
     p.bemerkung = document.getElementById('fBemerkung').value.trim();
-    p.unterschrift = sigData;
+    p.unterschriftKunde = canvasKunde.toDataURL('image/png');
+    p.unterschriftTechniker = canvasTechniker.toDataURL('image/png');
     p.bericht = true;
     p.erledigtAm = new Date().toISOString();
     dbPut('pruefungen', p, function(){
@@ -1204,10 +1228,17 @@ function buildBerichtHtml(p, k){
   html += '<h2 style="font-size:18px; margin:16px 0 14px 0;">Prüfbericht</h2>';
 
   html += '<div class="bericht-feld"><div class="l">Kunde</div><div class="w">' + (k ? escapeHtml(k.name) : '-') + '</div></div>';
+  if(k && k.kundennummer){
+    html += '<div class="bericht-feld"><div class="l">Kundennummer</div><div class="w">' + escapeHtml(k.kundennummer) + '</div></div>';
+  }
   html += '<div class="bericht-feld"><div class="l">Adresse</div><div class="w">' + (k ? escapeHtml(k.adresse||'-') : '-') + '</div></div>';
   html += '<div class="bericht-feld"><div class="l">Prüfungsart</div><div class="w">' + escapeHtml(p.typ||'-') + '</div></div>';
+  var gRef = null;
   if(p.geraetId){
-    var gRef = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    gRef = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    if(gRef && gRef.baujahr){
+      html += '<div class="bericht-feld"><div class="l">Baujahr</div><div class="w">' + gRef.baujahr + '</div></div>';
+    }
     if(gRef && gRef.seriennummer){
       html += '<div class="bericht-feld"><div class="l">Seriennummer</div><div class="w">' + escapeHtml(gRef.seriennummer) + '</div></div>';
     }
@@ -1219,9 +1250,15 @@ function buildBerichtHtml(p, k){
   if(p.bemerkung){
     html += '<div class="bericht-feld"><div class="l">Bemerkung / Befund</div><div class="w">' + escapeHtml(p.bemerkung) + '</div></div>';
   }
-  if(p.unterschrift){
+  var sigKunde = p.unterschriftKunde || p.unterschrift;
+  if(sigKunde){
     html += '<div class="bericht-feld"><div class="l">Unterschrift Kunde</div>';
-    html += '<img src="' + p.unterschrift + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
+    html += '<img src="' + sigKunde + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
+    html += '</div>';
+  }
+  if(p.unterschriftTechniker){
+    html += '<div class="bericht-feld"><div class="l">Unterschrift Techniker</div>';
+    html += '<img src="' + p.unterschriftTechniker + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
     html += '</div>';
   }
   html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
@@ -1325,6 +1362,21 @@ function bindDynamic(){
     scanManuellBtn.onclick = function(){
       var val = document.getElementById('scanManuellInput').value;
       if(val.trim()) verarbeiteScan(val);
+    };
+  }
+
+  var checkSigKundeCanvas = initSigPad('checkSigKunde');
+  var checkSigTechnikerCanvas = initSigPad('checkSigTechniker');
+  if(checkSigKundeCanvas){
+    var checkSigClearKunde = document.getElementById('checkSigClearKunde');
+    if(checkSigClearKunde) checkSigClearKunde.onclick = function(){
+      checkSigKundeCanvas.getContext('2d').clearRect(0,0,checkSigKundeCanvas.width,checkSigKundeCanvas.height);
+    };
+  }
+  if(checkSigTechnikerCanvas){
+    var checkSigClearTechniker = document.getElementById('checkSigClearTechniker');
+    if(checkSigClearTechniker) checkSigClearTechniker.onclick = function(){
+      checkSigTechnikerCanvas.getContext('2d').clearRect(0,0,checkSigTechnikerCanvas.width,checkSigTechnikerCanvas.height);
     };
   }
 
