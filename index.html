@@ -366,6 +366,17 @@ function render(){
 }
 
 // ---------- Dashboard ----------
+function kundeFuerPruefung(p){
+  if(p.geraetId){
+    var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    if(g){
+      var kg = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+      if(kg) return kg;
+    }
+  }
+  return state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+}
+
 function kundeIstAktiv(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   return !!(k && !k.geloescht);
@@ -398,7 +409,7 @@ function renderDashboard(){
     html += '<div class="empty"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
   } else {
     diesenMonat.forEach(function(p){
-      var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+      var k = kundeFuerPruefung(p);
       var st = statusForDate(p.datum);
       html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
@@ -415,7 +426,7 @@ function renderDashboard(){
   } else {
     var list = ueberfaelligPruefungen.concat(bald);
     list.forEach(function(p){
-      var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+      var k = kundeFuerPruefung(p);
       var st = statusForDate(p.datum);
       html += '<div class="card">';
       html += '<div class="row"><h3>' + (k ? k.name : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
@@ -560,6 +571,7 @@ function verarbeiteScan(text){
     return;
   }
   state.activeGeraetId = g.id;
+  state.checkRueckkehrZuKunde = null;
   state.tab = 'geraetCheck';
   render();
 }
@@ -633,6 +645,51 @@ function naechsterTerminNach(datumIso, intervallMonate){
   return basis.toISOString().substring(0,10);
 }
 
+function schnellErgebnisSetzen(geraetId, ergebnis){
+  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  if(!g) return;
+  var jetztIso = new Date().toISOString();
+  var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
+  var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
+  if(!offenePruefung){
+    offenePruefung = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: jetztIso.substring(0,10), erledigt: false };
+  }
+  offenePruefung.erledigt = true;
+  offenePruefung.erledigtAm = jetztIso;
+  offenePruefung.bericht = true;
+  offenePruefung.ergebnis = ergebnisLabel;
+  dbPut('pruefungen', offenePruefung, function(){
+    if(ergebnis === 'ausscheiden'){
+      g.ausgeschieden = true;
+      g.ausgeschiedenAm = jetztIso;
+      dbPut('geraete', g, function(){
+        var kid = g.kundeId;
+        var ersatzHtml = '';
+        ersatzHtml += '<div class="modal-head"><h3>Gerät ausgeschieden</h3></div>';
+        ersatzHtml += '<div style="font-size:14px; margin-bottom:16px;">Jetzt gleich ein Ersatzgerät für diesen Kunden anlegen?</div>';
+        ersatzHtml += '<button class="btn block" id="ersatzJa">Ja, Ersatzgerät anlegen</button>';
+        ersatzHtml += '<button class="btn block secondary" id="ersatzNein" style="margin-top:10px;">Nein, fertig</button>';
+        openModal(ersatzHtml);
+        document.getElementById('ersatzJa').onclick = function(){
+          loadAll(function(){ render(); modalNeuesGeraet(kid); });
+        };
+        document.getElementById('ersatzNein').onclick = function(){
+          closeModal();
+          loadAll(function(){ render(); toast('Gerät ausgeschieden'); });
+        };
+      });
+    } else if(ergebnis === 'in_ordnung'){
+      g.letztePruefung = jetztIso.substring(0,10);
+      g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+      dbPut('geraete', g, function(){
+        loadAll(function(){ render(); toast('Gespeichert: In Ordnung (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
+      });
+    } else {
+      loadAll(function(){ render(); toast('Gespeichert: Reparatur nötig'); });
+    }
+  });
+}
+
 function checkAbschliessen(geraetId, ergebnis){
   state.vorgewaehltesErgebnis = null;
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
@@ -658,21 +715,56 @@ function checkAbschliessen(geraetId, ergebnis){
   if(sigKundeCanvas) offenePruefung.unterschriftKunde = sigKundeCanvas.toDataURL('image/png');
   if(sigTechnikerCanvas) offenePruefung.unterschriftTechniker = sigTechnikerCanvas.toDataURL('image/png');
   dbPut('pruefungen', offenePruefung, function(){
+    var rueckkehrKunde = state.checkRueckkehrZuKunde;
+    function nachAbschluss(nachricht){
+      loadAll(function(){
+        if(rueckkehrKunde){
+          state.activeKundeId = rueckkehrKunde;
+          state.checkRueckkehrZuKunde = null;
+          state.tab = 'kundeDetail';
+          render();
+          toast(nachricht);
+        } else {
+          state.tab = 'berichte';
+          render();
+          toast(nachricht);
+          modalBerichtAnsicht(offenePruefung.id);
+        }
+      });
+    }
     if(ergebnis === 'ausscheiden'){
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
       dbPut('geraete', g, function(){
-        loadAll(function(){ state.tab = 'berichte'; render(); toast('Gerät ausgeschieden und Prüfung dokumentiert'); modalBerichtAnsicht(offenePruefung.id); });
+        var kid = g.kundeId;
+        var ersatzHtml = '';
+        ersatzHtml += '<div class="modal-head"><h3>Gerät ausgeschieden</h3></div>';
+        ersatzHtml += '<div style="font-size:14px; margin-bottom:16px;">Jetzt gleich ein Ersatzgerät für diesen Kunden anlegen?</div>';
+        ersatzHtml += '<button class="btn block" id="ersatzJa">Ja, Ersatzgerät anlegen</button>';
+        ersatzHtml += '<button class="btn block secondary" id="ersatzNein" style="margin-top:10px;">Nein, fertig</button>';
+        openModal(ersatzHtml);
+        document.getElementById('ersatzJa').onclick = function(){
+          loadAll(function(){
+            state.activeKundeId = kid;
+            state.checkRueckkehrZuKunde = null;
+            state.tab = 'kundeDetail';
+            render();
+            modalNeuesGeraet(kid);
+          });
+        };
+        document.getElementById('ersatzNein').onclick = function(){
+          nachAbschluss('Gerät ausgeschieden und Prüfung dokumentiert');
+        };
       });
     } else {
       if(ergebnis === 'in_ordnung'){
         g.letztePruefung = jetztIso.substring(0,10);
         g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
         dbPut('geraete', g, function(){
-          loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); modalBerichtAnsicht(offenePruefung.id); });
+          nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
         });
       } else {
-        loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(offenePruefung.id); });
+        nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel);
       }
     }
   });
@@ -840,7 +932,7 @@ function renderPruefungen(){
       html += '<div class="empty">Keine offenen Prüfungen' + (filter !== 'alle' ? ' in dieser Kategorie' : '') + '</div>';
     } else {
       offen.forEach(function(p){
-        var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+        var k = kundeFuerPruefung(p);
         var st = statusForDate(p.datum);
         html += '<div class="card">';
         html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
@@ -863,7 +955,7 @@ function renderPruefungen(){
       html += '<div class="empty">Keine Einträge in dieser Kategorie</div>';
     } else {
       erledigt.slice(0,20).forEach(function(p){
-        var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+        var k = kundeFuerPruefung(p);
         var ei = ergebnisInfo(p.ergebnis);
         html += '<div class="card">';
         html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
@@ -920,7 +1012,7 @@ function renderStatistik(){
     html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
   } else {
     statListe.forEach(function(p){
-      var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+      var k = kundeFuerPruefung(p);
       var ei = ergebnisInfo(p.ergebnis);
       html += '<div class="card">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
@@ -1442,7 +1534,7 @@ function initSigPad(canvasId){
 
 function modalErledigt(pruefungId){
   var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
-  var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+  var k = kundeFuerPruefung(p);
   var html = '';
   html += '<div class="modal-head"><h3>Prüfung abschließen</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + (k ? escapeHtml(k.name) : '') + ' &middot; ' + escapeHtml(p.typ || '') + '</div>';
@@ -1508,57 +1600,60 @@ function modalErledigt(pruefungId){
 
 function buildBerichtHtml(p, k){
   var html = '';
+  var berichtNr = 'PB-' + fmtDate(p.erledigtAm || p.datum).split('.').reverse().join('') + '-' + p.id.slice(-4);
+  var gRef = p.geraetId ? state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] : null;
+
   html += '<div class="bericht-brief">';
-  html += '<div class="bericht-kopf">';
-  html += '<img src="' + LOGO_DATA + '" class="bericht-logo-img">';
+
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Prüfergebnisbericht</h1><div class="sub">Prüfbericht Feuerlöscher</div><div class="norm">gemäß ÖNORM F1053</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
   html += '</div>';
-  html += '<div class="bericht-tagline">Seit über 20 Jahren Ihr Brandschutzprofi</div>';
+  html += '<div class="meta" style="margin:-8px 0 12px 0;">Prüfbericht Nr.: ' + berichtNr + '</div>';
 
-  html += '<h2 style="font-size:18px; margin:16px 0 14px 0;">Prüfbericht</h2>';
+  html += '<div class="pb-kundenbox">';
+  html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
+  html += '</div>';
 
-  html += '<div class="bericht-feld"><div class="l">Kunde</div><div class="w">' + (k ? escapeHtml(k.name) : '-') + '</div></div>';
-  if(k && k.kundennummer){
-    html += '<div class="bericht-feld"><div class="l">Kundennummer</div><div class="w">' + escapeHtml(k.kundennummer) + '</div></div>';
-  }
-  html += '<div class="bericht-feld"><div class="l">Adresse</div><div class="w">' + (k ? escapeHtml(k.adresse||'-') : '-') + '</div></div>';
-  html += '<div class="bericht-feld"><div class="l">Prüfungsart</div><div class="w">' + escapeHtml(p.typ||'-') + '</div></div>';
-  var gRef = null;
-  if(p.geraetId){
-    gRef = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
-    if(gRef && gRef.baujahr){
-      html += '<div class="bericht-feld"><div class="l">Baujahr</div><div class="w">' + gRef.baujahr + '</div></div>';
-    }
-    if(gRef && gRef.seriennummer){
-      html += '<div class="bericht-feld"><div class="l">Seriennummer</div><div class="w">' + escapeHtml(gRef.seriennummer) + '</div></div>';
-    }
-  }
-  html += '<div class="bericht-feld"><div class="l">Datum</div><div class="w">' + fmtDate(p.erledigtAm || p.datum) + '</div></div>';
-  if(p.ergebnis){
-    var eiSingle = ergebnisInfo(p.ergebnis);
-    html += '<div class="bericht-feld"><div class="l">Ergebnis</div><div class="w"><span class="' + eiSingle.cls + '">' + eiSingle.label + '</span></div></div>';
-  }
+  html += '<table class="pb-tabelle"><thead><tr>';
+  html += '<th>Gerät</th><th>Baujahr</th><th>Serien-Nr.</th><th>Datum</th><th>Ergebnis</th>';
+  html += '</tr></thead><tbody><tr>';
+  html += '<td>' + escapeHtml(p.typ||'-') + '</td>';
+  html += '<td>' + (gRef && gRef.baujahr ? gRef.baujahr : '-') + '</td>';
+  html += '<td>' + (gRef && gRef.seriennummer ? escapeHtml(gRef.seriennummer) : '-') + '</td>';
+  html += '<td>' + fmtDate(p.erledigtAm || p.datum) + '</td>';
+  var eiSingle = ergebnisInfo(p.ergebnis);
+  html += '<td><span class="' + eiSingle.cls + '">' + eiSingle.label + '</span></td>';
+  html += '</tr></tbody></table>';
+
   if(p.bemerkung){
-    html += '<div class="bericht-feld"><div class="l">Bemerkung / Befund</div><div class="w">' + escapeHtml(p.bemerkung) + '</div></div>';
+    html += '<div class="bericht-feld" style="margin-top:10px;"><div class="l">Bemerkung / Befund</div><div class="w">' + escapeHtml(p.bemerkung) + '</div></div>';
   }
+
   var sigKunde = p.unterschriftKunde || p.unterschrift;
-  if(sigKunde){
-    html += '<div class="bericht-feld"><div class="l">Unterschrift Kunde</div>';
-    html += '<img src="' + sigKunde + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
-    html += '</div>';
-  }
-  if(p.unterschriftTechniker){
-    html += '<div class="bericht-feld"><div class="l">Unterschrift Techniker</div>';
-    html += '<img src="' + p.unterschriftTechniker + '" style="width:100%; max-width:320px; border:1px solid #e4dcd0; border-radius:8px; background:#fff; margin-top:4px;">';
-    html += '</div>';
-  }
-  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
+  html += '<div class="pb-sig-row">';
+  html += '<div class="pb-sig-col">';
+  if(p.unterschriftTechniker) html += '<img src="' + p.unterschriftTechniker + '">';
+  else html += '<div style="height:60px;"></div>';
+  html += '<div class="sig-label">Unterschrift Techniker</div>';
+  html += '</div>';
+  html += '<div class="pb-sig-col">';
+  if(sigKunde) html += '<img src="' + sigKunde + '">';
+  else html += '<div style="height:60px;"></div>';
+  html += '<div class="sig-label">Unterschrift Kunde' + (k ? ' (' + escapeHtml(k.name) + ')' : '') + '</div>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '<div class="bericht-fuss">' + escapeHtml(berichtNr) + ' &middot; Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
   html += '</div>';
   return html;
 }
 
 function modalBerichtAnsicht(pruefungId){
   var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
-  var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+  var k = kundeFuerPruefung(p);
   var html = '';
   html += '<div class="modal-head no-print"><h3>Prüfbericht</h3><button class="close" id="mClose">&times;</button></div>';
 
@@ -1604,7 +1699,12 @@ function modalSammelbericht(kundeId){
   });
 
   var auswahl = {};
-  geraeteSortiert.forEach(function(g){ auswahl[g.id] = 'in_ordnung'; });
+  geraeteSortiert.forEach(function(g){
+    var letzte = letztePruefungFuerGeraet(g.id);
+    if(letzte && letzte.ergebnis === 'Reparatur nötig') auswahl[g.id] = 'reparatur';
+    else if(letzte && letzte.ergebnis === 'Ausgeschieden') auswahl[g.id] = 'ausscheiden';
+    else auswahl[g.id] = 'in_ordnung';
+  });
 
   var html = '';
   html += '<div class="modal-head"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
@@ -1615,14 +1715,19 @@ function modalSammelbericht(kundeId){
     html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
   } else {
     geraeteSortiert.forEach(function(g, idx){
+      var aktErg = auswahl[g.id];
+      var letzte = letztePruefungFuerGeraet(g.id);
+      var farbe = function(key){ return key === 'in_ordnung' ? 'var(--ok)' : (key === 'reparatur' ? '#c98a1c' : '#c23f12'); };
+      var klasse = function(key){ return aktErg === key ? 'btn small sbErgBtn active' : 'btn small secondary sbErgBtn'; };
+      var stil = function(key){ return 'flex:1;' + (aktErg === key ? ' background:' + farbe(key) + ';' : ''); };
       html += '<div class="card" data-geraetkarte="' + g.id + '">';
       html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; gap:6px; margin-top:10px;">';
-      html += '<button type="button" class="btn small sbErgBtn active" data-gid="' + g.id + '" data-erg="in_ordnung" style="flex:1; background:var(--ok);">In Ordnung</button>';
-      html += '<button type="button" class="btn small secondary sbErgBtn" data-gid="' + g.id + '" data-erg="reparatur" style="flex:1;">Reparatur</button>';
-      html += '<button type="button" class="btn small secondary sbErgBtn" data-gid="' + g.id + '" data-erg="ausscheiden" style="flex:1;">Ausscheiden</button>';
+      html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">In Ordnung</button>';
+      html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
+      html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
       html += '</div>';
-      html += '<textarea id="sbNotiz_' + g.id + '" rows="2" placeholder="Notiz zu diesem Gerät (optional)" style="margin-top:8px;"></textarea>';
+      html += '<textarea id="sbNotiz_' + g.id + '" rows="2" placeholder="Notiz zu diesem Gerät (optional)" style="margin-top:8px;">' + (letzte && letzte.bemerkung ? escapeHtml(letzte.bemerkung) : '') + '</textarea>';
       html += '</div>';
     });
   }
@@ -1990,10 +2095,9 @@ function bindDynamic(){
   document.querySelectorAll('[data-schnellcheck]').forEach(function(b){
     b.onclick = function(e){
       e.stopPropagation();
-      state.activeGeraetId = b.getAttribute('data-schnellcheck');
-      state.vorgewaehltesErgebnis = b.getAttribute('data-erg');
-      state.tab = 'geraetCheck';
-      render();
+      var gid = b.getAttribute('data-schnellcheck');
+      var erg = b.getAttribute('data-erg');
+      schnellErgebnisSetzen(gid, erg);
     };
   });
 
@@ -2024,6 +2128,7 @@ function bindDynamic(){
       var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
       if(!g){ toast('Gerät nicht gefunden'); return; }
       state.activeGeraetId = gid;
+      state.checkRueckkehrZuKunde = null;
       state.tab = 'geraetCheck';
       render();
     };
