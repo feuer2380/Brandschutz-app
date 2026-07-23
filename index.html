@@ -560,7 +560,11 @@ function renderGeraetCheck(geraetId){
   if(g.baujahr) html += '<div class="meta">Baujahr: ' + g.baujahr + '</div>';
   if(g.seriennummer) html += '<div class="meta">Seriennummer: ' + escapeHtml(g.seriennummer) + '</div>';
   if(bj) html += '<div style="margin-top:6px;"><span class="badge ' + bj.cls + '">' + bj.label + '</span></div>';
+  if(g.letzteInnenrevision) html += '<div class="meta" style="margin-top:4px;">Innenrevision zuletzt: ' + fmtDate(g.letzteInnenrevision) + '</div>';
   if(g.ausgeschieden) html += '<div style="margin-top:6px;"><span class="badge warn">Bereits ausgeschieden am ' + fmtDate(g.ausgeschiedenAm) + '</span></div>';
+  if(bj && !g.ausgeschieden){
+    html += '<button type="button" class="btn secondary small" id="checkInnenrevErledigt" style="margin-top:10px;">Innenrevision jetzt als durchgeführt markieren</button>';
+  }
   html += '</div>';
 
   if(!g.ausgeschieden){
@@ -1455,6 +1459,9 @@ function modalSammelbericht(kundeId){
     return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
   });
 
+  var auswahl = {};
+  geraeteSortiert.forEach(function(g){ auswahl[g.id] = 'in_ordnung'; });
+
   var html = '';
   html += '<div class="modal-head"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
@@ -1463,18 +1470,20 @@ function modalSammelbericht(kundeId){
   if(geraeteSortiert.length === 0){
     html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
   } else {
-    html += '<div class="card">';
     geraeteSortiert.forEach(function(g, idx){
-      var st = statusForDate(g.naechstePruefung);
-      html += '<div class="device-item">';
+      html += '<div class="card" data-geraetkarte="' + g.id + '">';
       html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
-      html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
+      html += '<div style="display:flex; gap:6px; margin-top:10px;">';
+      html += '<button type="button" class="btn small sbErgBtn active" data-gid="' + g.id + '" data-erg="in_ordnung" style="flex:1; background:var(--ok);">In Ordnung</button>';
+      html += '<button type="button" class="btn small secondary sbErgBtn" data-gid="' + g.id + '" data-erg="reparatur" style="flex:1;">Reparatur</button>';
+      html += '<button type="button" class="btn small secondary sbErgBtn" data-gid="' + g.id + '" data-erg="ausscheiden" style="flex:1;">Ausscheiden</button>';
+      html += '</div>';
+      html += '<textarea id="sbNotiz_' + g.id + '" rows="2" placeholder="Notiz zu diesem Gerät (optional)" style="margin-top:8px;"></textarea>';
       html += '</div>';
     });
-    html += '</div>';
   }
 
-  html += '<label style="margin-top:12px;">Allgemeine Bemerkung (optional)</label><textarea id="sbBemerkung" rows="2" placeholder="z.B. Alle Geräte kontrolliert, keine Auffälligkeiten"></textarea>';
+  html += '<label style="margin-top:4px;">Allgemeine Bemerkung (optional)</label><textarea id="sbBemerkung" rows="2" placeholder="z.B. Alle Geräte kontrolliert, keine Auffälligkeiten"></textarea>';
   html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
   html += '<canvas class="sig" id="sbSigKunde"></canvas>';
   html += '<button class="btn secondary small" id="sbSigClearKunde" style="margin-top:6px;">Löschen</button>';
@@ -1495,35 +1504,88 @@ function modalSammelbericht(kundeId){
     sigTechniker.getContext('2d').clearRect(0,0,sigTechniker.width,sigTechniker.height);
   };
 
+  document.querySelectorAll('.sbErgBtn').forEach(function(b){
+    b.onclick = function(){
+      var gid = b.getAttribute('data-gid');
+      auswahl[gid] = b.getAttribute('data-erg');
+      document.querySelectorAll('.sbErgBtn[data-gid="' + gid + '"]').forEach(function(other){
+        other.className = 'btn small secondary sbErgBtn';
+        other.style.background = '';
+      });
+      var farbe = auswahl[gid] === 'in_ordnung' ? 'var(--ok)' : (auswahl[gid] === 'reparatur' ? '#c98a1c' : '#c23f12');
+      b.className = 'btn small sbErgBtn active';
+      b.style.background = farbe;
+    };
+  });
+
   document.getElementById('sbSpeichern').onclick = function(){
     var jetztIso = new Date().toISOString();
-    var snapshot = geraeteSortiert.map(function(g, idx){
-      var letzte = letztePruefungFuerGeraet(g.id);
-      return {
-        nr: idx+1,
-        typ: g.typ,
-        standort: g.standort || '',
-        baujahr: g.baujahr || null,
-        seriennummer: g.seriennummer || '',
-        status: statusForDate(g.naechstePruefung).label,
-        ergebnis: letzte ? letzte.ergebnis : 'In Ordnung',
-        notiz: letzte ? (letzte.bemerkung || '') : '',
-        naechstePruefung: g.naechstePruefung || null
-      };
-    });
-    var sb = {
-      id: uid(),
-      kundeId: kundeId,
-      datum: jetztIso,
-      berichtNr: document.getElementById('sbBerichtNr').value.trim(),
-      geraeteSnapshot: snapshot,
-      bemerkung: document.getElementById('sbBemerkung').value.trim(),
-      unterschriftKunde: sigKunde.toDataURL('image/png'),
-      unterschriftTechniker: sigTechniker.toDataURL('image/png')
-    };
-    dbPut('sammelberichte', sb, function(){
-      loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast('Sammelbericht erstellt'); });
-    });
+    var idx = 0;
+    var snapshot = [];
+
+    function naechstesGeraet(){
+      if(idx >= geraeteSortiert.length){
+        var sb = {
+          id: uid(),
+          kundeId: kundeId,
+          datum: jetztIso,
+          berichtNr: document.getElementById('sbBerichtNr').value.trim(),
+          geraeteSnapshot: snapshot,
+          bemerkung: document.getElementById('sbBemerkung').value.trim(),
+          unterschriftKunde: sigKunde.toDataURL('image/png'),
+          unterschriftTechniker: sigTechniker.toDataURL('image/png')
+        };
+        dbPut('sammelberichte', sb, function(){
+          loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast('Sammelbericht erstellt'); });
+        });
+        return;
+      }
+      var g = geraeteSortiert[idx];
+      var ergebnis = auswahl[g.id] || 'in_ordnung';
+      var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
+      var notiz = (document.getElementById('sbNotiz_' + g.id).value || '').trim();
+
+      var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
+      if(!offenePruefung){
+        offenePruefung = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: jetztIso.substring(0,10), erledigt: false };
+      }
+      offenePruefung.erledigt = true;
+      offenePruefung.erledigtAm = jetztIso;
+      offenePruefung.bericht = true;
+      offenePruefung.ergebnis = ergebnisLabel;
+      offenePruefung.bemerkung = notiz;
+      offenePruefung.unterschriftKunde = sigKunde.toDataURL('image/png');
+      offenePruefung.unterschriftTechniker = sigTechniker.toDataURL('image/png');
+
+      dbPut('pruefungen', offenePruefung, function(){
+        var weiter = function(naechstePruefungWert){
+          snapshot.push({
+            nr: idx+1,
+            typ: g.typ,
+            standort: g.standort || '',
+            baujahr: g.baujahr || null,
+            seriennummer: g.seriennummer || '',
+            ergebnis: ergebnisLabel,
+            notiz: notiz,
+            naechstePruefung: naechstePruefungWert || null
+          });
+          idx++;
+          naechstesGeraet();
+        };
+        if(ergebnis === 'ausscheiden'){
+          g.ausgeschieden = true;
+          g.ausgeschiedenAm = jetztIso;
+          dbPut('geraete', g, function(){ weiter(null); });
+        } else if(ergebnis === 'in_ordnung'){
+          g.letztePruefung = jetztIso.substring(0,10);
+          g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+          dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
+        } else {
+          weiter(g.naechstePruefung);
+        }
+      });
+    }
+    naechstesGeraet();
   };
 }
 
@@ -1554,7 +1616,7 @@ function buildSammelberichtHtml(sb, k){
     html += '<td>' + escapeHtml(g.standort||'-') + '</td>';
     html += '<td>' + escapeHtml(g.seriennummer||'-') + '</td>';
     html += '<td>' + (g.baujahr||'-') + '</td>';
-    html += '<td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : escapeHtml(g.status)) + '</td>';
+    html += '<td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
     var ei = ergebnisInfo(g.ergebnis);
     html += '<td><span class="' + ei.cls + '">' + ei.label + '</span></td>';
     html += '<td>' + (g.notiz ? escapeHtml(g.notiz) : '-') + '</td>';
@@ -1675,6 +1737,21 @@ function bindDynamic(){
     var checkSigClearTechniker = document.getElementById('checkSigClearTechniker');
     if(checkSigClearTechniker) checkSigClearTechniker.onclick = function(){
       checkSigTechnikerCanvas.getContext('2d').clearRect(0,0,checkSigTechnikerCanvas.width,checkSigTechnikerCanvas.height);
+    };
+  }
+
+  var checkInnenrevErledigt = document.getElementById('checkInnenrevErledigt');
+  if(checkInnenrevErledigt){
+    checkInnenrevErledigt.onclick = function(){
+      customConfirm('Innenrevision für dieses Gerät jetzt als heute durchgeführt markieren?', function(){
+        var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
+        if(g){
+          g.letzteInnenrevision = new Date().toISOString().substring(0,10);
+          dbPut('geraete', g, function(){
+            loadAll(function(){ render(); toast('Innenrevision vermerkt'); });
+          });
+        }
+      });
     };
   }
 
