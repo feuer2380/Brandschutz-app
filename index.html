@@ -585,10 +585,15 @@ function ergebnisInfo(ergebnisText){
   return { cls:'pb-ok', badgeCls:'ok', label:'In Ordnung' };
 }
 
-function letztesErgebnisFuerGeraet(geraetId){
+function letztePruefungFuerGeraet(geraetId){
   var erledigte = state.pruefungen.filter(function(p){ return p.geraetId === geraetId && p.erledigt; });
   erledigte.sort(function(a,b){ return new Date(b.erledigtAm||b.datum) - new Date(a.erledigtAm||a.datum); });
-  return erledigte.length ? erledigte[0].ergebnis : 'In Ordnung';
+  return erledigte.length ? erledigte[0] : null;
+}
+
+function letztesErgebnisFuerGeraet(geraetId){
+  var letzte = letztePruefungFuerGeraet(geraetId);
+  return letzte ? letzte.ergebnis : 'In Ordnung';
 }
 
 function naechsterTerminNach(datumIso, intervallMonate){
@@ -1493,6 +1498,7 @@ function modalSammelbericht(kundeId){
   document.getElementById('sbSpeichern').onclick = function(){
     var jetztIso = new Date().toISOString();
     var snapshot = geraeteSortiert.map(function(g, idx){
+      var letzte = letztePruefungFuerGeraet(g.id);
       return {
         nr: idx+1,
         typ: g.typ,
@@ -1500,7 +1506,9 @@ function modalSammelbericht(kundeId){
         baujahr: g.baujahr || null,
         seriennummer: g.seriennummer || '',
         status: statusForDate(g.naechstePruefung).label,
-        ergebnis: letztesErgebnisFuerGeraet(g.id)
+        ergebnis: letzte ? letzte.ergebnis : 'In Ordnung',
+        notiz: letzte ? (letzte.bemerkung || '') : '',
+        naechstePruefung: g.naechstePruefung || null
       };
     });
     var sb = {
@@ -1537,7 +1545,7 @@ function buildSammelberichtHtml(sb, k){
   html += '</div>';
 
   html += '<table class="pb-tabelle"><thead><tr>';
-  html += '<th>Pos</th><th>Gerät</th><th>Standort</th><th>Serien-Nr.</th><th>Baujahr</th><th>Nä. Prüfung</th><th>Ergebnis</th>';
+  html += '<th>Pos</th><th>Gerät</th><th>Standort</th><th>Serien-Nr.</th><th>Baujahr</th><th>Nä. Prüfung</th><th>Ergebnis</th><th>Notiz</th>';
   html += '</tr></thead><tbody>';
   (sb.geraeteSnapshot || []).forEach(function(g){
     html += '<tr>';
@@ -1546,9 +1554,10 @@ function buildSammelberichtHtml(sb, k){
     html += '<td>' + escapeHtml(g.standort||'-') + '</td>';
     html += '<td>' + escapeHtml(g.seriennummer||'-') + '</td>';
     html += '<td>' + (g.baujahr||'-') + '</td>';
-    html += '<td>' + escapeHtml(g.status) + '</td>';
+    html += '<td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : escapeHtml(g.status)) + '</td>';
     var ei = ergebnisInfo(g.ergebnis);
     html += '<td><span class="' + ei.cls + '">' + ei.label + '</span></td>';
+    html += '<td>' + (g.notiz ? escapeHtml(g.notiz) : '-') + '</td>';
     html += '</tr>';
   });
   html += '</tbody></table>';
