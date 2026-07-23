@@ -855,6 +855,9 @@ function renderPruefungen(){
         html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
         html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
         if(p.bemerkung) html += '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>';
+        if(filter === 'reparatur' && p.geraetId){
+          html += '<button class="btn small" style="margin-top:8px;" data-erneutpruefen="' + p.geraetId + '">Erneut prüfen</button>';
+        }
         html += '</div>';
       });
     }
@@ -1495,7 +1498,7 @@ function buildBerichtHtml(p, k){
   html += '<div class="bericht-kopf">';
   html += '<img src="' + LOGO_DATA + '" class="bericht-logo-img">';
   html += '</div>';
-  html += '<div class="bericht-tagline">Seit ueber 20 Jahren Ihr Brandschutzprofi</div>';
+  html += '<div class="bericht-tagline">Seit über 20 Jahren Ihr Brandschutzprofi</div>';
 
   html += '<h2 style="font-size:18px; margin:16px 0 14px 0;">Prüfbericht</h2>';
 
@@ -1988,6 +1991,17 @@ function bindDynamic(){
           loadAll(function(){ render(); toast('Prüfung gelöscht'); });
         });
       });
+    };
+  });
+
+  document.querySelectorAll('[data-erneutpruefen]').forEach(function(b){
+    b.onclick = function(){
+      var gid = b.getAttribute('data-erneutpruefen');
+      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      if(!g){ toast('Gerät nicht gefunden'); return; }
+      state.activeGeraetId = gid;
+      state.tab = 'geraetCheck';
+      render();
     };
   });
 
