@@ -366,11 +366,16 @@ function render(){
 }
 
 // ---------- Dashboard ----------
+function kundeIstAktiv(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  return !!(k && !k.geloescht);
+}
+
 function renderDashboard(){
-  var offen = state.pruefungen.filter(function(p){ return !p.erledigt; });
+  var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
   var bald = offen.filter(function(p){ return daysUntil(p.datum) >= 0 && daysUntil(p.datum) <= 30; });
 
-  var geraeteAktiv = state.geraete.filter(function(g){ return !g.ausgeschieden; });
+  var geraeteAktiv = state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); });
   var ueberfaelligGeraete = geraeteAktiv.filter(function(g){ return statusForDate(g.naechstePruefung).cls === 'warn'; });
 
   var jetzt = new Date();
@@ -421,7 +426,7 @@ function renderDashboard(){
 
   html += '<div class="section-title">Fällige Innenrevisionen</div>';
   var innenrevListe = [];
-  state.geraete.filter(function(g){ return !g.ausgeschieden; }).forEach(function(g){
+  state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); }).forEach(function(g){
     var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
     if(bj && bj.cls === 'soon' && bj.label.indexOf('Innenrevision') === 0){
       innenrevListe.push({ geraet:g, bj:bj });
@@ -448,7 +453,7 @@ function renderDashboard(){
   html += '<button class="filter-btn' + (geraeteFilter === 'ok' ? ' active' : '') + '" data-geraetefilter="ok">&#10003; Aktuell</button>';
   html += '</div>';
 
-  var alleGeraete = state.geraete.filter(function(g){ return !g.ausgeschieden; });
+  var alleGeraete = state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); });
   var gefiltert = alleGeraete.filter(function(g){
     var st = statusForDate(g.naechstePruefung);
     if(geraeteFilter === 'alle') return true;
