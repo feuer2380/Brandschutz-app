@@ -368,8 +368,10 @@ function render(){
 // ---------- Dashboard ----------
 function renderDashboard(){
   var offen = state.pruefungen.filter(function(p){ return !p.erledigt; });
-  var ueberfaellig = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
   var bald = offen.filter(function(p){ return daysUntil(p.datum) >= 0 && daysUntil(p.datum) <= 30; });
+
+  var geraeteAktiv = state.geraete.filter(function(g){ return !g.ausgeschieden; });
+  var ueberfaelligGeraete = geraeteAktiv.filter(function(g){ return statusForDate(g.naechstePruefung).cls === 'warn'; });
 
   var jetzt = new Date();
   var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
@@ -381,9 +383,9 @@ function renderDashboard(){
 
   var html = '';
   html += '<div class="statrow">';
-  html += '<div class="stat"><div class="n">' + state.kunden.length + '</div><div class="l">Kunden</div></div>';
+  html += '<div class="stat"><div class="n">' + state.kunden.filter(function(x){ return !x.geloescht; }).length + '</div><div class="l">Kunden</div></div>';
   html += '<div class="stat"><div class="n">' + state.geraete.length + '</div><div class="l">Geräte</div></div>';
-  html += '<div class="stat"><div class="n" style="color:' + (ueberfaellig.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaellig.length + '</div><div class="l">Überfällig</div></div>';
+  html += '<div class="stat"><div class="n" style="color:' + (ueberfaelligGeraete.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaelligGeraete.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
 
   html += '<div class="section-title">Diesen Monat zu prüfen (' + monatNamen[jetzt.getMonth()] + ')</div>';
@@ -402,10 +404,11 @@ function renderDashboard(){
   }
 
   html += '<div class="section-title">Bald fällig (30 Tage)</div>';
-  if(bald.length === 0 && ueberfaellig.length === 0){
+  var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
+  if(bald.length === 0 && ueberfaelligPruefungen.length === 0){
     html += '<div class="empty"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
   } else {
-    var list = ueberfaellig.concat(bald);
+    var list = ueberfaelligPruefungen.concat(bald);
     list.forEach(function(p){
       var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
       var st = statusForDate(p.datum);
@@ -649,17 +652,17 @@ function checkAbschliessen(geraetId, ergebnis){
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
       dbPut('geraete', g, function(){
-        loadAll(function(){ state.tab = 'berichte'; render(); toast('Gerät ausgeschieden und Prüfung dokumentiert'); });
+        loadAll(function(){ state.tab = 'berichte'; render(); toast('Gerät ausgeschieden und Prüfung dokumentiert'); modalBerichtAnsicht(offenePruefung.id); });
       });
     } else {
       if(ergebnis === 'in_ordnung'){
         g.letztePruefung = jetztIso.substring(0,10);
         g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
         dbPut('geraete', g, function(){
-          loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
+          loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); modalBerichtAnsicht(offenePruefung.id); });
         });
       } else {
-        loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); });
+        loadAll(function(){ state.tab = 'berichte'; render(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(offenePruefung.id); });
       }
     }
   });
@@ -668,7 +671,7 @@ function checkAbschliessen(geraetId, ergebnis){
 // ---------- Kunden ----------
 function renderKundenListe(query){
   var q = (query || '').trim().toLowerCase();
-  var liste = state.kunden;
+  var liste = state.kunden.filter(function(k){ return !k.geloescht; });
   if(q){
     liste = liste.filter(function(k){
       var num = (k.kundennummer || '').toLowerCase();
@@ -700,6 +703,40 @@ function renderKunden(){
   var html = '';
   html += '<input id="kundenSuchInput" type="text" placeholder="Suche nach Name oder Kundennummer..." value="' + escapeHtml(state.kundenSuche || '') + '">';
   html += '<div id="kundenListContainer">' + renderKundenListe(state.kundenSuche) + '</div>';
+
+  var verwaist = state.geraete.filter(function(g){
+    return !state.kunden.some(function(k){ return k.id === g.kundeId; });
+  });
+  if(verwaist.length > 0){
+    html += '<div class="section-title">Geräte ohne Kunde (' + verwaist.length + ')</div>';
+    verwaist.forEach(function(g){
+      html += '<div class="card">';
+      html += '<h3>' + escapeHtml(g.typ) + '</h3>';
+      html += '<div class="meta">' + escapeHtml(g.standort || '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div>';
+      html += '<select id="zuweisen_' + g.id + '" style="margin-top:8px;">';
+      html += '<option value="">Kunde wählen...</option>';
+      state.kunden.filter(function(k){ return !k.geloescht; }).forEach(function(k){
+        html += '<option value="' + k.id + '">' + escapeHtml(k.name) + '</option>';
+      });
+      html += '</select>';
+      html += '<button class="btn small" data-zuweisen-geraet="' + g.id + '">Diesem Kunden zuweisen</button>';
+      html += '</div>';
+    });
+  }
+
+  var geloeschte = state.kunden.filter(function(k){ return k.geloescht; });
+  if(geloeschte.length > 0){
+    html += '<div class="section-title">Papierkorb (' + geloeschte.length + ')</div>';
+    geloeschte.sort(function(a,b){ return new Date(b.geloeschtAm||0) - new Date(a.geloeschtAm||0); });
+    geloeschte.forEach(function(k){
+      html += '<div class="card">';
+      html += '<h3>' + escapeHtml(k.name) + '</h3>';
+      html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
+      if(k.geloeschtAm) html += '<div class="meta">Gelöscht am ' + fmtDate(k.geloeschtAm) + '</div>';
+      html += '<button class="btn small secondary" data-wiederherstellen="' + k.id + '" style="margin-top:8px;">Wiederherstellen</button>';
+      html += '</div>';
+    });
+  }
   return html;
 }
 
@@ -754,14 +791,16 @@ function renderPruefungen(){
   var html = '';
   var sorted = state.pruefungen.slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
   var offenAlle = sorted.filter(function(p){ return !p.erledigt; });
-  var erledigt = sorted.filter(function(p){ return p.erledigt; });
+  var erledigtAlle = sorted.filter(function(p){ return p.erledigt; });
 
   var filter = state.pruefungFilter || 'alle';
   var filterOptionen = [
     {key:'alle', label:'Alle'},
     {key:'warn', label:'Überfällig'},
     {key:'soon', label:'Bald fällig'},
-    {key:'ok', label:'In Ordnung'}
+    {key:'ok', label:'In Ordnung'},
+    {key:'reparatur', label:'Reparatur'},
+    {key:'ausgeschieden', label:'Ausgeschieden'}
   ];
   html += '<div class="filter-bar">';
   filterOptionen.forEach(function(f){
@@ -769,37 +808,51 @@ function renderPruefungen(){
   });
   html += '</div>';
 
-  var offen = offenAlle.filter(function(p){
+  var ergebnisFilter = (filter === 'reparatur' || filter === 'ausgeschieden');
+
+  var offen = ergebnisFilter ? [] : offenAlle.filter(function(p){
     if(filter === 'alle') return true;
     return statusForDate(p.datum).cls === filter;
   });
 
-  html += '<div class="section-title">Offen</div>';
-  if(offen.length === 0){
-    html += '<div class="empty">Keine offenen Prüfungen' + (filter !== 'alle' ? ' in dieser Kategorie' : '') + '</div>';
-  } else {
-    offen.forEach(function(p){
-      var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
-      var st = statusForDate(p.datum);
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-      html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.datum) + '</div>';
-      html += '<div class="row" style="margin-top:8px;">';
-      html += '<button class="btn small erledigtBtn" data-pid="' + p.id + '">Als erledigt markieren</button>';
-      html += '<button class="btn small secondary pruefungLoeschenBtn" data-pid="' + p.id + '" style="margin-left:8px;">Löschen</button>';
-      html += '</div></div>';
-    });
+  if(!ergebnisFilter){
+    html += '<div class="section-title">Offen</div>';
+    if(offen.length === 0){
+      html += '<div class="empty">Keine offenen Prüfungen' + (filter !== 'alle' ? ' in dieser Kategorie' : '') + '</div>';
+    } else {
+      offen.forEach(function(p){
+        var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+        var st = statusForDate(p.datum);
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+        html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.datum) + '</div>';
+        html += '<div class="row" style="margin-top:8px;">';
+        html += '<button class="btn small erledigtBtn" data-pid="' + p.id + '">Als erledigt markieren</button>';
+        html += '<button class="btn small secondary pruefungLoeschenBtn" data-pid="' + p.id + '" style="margin-left:8px;">Löschen</button>';
+        html += '</div></div>';
+      });
+    }
   }
 
-  if(erledigt.length > 0){
-    html += '<div class="section-title">Erledigt</div>';
-    erledigt.slice(0,10).forEach(function(p){
-      var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ok">Erledigt</span></div>';
-      html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.datum) + '</div>';
-      html += '</div>';
-    });
+  var erledigt = erledigtAlle;
+  if(filter === 'reparatur') erledigt = erledigtAlle.filter(function(p){ return p.ergebnis === 'Reparatur nötig'; });
+  if(filter === 'ausgeschieden') erledigt = erledigtAlle.filter(function(p){ return p.ergebnis === 'Ausgeschieden'; });
+
+  if(ergebnisFilter || erledigt.length > 0){
+    html += '<div class="section-title">' + (filter === 'reparatur' ? 'Reparatur nötig' : (filter === 'ausgeschieden' ? 'Ausgeschieden' : 'Erledigt')) + '</div>';
+    if(erledigt.length === 0){
+      html += '<div class="empty">Keine Einträge in dieser Kategorie</div>';
+    } else {
+      erledigt.slice(0,20).forEach(function(p){
+        var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+        var ei = ergebnisInfo(p.ergebnis);
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+        html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
+        if(p.bemerkung) html += '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>';
+        html += '</div>';
+      });
+    }
   }
   return html;
 }
@@ -1018,7 +1071,7 @@ function modalKundeBearbeiten(kundeId){
   html += '<label>Telefon</label><input id="fTelefon" type="tel" value="' + escapeHtml(k.telefon || '') + '">';
   html += '<label>E-Mail</label><input id="fEmail" type="email" value="' + escapeHtml(k.email || '') + '">';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
-  html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde löschen</button>';
+  html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde in Papierkorb verschieben</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('fSave').onclick = function(){
@@ -1042,9 +1095,11 @@ function modalKundeBearbeiten(kundeId){
     });
   };
   document.getElementById('fDelete').onclick = function(){
-    customConfirm('Kunde wirklich löschen? Zugehörige Geräte und Prüfungen bleiben bestehen.', function(){
-      dbDelete('kunden', kundeId, function(){
-        loadAll(function(){ state.tab = 'kunden'; render(); toast('Kunde gelöscht'); });
+    customConfirm('Kunde in den Papierkorb verschieben? Er lässt sich später im Reiter Kunden wiederherstellen. Geräte und Prüfungen bleiben bestehen.', function(){
+      k.geloescht = true;
+      k.geloeschtAm = new Date().toISOString();
+      dbPut('kunden', k, function(){
+        loadAll(function(){ state.tab = 'kunden'; render(); closeModal(); toast('Kunde in den Papierkorb verschoben'); });
       });
     });
   };
@@ -1408,16 +1463,16 @@ function modalErledigt(pruefungId){
         gZu.ausgeschieden = true;
         gZu.ausgeschiedenAm = jetztIso;
         dbPut('geraete', gZu, function(){
-          loadAll(function(){ render(); closeModal(); toast('Gerät ausgeschieden'); });
+          loadAll(function(){ render(); closeModal(); toast('Gerät ausgeschieden'); modalBerichtAnsicht(p.id); });
         });
       } else if(gZu && ergebnis === 'in_ordnung'){
         gZu.letztePruefung = jetztIso.substring(0,10);
         gZu.naechstePruefung = naechsterTerminNach(jetztIso, gZu.intervallMonate);
         dbPut('geraete', gZu, function(){
-          loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); });
+          loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(p.id); });
         });
       } else {
-        loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); });
+        loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(p.id); });
       }
     });
   }
@@ -1767,6 +1822,35 @@ function bindKundenCards(container){
 
 function bindDynamic(){
   bindKundenCards(document);
+
+  document.querySelectorAll('[data-zuweisen-geraet]').forEach(function(b){
+    b.onclick = function(){
+      var gid = b.getAttribute('data-zuweisen-geraet');
+      var neueKundeId = document.getElementById('zuweisen_' + gid).value;
+      if(!neueKundeId){ toast('Bitte zuerst einen Kunden wählen'); return; }
+      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      if(g){
+        g.kundeId = neueKundeId;
+        dbPut('geraete', g, function(){
+          loadAll(function(){ render(); toast('Gerät zugewiesen'); });
+        });
+      }
+    };
+  });
+
+  document.querySelectorAll('[data-wiederherstellen]').forEach(function(b){
+    b.onclick = function(){
+      var kid = b.getAttribute('data-wiederherstellen');
+      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+      if(k){
+        k.geloescht = false;
+        k.geloeschtAm = null;
+        dbPut('kunden', k, function(){
+          loadAll(function(){ render(); toast('Kunde wiederhergestellt'); });
+        });
+      }
+    };
+  });
 
   var suchInput = document.getElementById('kundenSuchInput');
   if(suchInput){
