@@ -72,6 +72,7 @@
   }
   .badge.ok{background:#e4f2e8; color:var(--ok);}
   .badge.warn{background:#fbe6dc; color:var(--warn);}
+  .badge.blau{background:#dbe9fb; color:#1d5fa8;}
   .badge.soon{background:#fef2dd; color:#a8701a;}
   .btn{
     background:var(--ember); color:#fff; border:none; border-radius:8px;
@@ -164,6 +165,8 @@
   .pb-tabelle td{padding:7px 6px; border-bottom:1px solid var(--line); vertical-align:top;}
   .pb-pos{background:#f5f0e8; font-weight:700;}
   .pb-ok{display:inline-block; background:#e4f2e8; color:var(--ok); font-weight:700; font-size:11px; padding:3px 8px; border-radius:4px;}
+  .pb-blau{display:inline-block; background:#dbe9fb; color:#1d5fa8; font-weight:700; font-size:11px; padding:3px 8px; border-radius:4px;}
+  .pb-rot{display:inline-block; background:#fbe6dc; color:var(--warn); font-weight:700; font-size:11px; padding:3px 8px; border-radius:4px;}
   .pb-sig-row{display:flex; gap:16px; margin-top:22px;}
   .pb-sig-col{flex:1;}
   .pb-sig-col img{width:100%; max-height:80px; object-fit:contain; border-bottom:1px solid var(--ink);}
@@ -172,9 +175,12 @@
   #printArea{ display:none; }
 
   @media print{
-    body *{ visibility:hidden; }
-    #printArea, #printArea *{ visibility:visible; }
-    #printArea{ display:block !important; position:absolute; top:0; left:0; width:100%; padding:16px; background:#fff; }
+    body > *:not(#printArea){ display:none !important; }
+    #printArea{ display:block !important; position:static; width:100%; padding:0; background:#fff; }
+    .pb-tabelle{ page-break-inside:auto; }
+    .pb-tabelle tr{ page-break-inside:avoid; page-break-after:auto; }
+    .pb-tabelle thead{ display:table-header-group; }
+    .pb-kopfzeile, .pb-kundenbox{ page-break-inside:avoid; }
   }
 </style>
 </head>
@@ -552,6 +558,18 @@ function renderGeraetCheck(geraetId){
   return html;
 }
 
+function ergebnisInfo(ergebnisText){
+  if(ergebnisText === 'Reparatur nötig') return { cls:'pb-blau', badgeCls:'blau', label:'Reparieren' };
+  if(ergebnisText === 'Ausgeschieden') return { cls:'pb-rot', badgeCls:'warn', label:'Ausgeschieden' };
+  return { cls:'pb-ok', badgeCls:'ok', label:'In Ordnung' };
+}
+
+function letztesErgebnisFuerGeraet(geraetId){
+  var erledigte = state.pruefungen.filter(function(p){ return p.geraetId === geraetId && p.erledigt; });
+  erledigte.sort(function(a,b){ return new Date(b.erledigtAm||b.datum) - new Date(a.erledigtAm||a.datum); });
+  return erledigte.length ? erledigte[0].ergebnis : 'In Ordnung';
+}
+
 function naechsterTerminNach(datumIso, intervallMonate){
   var basis = datumIso ? new Date(datumIso) : new Date();
   var monate = intervallMonate || 24;
@@ -754,7 +772,7 @@ function renderBerichte(){
   } else {
     berichte.forEach(function(p){
       var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
-      var ergCls = p.ergebnis === 'Reparatur nötig' ? 'soon' : (p.ergebnis === 'Ausgeschieden' ? 'warn' : 'ok');
+      var ergCls = p.ergebnis === 'Reparatur nötig' ? 'blau' : (p.ergebnis === 'Ausgeschieden' ? 'warn' : 'ok');
       html += '<div class="card">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>' + (p.ergebnis ? '<span class="badge ' + ergCls + '">' + escapeHtml(p.ergebnis) + '</span>' : '') + '</div>';
       html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
@@ -1318,7 +1336,8 @@ function buildBerichtHtml(p, k){
   }
   html += '<div class="bericht-feld"><div class="l">Datum</div><div class="w">' + fmtDate(p.erledigtAm || p.datum) + '</div></div>';
   if(p.ergebnis){
-    html += '<div class="bericht-feld"><div class="l">Ergebnis</div><div class="w">' + escapeHtml(p.ergebnis) + '</div></div>';
+    var eiSingle = ergebnisInfo(p.ergebnis);
+    html += '<div class="bericht-feld"><div class="l">Ergebnis</div><div class="w"><span class="' + eiSingle.cls + '">' + eiSingle.label + '</span></div></div>';
   }
   if(p.bemerkung){
     html += '<div class="bericht-feld"><div class="l">Bemerkung / Befund</div><div class="w">' + escapeHtml(p.bemerkung) + '</div></div>';
@@ -1434,7 +1453,8 @@ function modalSammelbericht(kundeId){
         standort: g.standort || '',
         baujahr: g.baujahr || null,
         seriennummer: g.seriennummer || '',
-        status: statusForDate(g.naechstePruefung).label
+        status: statusForDate(g.naechstePruefung).label,
+        ergebnis: letztesErgebnisFuerGeraet(g.id)
       };
     });
     var sb = {
@@ -1480,7 +1500,8 @@ function buildSammelberichtHtml(sb, k){
     html += '<td>' + escapeHtml(g.seriennummer||'-') + '</td>';
     html += '<td>' + (g.baujahr||'-') + '</td>';
     html += '<td>' + escapeHtml(g.status) + '</td>';
-    html += '<td><span class="pb-ok">OK</span></td>';
+    var ei = ergebnisInfo(g.ergebnis);
+    html += '<td><span class="' + ei.cls + '">' + ei.label + '</span></td>';
     html += '</tr>';
   });
   html += '</tbody></table>';
