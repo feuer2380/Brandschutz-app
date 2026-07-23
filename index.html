@@ -880,10 +880,15 @@ function renderKundeDetail(kundeId){
       html += '</div>';
       html += '</div>';
       if(!g.ausgeschieden){
+        var aktLetzte = letztePruefungFuerGeraet(g.id);
+        var aktErgSchnell = aktLetzte && aktLetzte.ergebnis === 'Reparatur nötig' ? 'reparatur' : (aktLetzte && aktLetzte.ergebnis === 'Ausgeschieden' ? 'ausscheiden' : 'in_ordnung');
+        var farbeSchnell = function(key){ return key === 'in_ordnung' ? 'var(--ok)' : (key === 'reparatur' ? '#c98a1c' : '#c23f12'); };
+        var stilSchnell = function(key){ return 'flex:1;' + (aktErgSchnell === key ? ' background:' + farbeSchnell(key) + '; color:#fff;' : ''); };
+        var klasseSchnell = function(key){ return aktErgSchnell === key ? 'btn small' : 'btn small secondary'; };
         html += '<div style="display:flex; gap:6px; margin-top:8px;">';
-        html += '<button type="button" class="btn small" style="flex:1; background:var(--ok);" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">In Ordnung</button>';
-        html += '<button type="button" class="btn small secondary" style="flex:1;" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
-        html += '<button type="button" class="btn small secondary" style="flex:1;" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
+        html += '<button type="button" class="' + klasseSchnell('in_ordnung') + '" style="' + stilSchnell('in_ordnung') + '" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">In Ordnung</button>';
+        html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
+        html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
         html += '</div>';
       }
       html += '</div>';
@@ -1901,16 +1906,41 @@ function modalSammelberichtAnsicht(sbId){
   var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
   var html = '';
   html += '<div class="modal-head no-print"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="no-print" style="margin-bottom:10px;"><label>Prüfbericht-Nr.</label><input id="sbNrBearbeiten" type="text" value="' + escapeHtml(sb.berichtNr || '') + '"><button class="btn small secondary" id="sbNrSpeichern">Nummer speichern</button></div>';
   html += buildSammelberichtHtml(sb, k);
   html += '<div class="no-print" style="margin-top:16px;">';
   html += '<button class="btn block" id="druckBtnSb">Drucken / Als PDF teilen</button>';
+  html += '<button class="btn block secondary" id="mailBtnSb" style="margin-top:10px;">Per E-Mail senden</button>';
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('sbNrSpeichern').onclick = function(){
+    sb.berichtNr = document.getElementById('sbNrBearbeiten').value.trim();
+    dbPut('sammelberichte', sb, function(){
+      loadAll(function(){ toast('Nummer gespeichert'); modalSammelberichtAnsicht(sbId); });
+    });
+  };
   document.getElementById('druckBtnSb').onclick = function(){
     var pa = document.getElementById('printArea');
     pa.innerHTML = buildSammelberichtHtml(sb, k);
     window.print();
+  };
+  document.getElementById('mailBtnSb').onclick = function(){
+    var betreff = 'Sammelbericht ' + (k ? k.name : '') + ' - ' + fmtDate(sb.datum);
+    var zeilen = [];
+    zeilen.push('Sammelbericht');
+    zeilen.push('Kunde: ' + (k ? k.name : '-'));
+    zeilen.push('Adresse: ' + (k ? (k.adresse||'-') : '-'));
+    zeilen.push('Datum: ' + fmtDate(sb.datum));
+    zeilen.push('');
+    (sb.geraeteSnapshot || []).forEach(function(g){
+      zeilen.push('Nr. ' + g.nr + ' - ' + g.typ + ' (' + g.ergebnis + ')' + (g.notiz ? ' - ' + g.notiz : ''));
+    });
+    zeilen.push('');
+    zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+    var text = zeilen.join('\n');
+    var mailto = 'mailto:?subject=' + encodeURIComponent(betreff) + '&body=' + encodeURIComponent(text);
+    window.location.href = mailto;
   };
 }
 
