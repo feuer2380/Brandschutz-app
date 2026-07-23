@@ -163,6 +163,9 @@
   .pb-logo{max-width:150px; height:auto;}
   .pb-berichtnr{font-size:11.5px; color:var(--muted); margin:12px 0 18px 0; letter-spacing:.02em;}
   .pb-kundenbox{background:#f7f2ea; border-left:4px solid var(--ember); border-radius:4px; padding:12px 16px; margin-bottom:22px; font-size:13.5px;}
+  .pb-kundenreihe{display:flex; gap:12px; margin-bottom:22px;}
+  .pb-kundenreihe .pb-kundenbox{flex:1; margin-bottom:0;}
+  .pb-kundenreihe .pb-kundenbox.objektbox{border-left-color:var(--ink);}
   .pb-kundenbox .knr{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
   .pb-tabelle{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:16px; box-shadow:0 1px 3px rgba(26,20,16,.08);}
   .pb-tabelle th{background:var(--ink); color:#f5efe6; text-align:left; padding:9px 8px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
@@ -177,6 +180,15 @@
   .pb-sig-col{flex:1;}
   .pb-sig-col img{width:100%; max-height:80px; object-fit:contain; border-bottom:1.5px solid var(--ink);}
   .pb-sig-col .sig-label{font-size:11px; color:var(--muted); margin-top:6px; text-align:center; font-weight:600;}
+
+  .pos-karte{border:1px solid var(--line); border-radius:6px; margin-bottom:10px; overflow:hidden; page-break-inside:avoid;}
+  .pos-kopf{display:flex; justify-content:space-between; align-items:flex-start; background:#f0e2d4; padding:8px 10px; gap:10px;}
+  .pos-kopf .titel{font-weight:700; font-size:13px;}
+  .pos-kopf .meta2{font-size:11px; color:var(--muted); margin-top:2px;}
+  .pos-kopf .rechts{text-align:right; font-size:11px; color:var(--muted); white-space:nowrap;}
+  .pos-dienst{display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-top:1px solid var(--line); font-size:12px;}
+  .pos-dienst .dname{color:var(--muted);}
+  .pos-notiz{padding:6px 10px; border-top:1px solid var(--line); font-size:12px; background:#fbf8f3;}
 
   #printArea{ display:none; }
 
@@ -324,6 +336,42 @@ function fmtZeit(iso){
   return hh + ':' + mm;
 }
 
+function fmtKW(iso){
+  if(!iso) return '-';
+  var d = new Date(iso);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  var jahresstart = new Date(d.getFullYear(), 0, 4);
+  var kw = 1 + Math.round(((d - jahresstart) / 86400000 - 3 + ((jahresstart.getDay() + 6) % 7)) / 7);
+  return kw + ' / ' + d.getFullYear();
+}
+
+function dienstleistungenFuer(kategorie){
+  var karte = {
+    'Feuerlöscher': ['Überprüfung tragbarer Feuerlöscher', 'Überprüfungsplakette ÖNORM F1053'],
+    'Brandschutztüren': ['Jährliche Wartung Brandschutztür', 'Überprüfungsplakette Allgemein'],
+    'Brandschutzklappen': ['Jährliche Wartung Brandschutzklappe', 'Überprüfungsplakette Allgemein'],
+    'RWA-Anlage': ['Jährliche Wartung RWA-Anlage', 'Funktionsprüfung'],
+    'Notbeleuchtung': ['Jährliche Wartung Notbeleuchtung', 'Funktionsprüfung'],
+    'Rauchmelder': ['Jährliche Wartung Rauchmelder', 'Funktionsprüfung'],
+    'Brandschutzbegehung': ['Begehung durchgeführt'],
+    'Sonstiges': ['Jährliche Wartung', 'Überprüfung Allgemein']
+  };
+  return karte[kategorie] || karte['Sonstiges'];
+}
+
+function normFuerKategorie(kategorie){
+  var karte = {
+    'Feuerlöscher': 'gemäß ÖNORM F1053',
+    'Brandschutztüren': 'gemäß ÖNORM B1205, ÖNORM B3850, TRVB 148',
+    'Brandschutzklappen': 'gemäß ÖNORM H6031, TRVB 108',
+    'RWA-Anlage': 'gemäß ÖNORM EN 12101, TRVB S 111',
+    'Notbeleuchtung': 'gemäß ÖNORM EN 1838, ÖVE/ÖNORM E 8002',
+    'Rauchmelder': 'gemäß TRVB S 123, ÖNORM EN 14604'
+  };
+  return karte[kategorie] || null;
+}
+
 function fmtDate(iso){
   if(!iso) return '-';
   var d = new Date(iso);
@@ -428,12 +476,25 @@ function renderDashboard(){
     html += '<div class="empty"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
   } else {
     var list = ueberfaelligPruefungen.concat(bald);
+    var gruppen = {};
+    var reihenfolge = [];
     list.forEach(function(p){
       var k = kundeFuerPruefung(p);
-      var st = statusForDate(p.datum);
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? k.name : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-      html += '<div class="meta">' + (p.typ || 'Prüfung') + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
+      var key = k ? k.id : 'unbekannt';
+      if(!gruppen[key]){
+        gruppen[key] = { kunde: k, eintraege: [] };
+        reihenfolge.push(key);
+      }
+      gruppen[key].eintraege.push(p);
+    });
+    reihenfolge.forEach(function(key){
+      var gr = gruppen[key];
+      html += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
+      html += '<h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3>';
+      gr.eintraege.forEach(function(p){
+        var st = statusForDate(p.datum);
+        html += '<div class="row" style="margin-top:6px;"><div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+      });
       html += '</div>';
     });
   }
@@ -441,7 +502,7 @@ function renderDashboard(){
   html += '<div class="section-title">Fällige Innenrevisionen</div>';
   var innenrevListe = [];
   state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); }).forEach(function(g){
-    var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
+    var bj = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
     if(bj && bj.cls === 'soon' && bj.label.indexOf('Innenrevision') === 0){
       innenrevListe.push({ geraet:g, bj:bj });
     }
@@ -449,12 +510,25 @@ function renderDashboard(){
   if(innenrevListe.length === 0){
     html += '<div class="empty"><span class="ic">&#10003;</span>Keine Innenrevisionen fällig</div>';
   } else {
+    var innenrevGruppen = {};
+    var innenrevReihenfolge = [];
     innenrevListe.forEach(function(item){
-      var g = item.geraet;
-      var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + item.bj.cls + '">' + item.bj.label + '</span></div>';
-      html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+      var k = state.kunden.filter(function(x){ return x.id === item.geraet.kundeId; })[0];
+      var key = k ? k.id : 'unbekannt';
+      if(!innenrevGruppen[key]){
+        innenrevGruppen[key] = { kunde: k, eintraege: [] };
+        innenrevReihenfolge.push(key);
+      }
+      innenrevGruppen[key].eintraege.push(item);
+    });
+    innenrevReihenfolge.forEach(function(key){
+      var gr = innenrevGruppen[key];
+      html += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
+      html += '<h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3>';
+      gr.eintraege.forEach(function(item){
+        var g = item.geraet;
+        html += '<div class="row" style="margin-top:6px;"><div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div><span class="badge ' + item.bj.cls + '">' + item.bj.label + '</span></div>';
+      });
       html += '</div>';
     });
   }
@@ -583,7 +657,7 @@ function renderGeraetCheck(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return '<div class="empty">Gerät nicht gefunden</div>';
   var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-  var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
+  var bj = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
 
   var html = '';
   html += '<button class="btn secondary small" id="backToScan">&larr; Zurück</button>';
@@ -797,6 +871,7 @@ function renderKundenListe(query){
     var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id; }).length;
     html += '<div class="card kunde-card" data-id="' + k.id + '">';
     html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>';
+    if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
     html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
     html += '<div class="meta">' + geraeteAnz + ' Gerät(e)</div>';
     html += '</div>';
@@ -854,6 +929,7 @@ function renderKundeDetail(kundeId){
   html += '<button class="btn secondary small" id="backToKunden">&larr; Zurück</button>';
   html += '<div class="card" style="margin-top:12px;">';
   html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>';
+  if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
   html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
   if(k.telefon) html += '<div class="meta">Tel: ' + escapeHtml(k.telefon) + '</div>';
   if(k.email) html += '<div class="meta">' + escapeHtml(k.email) + '</div>';
@@ -872,10 +948,10 @@ function renderKundeDetail(kundeId){
     html += '<div class="card">';
     geraeteSortiert.forEach(function(g, idx){
       var st = statusForDate(g.naechstePruefung);
-      var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
+      var bj = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
-      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
       html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
       if(bj) html += '<span class="badge ' + bj.cls + '">' + bj.label + '</span>';
@@ -926,6 +1002,8 @@ function renderPruefungen(){
     html += '<button class="filter-btn' + (filter === f.key ? ' active' : '') + '" data-filter="' + f.key + '">' + f.label + '</button>';
   });
   html += '</div>';
+
+  html += '<button class="btn block secondary" id="terminlisteBtn" style="margin-bottom:16px;">Terminliste drucken / per Mail senden</button>';
 
   var ergebnisFilter = (filter === 'reparatur' || filter === 'ausgeschieden');
 
@@ -979,6 +1057,77 @@ function renderPruefungen(){
   return html;
 }
 
+function buildTerminlisteHtml(){
+  var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
+  offen.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
+
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Terminliste</h1><div class="sub">Offene Prüftermine</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+
+  if(offen.length === 0){
+    html += '<div class="empty">Keine offenen Prüftermine</div>';
+  } else {
+    html += '<table class="pb-tabelle"><thead><tr>';
+    html += '<th>Kunde</th><th>Adresse</th><th>Gerät</th><th>Fällig</th><th>Status</th>';
+    html += '</tr></thead><tbody>';
+    offen.forEach(function(p){
+      var k = kundeFuerPruefung(p);
+      var st = statusForDate(p.datum);
+      var stCls = st.cls === 'warn' ? 'pb-rot' : (st.cls === 'soon' ? 'pb-blau' : 'pb-ok');
+      html += '<tr>';
+      html += '<td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td>';
+      html += '<td>' + (k ? escapeHtml(k.adresse||'-') : '-') + '</td>';
+      html += '<td>' + escapeHtml(p.typ||'Prüfung') + '</td>';
+      html += '<td>' + fmtDate(p.datum) + '</td>';
+      html += '<td><span class="' + stCls + '">' + st.label + '</span></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
+  html += '</div>';
+  return html;
+}
+
+function modalTerminliste(){
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>Terminliste</h3><button class="close" id="mClose">&times;</button></div>';
+  html += buildTerminlisteHtml();
+  html += '<div class="no-print" style="margin-top:16px;">';
+  html += '<button class="btn block" id="druckBtnTL">Drucken / Als PDF teilen</button>';
+  html += '<button class="btn block secondary" id="mailBtnTL" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('druckBtnTL').onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildTerminlisteHtml();
+    window.print();
+  };
+  document.getElementById('mailBtnTL').onclick = function(){
+    var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
+    offen.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
+    var zeilen = [];
+    zeilen.push('Terminliste - Stand ' + fmtDate(new Date().toISOString()));
+    zeilen.push('');
+    offen.forEach(function(p){
+      var k = kundeFuerPruefung(p);
+      zeilen.push((k ? k.name : 'Unbekannt') + ' - ' + (p.typ||'Prüfung') + ' - fällig ' + fmtDate(p.datum));
+    });
+    zeilen.push('');
+    zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+    var text = zeilen.join('\n');
+    var mailto = 'mailto:?subject=' + encodeURIComponent('Terminliste ' + fmtDate(new Date().toISOString())) + '&body=' + encodeURIComponent(text);
+    window.location.href = mailto;
+  };
+}
+
 // ---------- Berichte ----------
 function renderStatistik(){
   var html = '';
@@ -1012,8 +1161,24 @@ function renderStatistik(){
   var statListe = alleErledigt.filter(function(p){ return new Date(p.erledigtAm) >= startBereich; });
   statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
 
+  var anzInOrdnung = statListe.filter(function(p){ return p.ergebnis === 'In Ordnung'; }).length;
+  var anzReparatur = statListe.filter(function(p){ return p.ergebnis === 'Reparatur nötig'; }).length;
+  var anzAusgeschieden = statListe.filter(function(p){ return p.ergebnis === 'Ausgeschieden'; }).length;
+  var kundenSet = {};
+  statListe.forEach(function(p){
+    var k = kundeFuerPruefung(p);
+    if(k) kundenSet[k.id] = true;
+  });
+  var anzKunden = Object.keys(kundenSet).length;
+
   html += '<div class="statrow">';
   html += '<div class="stat"><div class="n">' + statListe.length + '</div><div class="l">Überprüft</div></div>';
+  html += '<div class="stat"><div class="n">' + anzKunden + '</div><div class="l">Kunden geprüft</div></div>';
+  html += '</div>';
+  html += '<div class="statrow">';
+  html += '<div class="stat"><div class="n" style="color:var(--ok);">' + anzInOrdnung + '</div><div class="l">In Ordnung</div></div>';
+  html += '<div class="stat"><div class="n" style="color:#1d5fa8;">' + anzReparatur + '</div><div class="l">Reparatur</div></div>';
+  html += '<div class="stat"><div class="n" style="color:var(--warn);">' + anzAusgeschieden + '</div><div class="l">Ausgeschieden</div></div>';
   html += '</div>';
 
   if(statListe.length === 0){
@@ -1045,9 +1210,10 @@ function renderBerichte(){
   } else {
     sammelSortiert.forEach(function(sb){
       var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
+      var katLabel = (sb.geraeteSnapshot && sb.geraeteSnapshot.length) ? (sb.geraeteSnapshot[0].kategorie || 'Feuerlöscher') : 'Feuerlöscher';
       html += '<div class="card">';
-      html += '<h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
-      html += '<div class="meta">' + (sb.geraeteSnapshot ? sb.geraeteSnapshot.length : 0) + ' Geräte &middot; ' + fmtDate(sb.datum) + '</div>';
+      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge blau">' + escapeHtml(katLabel) + '</span></div>';
+      html += '<div class="meta">' + (sb.geraeteSnapshot ? sb.geraeteSnapshot.length : 0) + ' Position(en) &middot; ' + fmtDate(sb.datum) + (sb.berichtNr ? ' &middot; ' + escapeHtml(sb.berichtNr) : '') + '</div>';
       html += '<button class="btn small secondary" style="margin-top:8px;" data-viewsammelbericht="' + sb.id + '">Bericht ansehen</button>';
       html += '</div>';
     });
@@ -1142,6 +1308,8 @@ function modalNeuerKunde(){
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Kunde</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Name / Firma</label><input id="fName" type="text" placeholder="z.B. Kindergarten Sonnenschein">';
+  html += '<label>Objekt / Standort (optional)</label><input id="fObjekt" type="text" placeholder="z.B. Werk 13, Filiale Nord">';
+  html += '<label>Objekt-Adresse (falls abweichend vom Kunden, optional)</label><input id="fObjektAdresse" type="text" placeholder="z.B. Handelskai 267, 1030 Wien">';
   html += '<label>Kundennummer</label><input id="fKundennr" type="text" placeholder="z.B. K-1024">';
   html += '<label>Straße und Hausnummer</label><input id="fStrasse" type="text" placeholder="z.B. Ketzergasse 299">';
   html += '<div style="display:flex; gap:10px;">';
@@ -1165,6 +1333,8 @@ function modalNeuerKunde(){
       id: uid(),
       name: name,
       kundennummer: document.getElementById('fKundennr').value.trim(),
+      objekt: document.getElementById('fObjekt').value.trim(),
+      objektAdresse: document.getElementById('fObjektAdresse').value.trim(),
       strasse: strasse,
       plz: plz,
       ort: ort,
@@ -1184,6 +1354,8 @@ function modalKundeBearbeiten(kundeId){
   var html = '';
   html += '<div class="modal-head"><h3>Kunde bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Name / Firma</label><input id="fName" type="text" value="' + escapeHtml(k.name || '') + '">';
+  html += '<label>Objekt / Standort (optional)</label><input id="fObjekt" type="text" value="' + escapeHtml(k.objekt || '') + '" placeholder="z.B. Werk 13, Filiale Nord">';
+  html += '<label>Objekt-Adresse (falls abweichend vom Kunden, optional)</label><input id="fObjektAdresse" type="text" value="' + escapeHtml(k.objektAdresse || '') + '" placeholder="z.B. Handelskai 267, 1030 Wien">';
   html += '<label>Kundennummer</label><input id="fKundennr" type="text" value="' + escapeHtml(k.kundennummer || '') + '">';
   html += '<label>Straße und Hausnummer</label><input id="fStrasse" type="text" value="' + escapeHtml(k.strasse || '') + '">';
   html += '<div style="display:flex; gap:10px;">';
@@ -1206,6 +1378,8 @@ function modalKundeBearbeiten(kundeId){
     if(plz || ort) adresse += (adresse ? ', ' : '') + (plz + ' ' + ort).trim();
     k.name = name;
     k.kundennummer = document.getElementById('fKundennr').value.trim();
+    k.objekt = document.getElementById('fObjekt').value.trim();
+    k.objektAdresse = document.getElementById('fObjektAdresse').value.trim();
     k.strasse = strasse;
     k.plz = plz;
     k.ort = ort;
@@ -1277,11 +1451,20 @@ function modalQrGeraet(geraetId){
 function modalGeraetBearbeiten(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
+  var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Sonstiges'];
+  var aktKategorie = g.kategorie || 'Feuerlöscher';
   var html = '';
   html += '<div class="modal-head"><h3>Gerät bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>Kategorie</label><select id="fKategorie">';
+  kategorien.forEach(function(kat){
+    html += '<option' + (kat === aktKategorie ? ' selected' : '') + '>' + kat + '</option>';
+  });
+  html += '</select>';
   html += '<label>Typ</label><input id="fTyp" type="text" value="' + escapeHtml(g.typ || '') + '" placeholder="z.B. Pulverlöscher 6kg">';
   html += buildTypChips();
+  html += '<div id="fjBlockBaujahr">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" value="' + (g.baujahr || '') + '">';
+  html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
@@ -1296,7 +1479,7 @@ function modalGeraetBearbeiten(geraetId){
     html += '<option value="' + m + '"' + ((g.intervallMonate||24) === m ? ' selected' : '') + '>' + m + ' Monate</option>';
   });
   html += '</select>';
-  var bjStatus = baujahrStatus(g.baujahr, g.letzteInnenrevision);
+  var bjStatus = aktKategorie === 'Feuerlöscher' ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
   if(bjStatus){
     html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Innenrevisionen: ' + (g.baujahr+6) + ', ' + (g.baujahr+12) + ', ' + (g.baujahr+18) + ' &middot; Ausscheiden: ' + bjStatus.ausscheideJahr + '</div>';
     if(g.letzteInnenrevision){
@@ -1316,6 +1499,7 @@ function modalGeraetBearbeiten(geraetId){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   bindTypChips();
+  bindKategorieToggle();
 
   document.getElementById('btnDatumHeute').onclick = function(){
     document.getElementById('fDatum').value = new Date().toISOString().substring(0,10);
@@ -1347,6 +1531,7 @@ function modalGeraetBearbeiten(geraetId){
     var baujahrVal = document.getElementById('fBaujahr').value;
     var alteDatum = g.naechstePruefung;
     g.typ = typ;
+    g.kategorie = document.getElementById('fKategorie').value;
     g.baujahr = baujahrVal ? parseInt(baujahrVal, 10) : null;
     g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
@@ -1460,6 +1645,17 @@ function buildTypChips(){
   return html;
 }
 
+function bindKategorieToggle(){
+  var sel = document.getElementById('fKategorie');
+  var block = document.getElementById('fjBlockBaujahr');
+  if(!sel || !block) return;
+  function aktualisieren(){
+    block.style.display = (sel.value === 'Feuerlöscher') ? '' : 'none';
+  }
+  aktualisieren();
+  sel.onchange = aktualisieren;
+}
+
 function bindTypChips(){
   document.querySelectorAll('.typChip').forEach(function(c){
     c.onclick = function(){
@@ -1469,11 +1665,19 @@ function bindTypChips(){
 }
 
 function modalNeuesGeraet(kundeId){
+  var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Sonstiges'];
   var html = '';
   html += '<div class="modal-head"><h3>Neues Gerät</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>Kategorie</label><select id="fKategorie">';
+  kategorien.forEach(function(kat){
+    html += '<option' + (kat === 'Feuerlöscher' ? ' selected' : '') + '>' + kat + '</option>';
+  });
+  html += '</select>';
   html += '<label>Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg">';
   html += buildTypChips();
+  html += '<div id="fjBlockBaujahr">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" placeholder="z.B. 2020">';
+  html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date">';
@@ -1483,6 +1687,7 @@ function modalNeuesGeraet(kundeId){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   bindTypChips();
+  bindKategorieToggle();
   document.getElementById('fSave').onclick = function(){
     var typ = document.getElementById('fTyp').value;
     var datum = document.getElementById('fDatum').value;
@@ -1491,6 +1696,7 @@ function modalNeuesGeraet(kundeId){
       id: uid(),
       kundeId: kundeId,
       typ: typ,
+      kategorie: document.getElementById('fKategorie').value,
       baujahr: baujahrVal ? parseInt(baujahrVal, 10) : null,
       intervallMonate: parseInt(document.getElementById('fIntervall').value, 10),
       erstelltAm: new Date().toISOString(),
@@ -1619,11 +1825,26 @@ function buildBerichtHtml(p, k){
   html += '</div>';
   html += '<div class="pb-berichtnr">Prüfbericht Nr.: ' + berichtNr + '</div>';
 
-  html += '<div class="pb-kundenbox">';
-  html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-  html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
-  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
-  html += '</div>';
+  if(k && k.objekt){
+    html += '<div class="pb-kundenreihe">';
+    html += '<div class="pb-kundenbox">';
+    html += '<div class="knr">Kunde' + (k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+    html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.name) + '</div>';
+    html += '<div>' + escapeHtml(k.adresse||'') + '</div>';
+    html += '</div>';
+    html += '<div class="pb-kundenbox objektbox">';
+    html += '<div class="knr">Objekt</div>';
+    html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.objekt) + '</div>';
+    html += '<div>' + escapeHtml(k.objektAdresse || k.adresse || '') + '</div>';
+    html += '</div>';
+    html += '</div>';
+  } else {
+    html += '<div class="pb-kundenbox">';
+    html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+    html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+    html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
+    html += '</div>';
+  }
 
   html += '<table class="pb-tabelle"><thead><tr>';
   html += '<th>Gerät</th><th>Baujahr</th><th>Serien-Nr.</th><th>Innenrevision</th><th>Datum</th><th>Ergebnis</th>';
@@ -1631,7 +1852,7 @@ function buildBerichtHtml(p, k){
   html += '<td>' + escapeHtml(p.typ||'-') + '</td>';
   html += '<td>' + (gRef && gRef.baujahr ? gRef.baujahr : '-') + '</td>';
   html += '<td>' + (gRef && gRef.seriennummer ? escapeHtml(gRef.seriennummer) : '-') + '</td>';
-  var bjRefSingle = gRef ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
+  var bjRefSingle = (gRef && (!gRef.kategorie || gRef.kategorie === 'Feuerlöscher')) ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
   var innenrevKurzSingle = bjRefSingle ? bjRefSingle.label.replace(/^Innenrevision /, '') : '';
   html += '<td>' + (gRef && gRef.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(gRef.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurzSingle ? 'Nächste fällig: ' + escapeHtml(innenrevKurzSingle) : '-') + '</td>';
   html += '<td>' + fmtDate(p.erledigtAm || p.datum) + '</td>';
@@ -1732,7 +1953,7 @@ function modalSammelbericht(kundeId){
       var klasse = function(key){ return aktErg === key ? 'btn small sbErgBtn active' : 'btn small secondary sbErgBtn'; };
       var stil = function(key){ return 'flex:1;' + (aktErg === key ? ' background:' + farbe(key) + ';' : ''); };
       html += '<div class="card" data-geraetkarte="' + g.id + '">';
-      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; gap:6px; margin-top:10px;">';
       html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">In Ordnung</button>';
       html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
@@ -1785,19 +2006,53 @@ function modalSammelbericht(kundeId){
 
     function naechstesGeraet(){
       if(idx >= geraeteSortiert.length){
-        var sb = {
-          id: uid(),
-          kundeId: kundeId,
-          datum: jetztIso,
-          berichtNr: document.getElementById('sbBerichtNr').value.trim(),
-          geraeteSnapshot: snapshot,
-          bemerkung: document.getElementById('sbBemerkung').value.trim(),
-          unterschriftKunde: sigKunde.toDataURL('image/png'),
-          unterschriftTechniker: sigTechniker.toDataURL('image/png')
-        };
-        dbPut('sammelberichte', sb, function(){
-          loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast('Sammelbericht erstellt'); });
+        var basisNr = document.getElementById('sbBerichtNr').value.trim();
+        var allgemeineBemerkung = document.getElementById('sbBemerkung').value.trim();
+        var sigKundeData = sigKunde.toDataURL('image/png');
+        var sigTechnikerData = sigTechniker.toDataURL('image/png');
+
+        var gruppenNachKategorie = {};
+        var kategorienReihenfolge = [];
+        snapshot.forEach(function(g){
+          var kat = g.kategorie || 'Feuerlöscher';
+          if(!gruppenNachKategorie[kat]){
+            gruppenNachKategorie[kat] = [];
+            kategorienReihenfolge.push(kat);
+          }
+          gruppenNachKategorie[kat].push(g);
         });
+
+        var berichteZuSpeichern = kategorienReihenfolge.map(function(kat, katIdx){
+          var geraeteNeuNummeriert = gruppenNachKategorie[kat].map(function(g, i){
+            var kopie = {};
+            for(var key in g){ kopie[key] = g[key]; }
+            kopie.nr = i + 1;
+            return kopie;
+          });
+          return {
+            id: uid(),
+            kundeId: kundeId,
+            datum: jetztIso,
+            berichtNr: basisNr + (kategorienReihenfolge.length > 1 ? '-' + (katIdx+1) : ''),
+            geraeteSnapshot: geraeteNeuNummeriert,
+            bemerkung: allgemeineBemerkung,
+            unterschriftKunde: sigKundeData,
+            unterschriftTechniker: sigTechnikerData
+          };
+        });
+
+        var bi = 0;
+        function speichereNaechstenBericht(){
+          if(bi >= berichteZuSpeichern.length){
+            loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast(berichteZuSpeichern.length + ' Prüfbericht(e) erstellt'); });
+            return;
+          }
+          dbPut('sammelberichte', berichteZuSpeichern[bi], function(){
+            bi++;
+            speichereNaechstenBericht();
+          });
+        }
+        speichereNaechstenBericht();
         return;
       }
       var g = geraeteSortiert[idx];
@@ -1819,10 +2074,11 @@ function modalSammelbericht(kundeId){
 
       dbPut('pruefungen', offenePruefung, function(){
         var weiter = function(naechstePruefungWert){
-          var bjSnap = baujahrStatus(g.baujahr, g.letzteInnenrevision);
+          var bjSnap = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
           snapshot.push({
             nr: idx+1,
             typ: g.typ,
+            kategorie: g.kategorie || 'Feuerlöscher',
             standort: g.standort || '',
             baujahr: g.baujahr || null,
             seriennummer: g.seriennummer || '',
@@ -1857,40 +2113,75 @@ function buildSammelberichtHtml(sb, k){
   var berichtNr = sb.berichtNr || ('SB-' + fmtDate(sb.datum).split('.').reverse().join('') + '-' + sb.id.slice(-4));
   html += '<div class="bericht-brief">';
 
-  html += '<div class="pb-kopfzeile">';
-  html += '<div class="pb-titel"><h1>Prüfergebnisbericht</h1><div class="sub">Prüfbericht Feuerlöscher</div><div class="norm">gemäß ÖNORM F1053</div></div>';
-  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
-  html += '</div>';
-  html += '<div class="pb-berichtnr">Prüfbericht Nr.: ' + berichtNr + '</div>';
-
-  html += '<div class="pb-kundenbox">';
-  html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-  html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
-  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
-  html += '</div>';
-
-  html += '<table class="pb-tabelle"><thead><tr>';
-  html += '<th>Pos</th><th>Gerät</th><th>Standort</th><th>Serien-Nr.</th><th>Baujahr</th><th>Innenrevision</th><th>Nä. Prüfung</th><th>Ergebnis</th><th>Notiz</th>';
-  html += '</tr></thead><tbody>';
+  var gruppenNachKategorie = {};
+  var kategorienReihenfolge = [];
   (sb.geraeteSnapshot || []).forEach(function(g){
-    html += '<tr>';
-    html += '<td class="pb-pos">' + g.nr + '</td>';
-    html += '<td>' + escapeHtml(g.typ) + '</td>';
-    html += '<td>' + escapeHtml(g.standort||'-') + '</td>';
-    html += '<td>' + escapeHtml(g.seriennummer||'-') + '</td>';
-    html += '<td>' + (g.baujahr||'-') + '</td>';
-    var innenrevKurz = g.innenrevision ? g.innenrevision.replace(/^Innenrevision /, '').replace(/^Zu alt.*$/, g.innenrevision) : '';
-    html += '<td>' + (g.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(g.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurz ? 'Nächste fällig: ' + escapeHtml(innenrevKurz) : '-') + '</td>';
-    html += '<td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
-    var ei = ergebnisInfo(g.ergebnis);
-    html += '<td><span class="' + ei.cls + '">' + ei.label + '</span></td>';
-    html += '<td>' + (g.notiz ? escapeHtml(g.notiz) : '-') + '</td>';
-    html += '</tr>';
+    var kat = g.kategorie || 'Feuerlöscher';
+    if(!gruppenNachKategorie[kat]){
+      gruppenNachKategorie[kat] = [];
+      kategorienReihenfolge.push(kat);
+    }
+    gruppenNachKategorie[kat].push(g);
   });
-  html += '</tbody></table>';
+
+  kategorienReihenfolge.forEach(function(kat, katIdx){
+    var geraeteDerKategorie = gruppenNachKategorie[kat];
+    var normText = normFuerKategorie(kat);
+    var unterNr = berichtNr + (kategorienReihenfolge.length > 1 ? '-' + (katIdx+1) : '');
+
+    if(katIdx > 0) html += '<div style="page-break-before:always;"></div>';
+
+    html += '<div class="pb-kopfzeile">';
+    html += '<div class="pb-titel"><h1>Prüfergebnisbericht</h1><div class="sub">Prüfbericht ' + escapeHtml(kat) + '</div>' + (normText ? '<div class="norm">' + escapeHtml(normText) + '</div>' : '') + '</div>';
+    html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+    html += '</div>';
+    html += '<div class="pb-berichtnr">Prüfbericht Nr.: ' + unterNr + '</div>';
+
+    if(k && k.objekt){
+      html += '<div class="pb-kundenreihe">';
+      html += '<div class="pb-kundenbox">';
+      html += '<div class="knr">Kunde' + (k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.name) + '</div>';
+      html += '<div>' + escapeHtml(k.adresse||'') + '</div>';
+      html += '</div>';
+      html += '<div class="pb-kundenbox objektbox">';
+      html += '<div class="knr">Objekt</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.objekt) + '</div>';
+      html += '<div>' + escapeHtml(k.objektAdresse || k.adresse || '') + '</div>';
+      html += '</div>';
+      html += '</div>';
+    } else {
+      html += '<div class="pb-kundenbox">';
+      html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+      html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
+      html += '</div>';
+    }
+
+    geraeteDerKategorie.forEach(function(g){
+      var dienste = dienstleistungenFuer(kat);
+      var ei = ergebnisInfo(g.ergebnis);
+      var istOk = g.ergebnis === 'In Ordnung';
+      html += '<div class="pos-karte">';
+      html += '<div class="pos-kopf">';
+      html += '<div><div class="titel">' + g.nr + '. ' + escapeHtml(g.typ) + '</div>';
+      html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
+      html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (g.naechstePruefung ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+      html += '</div>';
+      dienste.forEach(function(dName){
+        html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(dName) + '</span><span class="' + ei.cls + '">Ergebnis: ' + (istOk ? 'OK' : escapeHtml(ei.label)) + '</span></div>';
+      });
+      if(g.notiz){
+        html += '<div class="pos-notiz"><strong>Bemerkung:</strong> ' + escapeHtml(g.notiz) + '</div>';
+      }
+      html += '</div>';
+    });
+
+    html += '<div class="bericht-fuss">' + escapeHtml(unterNr) + ' &middot; Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
+  });
 
   if(sb.bemerkung){
-    html += '<div class="bericht-feld" style="margin-top:10px;"><div class="l">Allgemeine Bemerkungen</div><div class="w">' + escapeHtml(sb.bemerkung) + '</div></div>';
+    html += '<div class="bericht-feld" style="margin-top:16px;"><div class="l">Allgemeine Bemerkungen</div><div class="w">' + escapeHtml(sb.bemerkung) + '</div></div>';
   }
 
   html += '<div class="pb-sig-row">';
@@ -1906,7 +2197,6 @@ function buildSammelberichtHtml(sb, k){
   html += '</div>';
   html += '</div>';
 
-  html += '<div class="bericht-fuss">' + escapeHtml(berichtNr) + ' &middot; Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
   html += '</div>';
   return html;
 }
@@ -2151,6 +2441,9 @@ function bindDynamic(){
   document.querySelectorAll('.erledigtBtn').forEach(function(b){
     b.onclick = function(){ modalErledigt(b.getAttribute('data-pid')); };
   });
+
+  var terminlisteBtn = document.getElementById('terminlisteBtn');
+  if(terminlisteBtn) terminlisteBtn.onclick = modalTerminliste;
 
   document.querySelectorAll('.pruefungLoeschenBtn').forEach(function(b){
     b.onclick = function(){
