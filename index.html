@@ -1626,11 +1626,14 @@ function buildBerichtHtml(p, k){
   html += '</div>';
 
   html += '<table class="pb-tabelle"><thead><tr>';
-  html += '<th>Gerät</th><th>Baujahr</th><th>Serien-Nr.</th><th>Datum</th><th>Ergebnis</th>';
+  html += '<th>Gerät</th><th>Baujahr</th><th>Serien-Nr.</th><th>Innenrevision</th><th>Datum</th><th>Ergebnis</th>';
   html += '</tr></thead><tbody><tr>';
   html += '<td>' + escapeHtml(p.typ||'-') + '</td>';
   html += '<td>' + (gRef && gRef.baujahr ? gRef.baujahr : '-') + '</td>';
   html += '<td>' + (gRef && gRef.seriennummer ? escapeHtml(gRef.seriennummer) : '-') + '</td>';
+  var bjRefSingle = gRef ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
+  var innenrevKurzSingle = bjRefSingle ? bjRefSingle.label.replace(/^Innenrevision /, '') : '';
+  html += '<td>' + (gRef && gRef.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(gRef.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurzSingle ? 'Nächste fällig: ' + escapeHtml(innenrevKurzSingle) : '-') + '</td>';
   html += '<td>' + fmtDate(p.erledigtAm || p.datum) + '</td>';
   var eiSingle = ergebnisInfo(p.ergebnis);
   html += '<td><span class="' + eiSingle.cls + '">' + eiSingle.label + '</span></td>';
@@ -1816,6 +1819,7 @@ function modalSammelbericht(kundeId){
 
       dbPut('pruefungen', offenePruefung, function(){
         var weiter = function(naechstePruefungWert){
+          var bjSnap = baujahrStatus(g.baujahr, g.letzteInnenrevision);
           snapshot.push({
             nr: idx+1,
             typ: g.typ,
@@ -1824,7 +1828,9 @@ function modalSammelbericht(kundeId){
             seriennummer: g.seriennummer || '',
             ergebnis: ergebnisLabel,
             notiz: notiz,
-            naechstePruefung: naechstePruefungWert || null
+            naechstePruefung: naechstePruefungWert || null,
+            innenrevision: bjSnap ? bjSnap.label : null,
+            letzteInnenrevision: g.letzteInnenrevision || null
           });
           idx++;
           naechstesGeraet();
@@ -1864,7 +1870,7 @@ function buildSammelberichtHtml(sb, k){
   html += '</div>';
 
   html += '<table class="pb-tabelle"><thead><tr>';
-  html += '<th>Pos</th><th>Gerät</th><th>Standort</th><th>Serien-Nr.</th><th>Baujahr</th><th>Nä. Prüfung</th><th>Ergebnis</th><th>Notiz</th>';
+  html += '<th>Pos</th><th>Gerät</th><th>Standort</th><th>Serien-Nr.</th><th>Baujahr</th><th>Innenrevision</th><th>Nä. Prüfung</th><th>Ergebnis</th><th>Notiz</th>';
   html += '</tr></thead><tbody>';
   (sb.geraeteSnapshot || []).forEach(function(g){
     html += '<tr>';
@@ -1873,6 +1879,8 @@ function buildSammelberichtHtml(sb, k){
     html += '<td>' + escapeHtml(g.standort||'-') + '</td>';
     html += '<td>' + escapeHtml(g.seriennummer||'-') + '</td>';
     html += '<td>' + (g.baujahr||'-') + '</td>';
+    var innenrevKurz = g.innenrevision ? g.innenrevision.replace(/^Innenrevision /, '').replace(/^Zu alt.*$/, g.innenrevision) : '';
+    html += '<td>' + (g.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(g.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurz ? 'Nächste fällig: ' + escapeHtml(innenrevKurz) : '-') + '</td>';
     html += '<td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
     var ei = ergebnisInfo(g.ergebnis);
     html += '<td><span class="' + ei.cls + '">' + ei.label + '</span></td>';
