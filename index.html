@@ -203,6 +203,7 @@
     <button class="tabbtn" data-tab="scan"><span class="ic">&#128247;</span>Scan</button>
     <button class="tabbtn" data-tab="pruefungen"><span class="ic">&#128197;</span>Prüfungen</button>
     <button class="tabbtn" data-tab="berichte"><span class="ic">&#128196;</span>Berichte</button>
+    <button class="tabbtn" data-tab="statistik"><span class="ic">&#128202;</span>Statistik</button>
   </nav>
 </div>
 
@@ -281,7 +282,8 @@ var state = {
   sammelberichte: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
-  geraeteFilter: 'alle'
+  geraeteFilter: 'alle',
+  statFilter: 'tag'
 };
 
 function loadAll(cb){
@@ -308,6 +310,14 @@ function toast(msg){
 }
 
 // ---------- Datum Helfer ----------
+function fmtZeit(iso){
+  if(!iso) return '';
+  var d = new Date(iso);
+  var hh = d.getHours(); if(hh<10) hh = '0'+hh;
+  var mm = d.getMinutes(); if(mm<10) mm = '0'+mm;
+  return hh + ':' + mm;
+}
+
 function fmtDate(iso){
   if(!iso) return '-';
   var d = new Date(iso);
@@ -342,6 +352,7 @@ function render(){
   else if(state.tab === 'kunden') m.innerHTML = renderKunden();
   else if(state.tab === 'pruefungen') m.innerHTML = renderPruefungen();
   else if(state.tab === 'berichte') m.innerHTML = renderBerichte();
+  else if(state.tab === 'statistik') m.innerHTML = renderStatistik();
   else if(state.tab === 'kundeDetail') m.innerHTML = renderKundeDetail(state.activeKundeId);
   else if(state.tab === 'scan') m.innerHTML = renderScan();
   else if(state.tab === 'geraetCheck') m.innerHTML = renderGeraetCheck(state.activeGeraetId);
@@ -791,6 +802,58 @@ function renderPruefungen(){
 }
 
 // ---------- Berichte ----------
+function renderStatistik(){
+  var html = '';
+  html += '<div class="section-title">Statistik</div>';
+  var statFilter = state.statFilter || 'tag';
+  var statOptionen = [
+    {key:'tag', label:'Heute'},
+    {key:'woche', label:'Diese Woche'},
+    {key:'monat', label:'Diesen Monat'},
+    {key:'jahr', label:'Dieses Jahr'}
+  ];
+  html += '<div class="filter-bar">';
+  statOptionen.forEach(function(f){
+    html += '<button class="filter-btn' + (statFilter === f.key ? ' active' : '') + '" data-statfilter="' + f.key + '">' + f.label + '</button>';
+  });
+  html += '</div>';
+
+  var jetztDate = new Date();
+  var alleErledigt = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm; });
+  var startBereich;
+  if(statFilter === 'tag'){
+    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate());
+  } else if(statFilter === 'woche'){
+    var wochentag = (jetztDate.getDay() + 6) % 7;
+    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate() - wochentag);
+  } else if(statFilter === 'monat'){
+    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), 1);
+  } else {
+    startBereich = new Date(jetztDate.getFullYear(), 0, 1);
+  }
+  var statListe = alleErledigt.filter(function(p){ return new Date(p.erledigtAm) >= startBereich; });
+  statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
+
+  html += '<div class="statrow">';
+  html += '<div class="stat"><div class="n">' + statListe.length + '</div><div class="l">Überprüft</div></div>';
+  html += '</div>';
+
+  if(statListe.length === 0){
+    html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
+  } else {
+    statListe.forEach(function(p){
+      var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+      var ei = ergebnisInfo(p.ergebnis);
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+      html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + '</div>';
+      html += '<div class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</div>';
+      html += '</div>';
+    });
+  }
+  return html;
+}
+
 function renderBerichte(){
   var ausgeschieden = state.geraete.filter(function(g){ return g.ausgeschieden; });
   ausgeschieden.sort(function(a,b){ return new Date(b.ausgeschiedenAm) - new Date(a.ausgeschiedenAm); });
@@ -1776,6 +1839,8 @@ function bindDynamic(){
     b.onclick = function(){
       if(b.hasAttribute('data-geraetefilter')){
         state.geraeteFilter = b.getAttribute('data-geraetefilter');
+      } else if(b.hasAttribute('data-statfilter')){
+        state.statFilter = b.getAttribute('data-statfilter');
       } else {
         state.pruefungFilter = b.getAttribute('data-filter');
       }
