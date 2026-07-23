@@ -402,6 +402,27 @@ function renderDashboard(){
     });
   }
 
+  html += '<div class="section-title">Fällige Innenrevisionen</div>';
+  var innenrevListe = [];
+  state.geraete.filter(function(g){ return !g.ausgeschieden; }).forEach(function(g){
+    var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
+    if(bj && bj.cls === 'soon' && bj.label.indexOf('Innenrevision') === 0){
+      innenrevListe.push({ geraet:g, bj:bj });
+    }
+  });
+  if(innenrevListe.length === 0){
+    html += '<div class="empty"><span class="ic">&#10003;</span>Keine Innenrevisionen fällig</div>';
+  } else {
+    innenrevListe.forEach(function(item){
+      var g = item.geraet;
+      var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
+      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + item.bj.cls + '">' + item.bj.label + '</span></div>';
+      html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+      html += '</div>';
+    });
+  }
+
   html += '<div class="section-title">Alle Geräte</div>';
   var geraeteFilter = state.geraeteFilter || 'alle';
   html += '<div class="filter-bar">';
@@ -525,7 +546,7 @@ function renderGeraetCheck(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return '<div class="empty">Gerät nicht gefunden</div>';
   var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-  var bj = baujahrStatus(g.baujahr);
+  var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
 
   var html = '';
   html += '<button class="btn secondary small" id="backToScan">&larr; Zurück</button>';
@@ -686,7 +707,7 @@ function renderKundeDetail(kundeId){
     html += '<div class="card">';
     geraeteSortiert.forEach(function(g, idx){
       var st = statusForDate(g.naechstePruefung);
-      var bj = baujahrStatus(g.baujahr);
+      var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
       html += '<div class="device-item" data-gid="' + g.id + '">';
       html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
@@ -1037,9 +1058,14 @@ function modalGeraetBearbeiten(geraetId){
     html += '<option value="' + m + '"' + ((g.intervallMonate||24) === m ? ' selected' : '') + '>' + m + ' Monate</option>';
   });
   html += '</select>';
-  var bjStatus = baujahrStatus(g.baujahr);
+  var bjStatus = baujahrStatus(g.baujahr, g.letzteInnenrevision);
   if(bjStatus){
-    html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Innenrevisionen: ' + (g.baujahr+6) + ', ' + (g.baujahr+12) + ', ' + (g.baujahr+18) + ' &middot; Ausscheiden: ' + bjStatus.ausscheideJahr + '</div></div>';
+    html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Innenrevisionen: ' + (g.baujahr+6) + ', ' + (g.baujahr+12) + ', ' + (g.baujahr+18) + ' &middot; Ausscheiden: ' + bjStatus.ausscheideJahr + '</div>';
+    if(g.letzteInnenrevision){
+      html += '<div class="meta" style="margin-top:4px;">Zuletzt durchgeführt: ' + fmtDate(g.letzteInnenrevision) + '</div>';
+    }
+    html += '<button type="button" class="btn secondary small" id="btnInnenrevErledigt" style="margin-top:8px;">Innenrevision jetzt als durchgeführt markieren</button>';
+    html += '</div>';
   }
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
   html += '<button class="btn block secondary" id="qrGeraetBtn" style="margin-top:10px;">QR-Code anzeigen</button>';
@@ -1064,6 +1090,18 @@ function modalGeraetBearbeiten(geraetId){
     var d = new Date(); d.setFullYear(d.getFullYear()+2);
     document.getElementById('fDatum').value = d.toISOString().substring(0,10);
   };
+
+  var btnInnenrevErledigt = document.getElementById('btnInnenrevErledigt');
+  if(btnInnenrevErledigt){
+    btnInnenrevErledigt.onclick = function(){
+      customConfirm('Innenrevision jetzt als heute durchgeführt markieren?', function(){
+        g.letzteInnenrevision = new Date().toISOString().substring(0,10);
+        dbPut('geraete', g, function(){
+          loadAll(function(){ render(); closeModal(); toast('Innenrevision vermerkt'); });
+        });
+      });
+    };
+  }
 
   document.getElementById('fSave').onclick = function(){
     var typ = document.getElementById('fTyp').value;
@@ -1130,29 +1168,37 @@ function customConfirm(nachricht, aufJa){
   document.getElementById('cNo').onclick = closeModal;
 }
 
-function baujahrStatus(baujahr){
+function baujahrStatus(baujahr, letzteInnenrevision){
   if(!baujahr) return null;
   var jetzt = new Date().getFullYear();
   var alter = jetzt - baujahr;
   var ausscheideJahr = baujahr + 20;
+  var meilensteinJahre = [6,12,18];
+  var erledigtBisIndex = -1;
+  if(letzteInnenrevision){
+    var revJahr = new Date(letzteInnenrevision).getFullYear();
+    for(var j=0; j<meilensteinJahre.length; j++){
+      if(baujahr + meilensteinJahre[j] <= revJahr) erledigtBisIndex = j;
+    }
+  }
   if(alter >= 20){
     return { cls:'warn', label:'Zu alt (' + alter + ' J.) - ausscheiden', ausscheideJahr: ausscheideJahr };
   }
-  var meilensteinJahre = [6,12,18];
   var naechstes = null;
   var naechstesMeilenstein = null;
-  for(var i=0; i<meilensteinJahre.length; i++){
-    var jahr = baujahr + meilensteinJahre[i];
-    if(jahr >= jetzt){ naechstes = jahr; naechstesMeilenstein = meilensteinJahre[i]; break; }
+  for(var i=erledigtBisIndex+1; i<meilensteinJahre.length; i++){
+    naechstes = baujahr + meilensteinJahre[i];
+    naechstesMeilenstein = meilensteinJahre[i];
+    break;
   }
   if(naechstes === null){
     return { cls:'warn', label:'Zu alt - ausscheiden', ausscheideJahr: ausscheideJahr };
   }
   var restJahre = naechstes - jetzt;
   if(restJahre <= 0){
-    return { cls:'soon', label:'Innenrevision ' + naechstesMeilenstein + ' Jahre fällig (' + naechstes + ')', ausscheideJahr: ausscheideJahr };
+    return { cls:'soon', label:'Innenrevision ' + naechstesMeilenstein + ' Jahre fällig (' + naechstes + ')', ausscheideJahr: ausscheideJahr, faelligJahr: naechstes, meilenstein: naechstesMeilenstein };
   }
-  return { cls:'ok', label:'Innenrevision ' + naechstesMeilenstein + ' Jahre: ' + naechstes, ausscheideJahr: ausscheideJahr };
+  return { cls:'ok', label:'Innenrevision ' + naechstesMeilenstein + ' Jahre: ' + naechstes, ausscheideJahr: ausscheideJahr, faelligJahr: naechstes, meilenstein: naechstesMeilenstein };
 }
 
 function typListeAlle(){
@@ -1408,6 +1454,7 @@ function modalSammelbericht(kundeId){
   var html = '';
   html += '<div class="modal-head"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  html += '<label>Prüfbericht-Nr.</label><input id="sbBerichtNr" type="text" value="SB-' + fmtDate(new Date().toISOString()).split('.').reverse().join('') + '">';
 
   if(geraeteSortiert.length === 0){
     html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
@@ -1461,6 +1508,7 @@ function modalSammelbericht(kundeId){
       id: uid(),
       kundeId: kundeId,
       datum: jetztIso,
+      berichtNr: document.getElementById('sbBerichtNr').value.trim(),
       geraeteSnapshot: snapshot,
       bemerkung: document.getElementById('sbBemerkung').value.trim(),
       unterschriftKunde: sigKunde.toDataURL('image/png'),
@@ -1474,7 +1522,7 @@ function modalSammelbericht(kundeId){
 
 function buildSammelberichtHtml(sb, k){
   var html = '';
-  var berichtNr = 'SB-' + fmtDate(sb.datum).split('.').reverse().join('') + '-' + sb.id.slice(-4);
+  var berichtNr = sb.berichtNr || ('SB-' + fmtDate(sb.datum).split('.').reverse().join('') + '-' + sb.id.slice(-4));
   html += '<div class="bericht-brief">';
 
   html += '<div class="pb-kopfzeile">';
