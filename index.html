@@ -772,6 +772,7 @@ function renderPruefungen(){
       html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.datum) + '</div>';
       html += '<div class="row" style="margin-top:8px;">';
       html += '<button class="btn small erledigtBtn" data-pid="' + p.id + '">Als erledigt markieren</button>';
+      html += '<button class="btn small secondary pruefungLoeschenBtn" data-pid="' + p.id + '" style="margin-left:8px;">Löschen</button>';
       html += '</div></div>';
     });
   }
@@ -1820,6 +1821,17 @@ function bindDynamic(){
 
   document.querySelectorAll('.erledigtBtn').forEach(function(b){
     b.onclick = function(){ modalErledigt(b.getAttribute('data-pid')); };
+  });
+
+  document.querySelectorAll('.pruefungLoeschenBtn').forEach(function(b){
+    b.onclick = function(){
+      var pid = b.getAttribute('data-pid');
+      customConfirm('Diese Prüfung wirklich löschen? Das entfernt nur den Termin, das Gerät bleibt bestehen.', function(){
+        dbDelete('pruefungen', pid, function(){
+          loadAll(function(){ render(); toast('Prüfung gelöscht'); });
+        });
+      });
+    };
   });
 
   document.querySelectorAll('[data-viewbericht]').forEach(function(b){
