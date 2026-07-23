@@ -782,25 +782,10 @@ function renderPruefungen(){
 
 // ---------- Berichte ----------
 function renderBerichte(){
-  var berichte = state.pruefungen.filter(function(p){ return p.erledigt && p.bericht; });
   var ausgeschieden = state.geraete.filter(function(g){ return g.ausgeschieden; });
   ausgeschieden.sort(function(a,b){ return new Date(b.ausgeschiedenAm) - new Date(a.ausgeschiedenAm); });
 
   var html = '';
-  html += '<div class="section-title">Prüfberichte</div>';
-  if(berichte.length === 0){
-    html += '<div class="empty" style="padding:24px 20px;"><span class="ic">&#128196;</span>Noch keine Prüfberichte erstellt.<br>Erledige eine Prüfung mit Unterschrift, um einen Bericht zu erzeugen.</div>';
-  } else {
-    berichte.forEach(function(p){
-      var k = state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
-      var ergCls = p.ergebnis === 'Reparatur nötig' ? 'blau' : (p.ergebnis === 'Ausgeschieden' ? 'warn' : 'ok');
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>' + (p.ergebnis ? '<span class="badge ' + ergCls + '">' + escapeHtml(p.ergebnis) + '</span>' : '') + '</div>';
-      html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
-      html += '<button class="btn small secondary" style="margin-top:8px;" data-viewbericht="' + p.id + '">Bericht ansehen</button>';
-      html += '</div>';
-    });
-  }
 
   html += '<div class="section-title">Sammelberichte</div>';
   var sammelSortiert = state.sammelberichte.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
@@ -1315,42 +1300,56 @@ function modalErledigt(pruefungId){
   html += '<label style="margin-top:14px;">Unterschrift Techniker</label>';
   html += '<canvas class="sig" id="sigPadTechniker"></canvas>';
   html += '<button class="btn secondary small" id="sigClearTechniker" style="margin-top:8px;">Unterschrift löschen</button>';
-  html += '<button class="btn block" id="fSave" style="margin-top:14px;">Prüfung abschließen &amp; Bericht erstellen</button>';
+  html += '<button class="btn block" id="btnErlOk" style="background:var(--ok); margin-top:16px;">&#10003; In Ordnung - Prüfung abschließen</button>';
+  html += '<button class="btn block" id="btnErlReparatur" style="background:#c98a1c; margin-top:10px;">&#9881; Reparatur nötig</button>';
+  html += '<button class="btn block secondary" id="btnErlAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Gerät ausscheiden (zu alt / defekt)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
 
   var canvasKunde = initSigPad('sigPadKunde');
   var canvasTechniker = initSigPad('sigPadTechniker');
-  var ctxKunde = canvasKunde.getContext('2d');
-  var ctxTechniker = canvasTechniker.getContext('2d');
 
   document.getElementById('sigClearKunde').onclick = function(){
-    ctxKunde.clearRect(0,0,canvasKunde.width,canvasKunde.height);
+    canvasKunde.getContext('2d').clearRect(0,0,canvasKunde.width,canvasKunde.height);
   };
   document.getElementById('sigClearTechniker').onclick = function(){
-    ctxTechniker.clearRect(0,0,canvasTechniker.width,canvasTechniker.height);
+    canvasTechniker.getContext('2d').clearRect(0,0,canvasTechniker.width,canvasTechniker.height);
   };
 
-  document.getElementById('fSave').onclick = function(){
+  function abschliessenMit(ergebnis){
+    var jetztIso = new Date().toISOString();
+    var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
     p.erledigt = true;
+    p.erledigtAm = jetztIso;
+    p.bericht = true;
+    p.ergebnis = ergebnisLabel;
     p.bemerkung = document.getElementById('fBemerkung').value.trim();
     p.unterschriftKunde = canvasKunde.toDataURL('image/png');
     p.unterschriftTechniker = canvasTechniker.toDataURL('image/png');
-    p.bericht = true;
-    p.erledigtAm = new Date().toISOString();
-    p.ergebnis = p.ergebnis || 'In Ordnung';
     dbPut('pruefungen', p, function(){
       var gZu = p.geraetId ? state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] : null;
-      if(gZu){
-        gZu.letztePruefung = p.erledigtAm.substring(0,10);
-        gZu.naechstePruefung = naechsterTerminNach(p.erledigtAm, gZu.intervallMonate);
+      if(gZu && ergebnis === 'ausscheiden'){
+        gZu.ausgeschieden = true;
+        gZu.ausgeschiedenAm = jetztIso;
         dbPut('geraete', gZu, function(){
-          loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen'); });
+          loadAll(function(){ render(); closeModal(); toast('Gerät ausgeschieden'); });
+        });
+      } else if(gZu && ergebnis === 'in_ordnung'){
+        gZu.letztePruefung = jetztIso.substring(0,10);
+        gZu.naechstePruefung = naechsterTerminNach(jetztIso, gZu.intervallMonate);
+        dbPut('geraete', gZu, function(){
+          loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); });
         });
       } else {
-        loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen'); });
+        loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); });
       }
     });
+  }
+
+  document.getElementById('btnErlOk').onclick = function(){ abschliessenMit('in_ordnung'); };
+  document.getElementById('btnErlReparatur').onclick = function(){ abschliessenMit('reparatur'); };
+  document.getElementById('btnErlAusscheiden').onclick = function(){
+    customConfirm('Gerät wirklich als ausgeschieden markieren?', function(){ abschliessenMit('ausscheiden'); });
   };
 }
 
