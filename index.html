@@ -597,9 +597,13 @@ function renderGeraetCheck(geraetId){
     html += '<label style="margin-top:14px;">Unterschrift Techniker</label>';
     html += '<canvas class="sig" id="checkSigTechniker"></canvas>';
     html += '<button class="btn secondary small" id="checkSigClearTechniker" style="margin-top:6px;">Löschen</button>';
-    html += '<button class="btn block" id="btnOk" style="background:var(--ok); margin-top:16px;">&#10003; In Ordnung - Prüfung abschließen</button>';
-    html += '<button class="btn block" id="btnReparatur" style="background:#c98a1c; margin-top:10px;">&#9881; Reparatur nötig</button>';
-    html += '<button class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Gerät ausscheiden (zu alt / defekt)</button>';
+    var vorg = state.vorgewaehltesErgebnis;
+    var hlOk = vorg === 'in_ordnung' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
+    var hlRep = vorg === 'reparatur' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
+    var hlAus = vorg === 'ausscheiden' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
+    html += '<button class="btn block" id="btnOk" style="background:var(--ok); margin-top:16px;' + hlOk + '">&#10003; In Ordnung - Prüfung abschließen</button>';
+    html += '<button class="btn block" id="btnReparatur" style="background:#c98a1c; margin-top:10px;' + hlRep + '">&#9881; Reparatur nötig</button>';
+    html += '<button class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;' + hlAus + '">Gerät ausscheiden (zu alt / defekt)</button>';
   }
 
   return html;
@@ -630,6 +634,7 @@ function naechsterTerminNach(datumIso, intervallMonate){
 }
 
 function checkAbschliessen(geraetId, ergebnis){
+  state.vorgewaehltesErgebnis = null;
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   var bemerkungEl = document.getElementById('checkBemerkung');
   var bemerkung = bemerkungEl ? bemerkungEl.value.trim() : '';
@@ -773,13 +778,22 @@ function renderKundeDetail(kundeId){
     geraeteSortiert.forEach(function(g, idx){
       var st = statusForDate(g.naechstePruefung);
       var bj = baujahrStatus(g.baujahr, g.letzteInnenrevision);
-      html += '<div class="device-item" data-gid="' + g.id + '">';
+      html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
+      html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
       html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong><br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
       html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
       if(bj) html += '<span class="badge ' + bj.cls + '">' + bj.label + '</span>';
       html += '<button class="btn secondary small qrGeraetInlineBtn" data-gid="' + g.id + '" style="padding:5px 9px;">QR</button>';
       html += '</div>';
+      html += '</div>';
+      if(!g.ausgeschieden){
+        html += '<div style="display:flex; gap:6px; margin-top:8px;">';
+        html += '<button type="button" class="btn small" style="flex:1; background:var(--ok);" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">In Ordnung</button>';
+        html += '<button type="button" class="btn small secondary" style="flex:1;" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
+        html += '<button type="button" class="btn small secondary" style="flex:1;" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
+        html += '</div>';
+      }
       html += '</div>';
     });
     html += '</div>';
@@ -1874,7 +1888,7 @@ function bindDynamic(){
   if(back) back.onclick = function(){ state.tab = 'kunden'; render(); };
 
   var backScan = document.getElementById('backToScan');
-  if(backScan) backScan.onclick = function(){ state.tab = 'scan'; render(); };
+  if(backScan) backScan.onclick = function(){ state.vorgewaehltesErgebnis = null; state.tab = 'scan'; render(); };
 
   var scanManuellBtn = document.getElementById('scanManuellBtn');
   if(scanManuellBtn){
@@ -1970,6 +1984,16 @@ function bindDynamic(){
     b.onclick = function(e){
       e.stopPropagation();
       modalQrGeraet(b.getAttribute('data-gid'));
+    };
+  });
+
+  document.querySelectorAll('[data-schnellcheck]').forEach(function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      state.activeGeraetId = b.getAttribute('data-schnellcheck');
+      state.vorgewaehltesErgebnis = b.getAttribute('data-erg');
+      state.tab = 'geraetCheck';
+      render();
     };
   });
 
