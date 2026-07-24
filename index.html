@@ -451,7 +451,7 @@ function renderDashboard(){
   var html = '';
   html += '<div class="statrow">';
   html += '<div class="stat"><div class="n">' + state.kunden.filter(function(x){ return !x.geloescht; }).length + '</div><div class="l">Kunden</div></div>';
-  html += '<div class="stat"><div class="n">' + state.geraete.length + '</div><div class="l">Geräte</div></div>';
+  html += '<div class="stat"><div class="n">' + state.geraete.filter(function(g){ return !g.ausgeschieden; }).length + '</div><div class="l">Geräte</div></div>';
   html += '<div class="stat"><div class="n" style="color:' + (ueberfaelligGeraete.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaelligGeraete.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
 
