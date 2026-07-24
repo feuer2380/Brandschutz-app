@@ -868,7 +868,7 @@ function renderKundenListe(query){
     return html;
   }
   liste.forEach(function(k){
-    var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id; }).length;
+    var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id && !g.ausgeschieden; }).length;
     html += '<div class="card kunde-card" data-id="' + k.id + '">';
     html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>';
     if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
@@ -976,6 +976,7 @@ function renderKundeDetail(kundeId){
   }
 
   html += '<button class="btn block" style="margin-top:14px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="ausstattungBtn">Ausstattungsliste (was ist wo im Gebäude)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
   return html;
@@ -1093,6 +1094,85 @@ function buildTerminlisteHtml(){
   html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
   html += '</div>';
   return html;
+}
+
+function buildGeraeteuebersichtHtml(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+
+  var gruppen = {};
+  var reihenfolge = [];
+  geraete.forEach(function(g){
+    var kat = g.kategorie || 'Feuerlöscher';
+    if(!gruppen[kat]){ gruppen[kat] = []; reihenfolge.push(kat); }
+    gruppen[kat].push(g);
+  });
+
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Ausstattungsliste</h1><div class="sub">Übersicht Brandschutzeinrichtungen im Gebäude</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+
+  if(k && k.objekt){
+    html += '<div class="pb-kundenreihe">';
+    html += '<div class="pb-kundenbox"><div class="knr">Kunde' + (k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div><div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.name) + '</div><div>' + escapeHtml(k.adresse||'') + '</div></div>';
+    html += '<div class="pb-kundenbox objektbox"><div class="knr">Objekt</div><div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.objekt) + '</div><div>' + escapeHtml(k.objektAdresse || k.adresse || '') + '</div></div>';
+    html += '</div>';
+  } else {
+    html += '<div class="pb-kundenbox"><div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div><div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div><div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div></div>';
+  }
+
+  if(geraete.length === 0){
+    html += '<div class="empty">Keine Geräte hinterlegt</div>';
+  } else {
+    reihenfolge.forEach(function(kat){
+      html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th></tr></thead><tbody>';
+      gruppen[kat].forEach(function(g, i){
+        html += '<tr><td class="pb-pos">' + (i+1) + '</td><td>' + escapeHtml(g.typ) + '</td><td>' + escapeHtml(g.standort||'-') + '</td><td>' + escapeHtml(g.seriennummer||'-') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    });
+  }
+
+  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
+  html += '</div>';
+  return html;
+}
+
+function modalGeraeteuebersicht(kundeId){
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>Ausstattungsliste</h3><button class="close" id="mClose">&times;</button></div>';
+  html += buildGeraeteuebersichtHtml(kundeId);
+  html += '<div class="no-print" style="margin-top:16px;">';
+  html += '<button class="btn block" id="druckBtnAL">Drucken / Als PDF teilen</button>';
+  html += '<button class="btn block secondary" id="mailBtnAL" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('druckBtnAL').onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildGeraeteuebersichtHtml(kundeId);
+    window.print();
+  };
+  document.getElementById('mailBtnAL').onclick = function(){
+    var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+    var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+    var zeilen = [];
+    zeilen.push('Ausstattungsliste - ' + (k ? k.name : '') + (k && k.objekt ? ' / ' + k.objekt : ''));
+    zeilen.push('');
+    geraete.forEach(function(g){
+      zeilen.push((g.kategorie || 'Feuerlöscher') + ': ' + g.typ + ' - ' + (g.standort || 'Standort unbekannt'));
+    });
+    zeilen.push('');
+    zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+    var text = zeilen.join('\n');
+    var mailto = 'mailto:?subject=' + encodeURIComponent('Ausstattungsliste ' + (k ? k.name : '')) + '&body=' + encodeURIComponent(text);
+    window.location.href = mailto;
+  };
 }
 
 function modalTerminliste(){
@@ -1648,12 +1728,19 @@ function buildTypChips(){
 function bindKategorieToggle(){
   var sel = document.getElementById('fKategorie');
   var block = document.getElementById('fjBlockBaujahr');
-  if(!sel || !block) return;
+  var intervallSel = document.getElementById('fIntervall');
+  if(!sel) return;
   function aktualisieren(){
-    block.style.display = (sel.value === 'Feuerlöscher') ? '' : 'none';
+    if(block) block.style.display = (sel.value === 'Feuerlöscher') ? '' : 'none';
+    if(intervallSel && !intervallSel.getAttribute('data-manuell')){
+      intervallSel.value = (sel.value === 'Feuerlöscher') ? '24' : '12';
+    }
   }
   aktualisieren();
   sel.onchange = aktualisieren;
+  if(intervallSel){
+    intervallSel.onchange = function(){ intervallSel.setAttribute('data-manuell', '1'); };
+  }
 }
 
 function bindTypChips(){
@@ -2166,7 +2253,8 @@ function buildSammelberichtHtml(sb, k){
       html += '<div class="pos-kopf">';
       html += '<div><div class="titel">' + g.nr + '. ' + escapeHtml(g.typ) + '</div>';
       html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
-      html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (g.naechstePruefung ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+      var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
+      html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
       html += '</div>';
       dienste.forEach(function(dName){
         html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(dName) + '</span><span class="' + ei.cls + '">Ergebnis: ' + (istOk ? 'OK' : escapeHtml(ei.label)) + '</span></div>';
@@ -2434,6 +2522,9 @@ function bindDynamic(){
 
   var sammelberichtBtn = document.getElementById('sammelberichtBtn');
   if(sammelberichtBtn) sammelberichtBtn.onclick = function(){ modalSammelbericht(state.activeKundeId); };
+
+  var ausstattungBtn = document.getElementById('ausstattungBtn');
+  if(ausstattungBtn) ausstattungBtn.onclick = function(){ modalGeraeteuebersicht(state.activeKundeId); };
 
   var qrBtn = document.getElementById('qrKundeBtn');
   if(qrBtn) qrBtn.onclick = function(){ modalQrKunde(state.activeKundeId); };
