@@ -1309,6 +1309,7 @@ function renderBerichte(){
       html += '<div class="row"><h3>' + escapeHtml(g.typ) + '</h3><span class="badge warn">Ausgeschieden</span></div>';
       html += '<div class="meta">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
       html += '<div class="meta">' + (g.baujahr ? 'Baujahr ' + g.baujahr + ' &middot; ' : '') + 'Ausgeschieden am ' + fmtDate(g.ausgeschiedenAm) + '</div>';
+      html += '<button class="btn small secondary ausgeschiedenLoeschenBtn" style="margin-top:8px;" data-gid="' + g.id + '">Endgültig löschen</button>';
       html += '</div>';
     });
   }
@@ -2535,6 +2536,17 @@ function bindDynamic(){
 
   var terminlisteBtn = document.getElementById('terminlisteBtn');
   if(terminlisteBtn) terminlisteBtn.onclick = modalTerminliste;
+
+  document.querySelectorAll('.ausgeschiedenLoeschenBtn').forEach(function(b){
+    b.onclick = function(){
+      var gid = b.getAttribute('data-gid');
+      customConfirm('Dieses ausgeschiedene Gerät unwiderruflich löschen?', function(){
+        dbDelete('geraete', gid, function(){
+          loadAll(function(){ render(); toast('Gerät gelöscht'); });
+        });
+      });
+    };
+  });
 
   document.querySelectorAll('.pruefungLoeschenBtn').forEach(function(b){
     b.onclick = function(){
