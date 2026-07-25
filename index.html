@@ -2089,6 +2089,9 @@ function modalSammelbericht(kundeId){
         html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
         html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
         html += '</div>';
+        if((g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch'){
+          html += '<label style="margin-top:6px;">Abfülldatum</label><input type="date" id="sbAbfuell_' + g.id + '" value="' + (g.abfuelldatum || '') + '">';
+        }
       }
       html += '<textarea id="sbNotiz_' + g.id + '" rows="2" placeholder="Notiz zu diesem Gerät (optional)" style="margin-top:8px;">' + (letzte && letzte.bemerkung ? escapeHtml(letzte.bemerkung) : '') + '</textarea>';
       html += '</div>';
@@ -2202,6 +2205,10 @@ function modalSammelbericht(kundeId){
       var akkuEl = istRWA ? document.getElementById('sbAkku_' + g.id) : null;
       var akkuVal = akkuEl ? akkuEl.value : '';
       if(akkuVal){ g.akkuTauschDatum = akkuVal; }
+      var istPZ = (g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch';
+      var abfuellEl = istPZ ? document.getElementById('sbAbfuell_' + g.id) : null;
+      var abfuellVal = abfuellEl ? abfuellEl.value : '';
+      if(abfuellVal){ g.abfuelldatum = abfuellVal; }
       var ergebnis;
       if(istRWA){
         var ausscheidenBox = document.querySelector('.sbAusscheidenRWA[data-gid="' + g.id + '"]');
@@ -2239,6 +2246,7 @@ function modalSammelbericht(kundeId){
             standort: g.standort || '',
             baujahr: g.baujahr || null,
             seriennummer: g.seriennummer || '',
+            abfuelldatum: g.abfuelldatum || null,
             ergebnis: ergebnisLabel,
             notiz: notiz,
             naechstePruefung: naechstePruefungWert || null,
@@ -2258,7 +2266,7 @@ function modalSammelbericht(kundeId){
           g.letztePruefung = jetztIso.substring(0,10);
           g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
-        } else if(akkuVal){
+        } else if(akkuVal || abfuellVal){
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
         } else {
           weiter(g.naechstePruefung);
@@ -2327,7 +2335,11 @@ function buildSammelberichtHtml(sb, k){
       html += '<div><div class="titel">' + g.nr + '. ' + escapeHtml(g.typ) + '</div>';
       html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
       var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
-      html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+      if(kat === 'Perchtl Zisch'){
+        html += '<div class="rechts">Abfülldatum<br><strong>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</strong></div>';
+      } else {
+        html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+      }
       html += '</div>';
       if(g.dienstErgebnisse && g.dienstErgebnisse.length){
         g.dienstErgebnisse.forEach(function(d){
