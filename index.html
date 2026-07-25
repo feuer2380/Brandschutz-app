@@ -2327,7 +2327,11 @@ function buildSammelberichtHtml(sb, k){
       html += '<div><div class="titel">' + g.nr + '. ' + escapeHtml(g.typ) + '</div>';
       html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
       var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
-      html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+      if(kat === 'Perchtl Zisch'){
+        html += '<div class="rechts">Abfülldatum<br><strong>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</strong></div>';
+      } else {
+        html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+      }
       html += '</div>';
       if(g.dienstErgebnisse && g.dienstErgebnisse.length){
         g.dienstErgebnisse.forEach(function(d){
