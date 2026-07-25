@@ -364,32 +364,7 @@ function dienstleistungenFuer(kategorie){
 
 function dienstleistungenFuerGeraet(kategorie, typ){
   if(kategorie !== 'RWA-Anlage') return dienstleistungenFuer(kategorie);
-  var t = (typ || '').toLowerCase();
-  if(t.indexOf('energieversorgung') !== -1 || t.indexOf('steuerzentrale') !== -1){
-    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Zugänglichkeit','Überprüfung der Akkumulator- und Ladespannung','Belastungstest Akkumulatoren und Lebensdauerkontrolle','Kapazitätsprüfung: Vergleich Stromaufnahme Motoröffner mit Leistung Energieversorgung','Überprüfung aller Funktionen, Anzeigen und Signale','Überprüfung der Elektroleitungen auf Beschädigungen und festen Klemmsitz','Überprüfung der Zugänglichkeit und Kennzeichnung der elektrischen Absicherung'];
-  }
-  if(t.indexOf('taster') !== -1){
-    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Zugänglichkeit','Überprüfung aller Funktionen, Anzeigen und Signale','Überprüfung der Elektroleitungen auf Beschädigungen und festen Klemmsitz'];
-  }
-  if(t.indexOf('manuelle auslöse') !== -1){
-    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Zugänglichkeit','Überprüfung aller Funktionen, Betriebs- und Sichtanzeigen, Einstichnadel','Überprüfung aller beweglichen Teile auf Gangbarkeit und Funktion','Überprüfung der Anschlüsse und Befestigungen auf festen Sitz','Überprüfung Treibgaspatronen, Einbaulage, Total-(Brutto-)Gewicht, festen Sitz','Überprüfung der Druckluftleitungen auf Beschädigung, Korrosion, Befestigung, Dichtheit'];
-  }
-  if(t.indexOf('automatische auslösung') !== -1){
-    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Anschlüsse','Funktionsprüfung eines Thermovorrangventils je Rauchabschnitt mit Wärmequelle','Überprüfung aller beweglichen Teile auf Gangbarkeit und Funktion','Sichtprüfung des Glaskolbens, Flaschendichtung und der Einstichnadel','Überprüfung Treibgaspatrone, Einbaulage Temperaturklasse, Total-(Brutto-)Gewicht'];
-  }
-  if(t.indexOf('beschlag') !== -1){
-    return ['Funktionskontrolle im Notstrombetrieb (2 Öffnungs- und Schließzyklen)','Überprüfung der Öffnungszeiten','Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Anschlüsse','Überprüfung der beweglichen Teile und Schub-/Kolbenstange auf Gangbarkeit, Funktion','Überprüfung der Anschlüsse und Befestigungen auf festen Sitz und Dichtheit','Überprüfung der Verriegelungen und Sichtprüfung der Anschlusskabel/-schläuche'];
-  }
-  if(t.indexOf('entrauchungsöffnung') !== -1 || t.indexOf('lichtkuppel') !== -1){
-    return ['Sichtprüfung auf Beschädigungen und Dichtheit','Freihalten des Öffnungs- bzw. Schwenkbereichs','Überprüfung der Befestigung der Scharniere','Kontrolle der Dichtungen auf Beschädigungen, Quetschungen','Windleitblech/Eckleitwand: Kontrolle auf Beschädigung, Korrosion und Befestigung','Überprüfung der Absturzsicherung auf Beschädigung, Korrosion und Befestigung','Überprüfung der notwendigen geometrischen Fläche von mindestens 1m²'];
-  }
-  if(t.indexOf('sonstiges') !== -1){
-    return ['Überprüfung Lüftungsfunktion','Überprüfung Wind- und Regenmelder auf Verschmutzung, Beschädigung, Befestigung','Überprüfung der notwendigen Kennzeichnung','Funktionserhaltendes Reinigen und Schmieren','Kontrollbuch vorhanden und Inspektion eingetragen'];
-  }
-  if(t.indexOf('rauchabzug') !== -1 || t.indexOf('stiegenhaus') !== -1){
-    return ['Jährliche Wartung Rauchabzug in Stiegen-/Stiegenhäusern nach ÖNORM F 3075','Überprüfungsplakette Allgemein'];
-  }
-  return ['Jährliche Wartung natürliche Rauch- und Wärmeabzugsanlage (RWA/BRE) Rauchableitungsanlage','Überprüfungsplakette Allgemein'];
+  return ['Jährliche Wartung Rauchabzug in Stiegen-/Stiegenhäusern nach ÖNORM F 3075','Überprüfungsplakette Allgemein'];
 }
 
 function normFuerKategorie(kategorie){
