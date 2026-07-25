@@ -362,12 +362,42 @@ function dienstleistungenFuer(kategorie){
   return karte[kategorie] || karte['Sonstiges'];
 }
 
+function dienstleistungenFuerGeraet(kategorie, typ){
+  if(kategorie !== 'RWA-Anlage') return dienstleistungenFuer(kategorie);
+  var t = (typ || '').toLowerCase();
+  if(t.indexOf('energieversorgung') !== -1 || t.indexOf('steuerzentrale') !== -1){
+    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Zugänglichkeit','Überprüfung der Akkumulator- und Ladespannung','Belastungstest Akkumulatoren und Lebensdauerkontrolle','Kapazitätsprüfung: Vergleich Stromaufnahme Motoröffner mit Leistung Energieversorgung','Überprüfung aller Funktionen, Anzeigen und Signale','Überprüfung der Elektroleitungen auf Beschädigungen und festen Klemmsitz','Überprüfung der Zugänglichkeit und Kennzeichnung der elektrischen Absicherung'];
+  }
+  if(t.indexOf('taster') !== -1){
+    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Zugänglichkeit','Überprüfung aller Funktionen, Anzeigen und Signale','Überprüfung der Elektroleitungen auf Beschädigungen und festen Klemmsitz'];
+  }
+  if(t.indexOf('manuelle auslöse') !== -1){
+    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Zugänglichkeit','Überprüfung aller Funktionen, Betriebs- und Sichtanzeigen, Einstichnadel','Überprüfung aller beweglichen Teile auf Gangbarkeit und Funktion','Überprüfung der Anschlüsse und Befestigungen auf festen Sitz','Überprüfung Treibgaspatronen, Einbaulage, Total-(Brutto-)Gewicht, festen Sitz','Überprüfung der Druckluftleitungen auf Beschädigung, Korrosion, Befestigung, Dichtheit'];
+  }
+  if(t.indexOf('automatische auslösung') !== -1){
+    return ['Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Anschlüsse','Funktionsprüfung eines Thermovorrangventils je Rauchabschnitt mit Wärmequelle','Überprüfung aller beweglichen Teile auf Gangbarkeit und Funktion','Sichtprüfung des Glaskolbens, Flaschendichtung und der Einstichnadel','Überprüfung Treibgaspatrone, Einbaulage Temperaturklasse, Total-(Brutto-)Gewicht'];
+  }
+  if(t.indexOf('beschlag') !== -1){
+    return ['Funktionskontrolle im Notstrombetrieb (2 Öffnungs- und Schließzyklen)','Überprüfung der Öffnungszeiten','Überprüfung auf Verschmutzung, Beschädigung, Korrosion, Befestigung, Anschlüsse','Überprüfung der beweglichen Teile und Schub-/Kolbenstange auf Gangbarkeit, Funktion','Überprüfung der Anschlüsse und Befestigungen auf festen Sitz und Dichtheit','Überprüfung der Verriegelungen und Sichtprüfung der Anschlusskabel/-schläuche'];
+  }
+  if(t.indexOf('entrauchungsöffnung') !== -1 || t.indexOf('lichtkuppel') !== -1){
+    return ['Sichtprüfung auf Beschädigungen und Dichtheit','Freihalten des Öffnungs- bzw. Schwenkbereichs','Überprüfung der Befestigung der Scharniere','Kontrolle der Dichtungen auf Beschädigungen, Quetschungen','Windleitblech/Eckleitwand: Kontrolle auf Beschädigung, Korrosion und Befestigung','Überprüfung der Absturzsicherung auf Beschädigung, Korrosion und Befestigung','Überprüfung der notwendigen geometrischen Fläche von mindestens 1m²'];
+  }
+  if(t.indexOf('sonstiges') !== -1){
+    return ['Überprüfung Lüftungsfunktion','Überprüfung Wind- und Regenmelder auf Verschmutzung, Beschädigung, Befestigung','Überprüfung der notwendigen Kennzeichnung','Funktionserhaltendes Reinigen und Schmieren','Kontrollbuch vorhanden und Inspektion eingetragen'];
+  }
+  if(t.indexOf('rauchabzug') !== -1 || t.indexOf('stiegenhaus') !== -1){
+    return ['Jährliche Wartung Rauchabzug in Stiegen-/Stiegenhäusern nach ÖNORM F 3075','Überprüfungsplakette Allgemein'];
+  }
+  return ['Jährliche Wartung natürliche Rauch- und Wärmeabzugsanlage (RWA/BRE) Rauchableitungsanlage','Überprüfungsplakette Allgemein'];
+}
+
 function normFuerKategorie(kategorie){
   var karte = {
     'Feuerlöscher': 'gemäß ÖNORM F1053',
     'Brandschutztüren': 'gemäß ÖNORM B1205, ÖNORM B3850, TRVB 148',
     'Brandschutzklappen': 'gemäß ÖNORM H6031, TRVB 108',
-    'RWA-Anlage': 'gemäß ÖNORM EN 12101, TRVB S 111',
+    'RWA-Anlage': 'gemäß ÖNORM F 3075',
     'Notbeleuchtung': 'gemäß ÖNORM EN 1838, ÖVE/ÖNORM E 8002',
     'Rauchmelder': 'gemäß TRVB S 123, ÖNORM EN 14604'
   };
@@ -2046,6 +2076,13 @@ function modalSammelbericht(kundeId){
     else auswahl[g.id] = 'in_ordnung';
   });
 
+  var einzelErgebnisse = {};
+  geraeteSortiert.forEach(function(g){
+    if((g.kategorie || 'Feuerlöscher') === 'RWA-Anlage'){
+      einzelErgebnisse[g.id] = dienstleistungenFuerGeraet('RWA-Anlage', g.typ).map(function(text){ return { text: text, ok: true }; });
+    }
+  });
+
   var html = '';
   html += '<div class="modal-head"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
@@ -2055,6 +2092,7 @@ function modalSammelbericht(kundeId){
     html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
   } else {
     geraeteSortiert.forEach(function(g, idx){
+      var istRWA = (g.kategorie || 'Feuerlöscher') === 'RWA-Anlage';
       var aktErg = auswahl[g.id];
       var letzte = letztePruefungFuerGeraet(g.id);
       var farbe = function(key){ return key === 'in_ordnung' ? 'var(--ok)' : (key === 'reparatur' ? '#c98a1c' : '#c23f12'); };
@@ -2062,11 +2100,20 @@ function modalSammelbericht(kundeId){
       var stil = function(key){ return 'flex:1;' + (aktErg === key ? ' background:' + farbe(key) + ';' : ''); };
       html += '<div class="card" data-geraetkarte="' + g.id + '">';
       html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
-      html += '<div style="display:flex; gap:6px; margin-top:10px;">';
-      html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">In Ordnung</button>';
-      html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
-      html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
-      html += '</div>';
+      if(istRWA){
+        html += '<div style="margin-top:10px;">';
+        einzelErgebnisse[g.id].forEach(function(d, dIdx){
+          html += '<div class="pos-dienst" style="padding:6px 0;"><span class="dname" style="flex:1; padding-right:8px;">' + escapeHtml(d.text) + '</span><button type="button" class="btn small sbDienstBtn" data-gid="' + g.id + '" data-didx="' + dIdx + '" style="background:var(--ok); min-width:78px;">OK</button></div>';
+        });
+        html += '</div>';
+        html += '<label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-weight:400;"><input type="checkbox" class="sbAusscheidenRWA" data-gid="' + g.id + '" style="width:auto;"> Gerät ausscheiden (defekt)</label>';
+      } else {
+        html += '<div style="display:flex; gap:6px; margin-top:10px;">';
+        html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">In Ordnung</button>';
+        html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
+        html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
+        html += '</div>';
+      }
       html += '<textarea id="sbNotiz_' + g.id + '" rows="2" placeholder="Notiz zu diesem Gerät (optional)" style="margin-top:8px;">' + (letzte && letzte.bemerkung ? escapeHtml(letzte.bemerkung) : '') + '</textarea>';
       html += '</div>';
     });
@@ -2104,6 +2151,17 @@ function modalSammelbericht(kundeId){
       var farbe = auswahl[gid] === 'in_ordnung' ? 'var(--ok)' : (auswahl[gid] === 'reparatur' ? '#c98a1c' : '#c23f12');
       b.className = 'btn small sbErgBtn active';
       b.style.background = farbe;
+    };
+  });
+
+  document.querySelectorAll('.sbDienstBtn').forEach(function(b){
+    b.onclick = function(){
+      var gid = b.getAttribute('data-gid');
+      var dIdx = parseInt(b.getAttribute('data-didx'), 10);
+      var d = einzelErgebnisse[gid][dIdx];
+      d.ok = !d.ok;
+      b.textContent = d.ok ? 'OK' : 'nicht OK';
+      b.style.background = d.ok ? 'var(--ok)' : '#c23f12';
     };
   });
 
@@ -2164,7 +2222,19 @@ function modalSammelbericht(kundeId){
         return;
       }
       var g = geraeteSortiert[idx];
-      var ergebnis = auswahl[g.id] || 'in_ordnung';
+      var istRWA = (g.kategorie || 'Feuerlöscher') === 'RWA-Anlage';
+      var ergebnis;
+      if(istRWA){
+        var ausscheidenBox = document.querySelector('.sbAusscheidenRWA[data-gid="' + g.id + '"]');
+        if(ausscheidenBox && ausscheidenBox.checked){
+          ergebnis = 'ausscheiden';
+        } else {
+          var alleOk = einzelErgebnisse[g.id].every(function(d){ return d.ok; });
+          ergebnis = alleOk ? 'in_ordnung' : 'reparatur';
+        }
+      } else {
+        ergebnis = auswahl[g.id] || 'in_ordnung';
+      }
       var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
       var notiz = (document.getElementById('sbNotiz_' + g.id).value || '').trim();
 
@@ -2194,7 +2264,8 @@ function modalSammelbericht(kundeId){
             notiz: notiz,
             naechstePruefung: naechstePruefungWert || null,
             innenrevision: bjSnap ? bjSnap.label : null,
-            letzteInnenrevision: g.letzteInnenrevision || null
+            letzteInnenrevision: g.letzteInnenrevision || null,
+            dienstErgebnisse: istRWA ? einzelErgebnisse[g.id].map(function(d){ return { text: d.text, ok: d.ok }; }) : null
           });
           idx++;
           naechstesGeraet();
@@ -2267,7 +2338,6 @@ function buildSammelberichtHtml(sb, k){
     }
 
     geraeteDerKategorie.forEach(function(g){
-      var dienste = dienstleistungenFuer(kat);
       var ei = ergebnisInfo(g.ergebnis);
       var istOk = g.ergebnis === 'In Ordnung';
       html += '<div class="pos-karte">';
@@ -2277,9 +2347,17 @@ function buildSammelberichtHtml(sb, k){
       var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
       html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
       html += '</div>';
-      dienste.forEach(function(dName){
-        html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(dName) + '</span><span class="' + ei.cls + '">Ergebnis: ' + (istOk ? 'OK' : escapeHtml(ei.label)) + '</span></div>';
-      });
+      if(g.dienstErgebnisse && g.dienstErgebnisse.length){
+        g.dienstErgebnisse.forEach(function(d){
+          var dOk = d.ok !== false;
+          html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(d.text) + '</span><span class="' + (dOk ? 'pb-ok' : 'pb-rot') + '">Ergebnis: ' + (dOk ? 'OK' : 'nicht OK') + '</span></div>';
+        });
+      } else {
+        var dienste = dienstleistungenFuer(kat);
+        dienste.forEach(function(dName){
+          html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(dName) + '</span><span class="' + ei.cls + '">Ergebnis: ' + (istOk ? 'OK' : escapeHtml(ei.label)) + '</span></div>';
+        });
+      }
       if(g.notiz){
         html += '<div class="pos-notiz"><strong>Bemerkung:</strong> ' + escapeHtml(g.notiz) + '</div>';
       }
