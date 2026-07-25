@@ -2090,7 +2090,7 @@ function modalSammelbericht(kundeId){
         html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
         html += '</div>';
         if((g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch'){
-          html += '<label style="margin-top:6px;">Abfülldatum</label><input type="date" id="sbAbfuell_' + g.id + '" value="' + (g.abfuelldatum || '') + '">';
+          html += '<label style="margin-top:6px;">Neufüllung Sodawasser am (Datum + Uhrzeit)</label><input type="datetime-local" id="sbAbfuell_' + g.id + '" value="' + (g.abfuelldatum || '') + '">';
         }
       }
       html += '<textarea id="sbNotiz_' + g.id + '" rows="2" placeholder="Notiz zu diesem Gerät (optional)" style="margin-top:8px;">' + (letzte && letzte.bemerkung ? escapeHtml(letzte.bemerkung) : '') + '</textarea>';
@@ -2336,7 +2336,7 @@ function buildSammelberichtHtml(sb, k){
       html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
       var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
       if(kat === 'Perchtl Zisch'){
-        html += '<div class="rechts">Abfülldatum<br><strong>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</strong></div>';
+        html += '<div class="rechts">Neufüllung am<br><strong>' + (g.abfuelldatum ? (fmtDate(g.abfuelldatum) + ', ' + fmtZeit(g.abfuelldatum) + ' Uhr') : '-') + '</strong></div>';
       } else {
         html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
       }
@@ -2346,6 +2346,9 @@ function buildSammelberichtHtml(sb, k){
           var dOk = d.ok !== false;
           html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(d.text) + '</span><span class="' + (dOk ? 'pb-ok' : 'pb-rot') + '">Ergebnis: ' + (dOk ? 'OK' : 'nicht OK') + '</span></div>';
         });
+      } else if(kat === 'Perchtl Zisch'){
+        var neufuellText = 'Neufüllung Sodawasser am ' + (g.abfuelldatum ? (fmtDate(g.abfuelldatum) + ', ' + fmtZeit(g.abfuelldatum) + ' Uhr') : (fmtDate(sb.datum)));
+        html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(neufuellText) + '</span><span class="' + ei.cls + '">Ergebnis: ' + (istOk ? 'OK' : escapeHtml(ei.label)) + '</span></div>';
       } else {
         var dienste = dienstleistungenFuer(kat);
         dienste.forEach(function(dName){
