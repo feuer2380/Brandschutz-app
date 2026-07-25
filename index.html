@@ -1131,10 +1131,11 @@ function buildGeraeteuebersichtHtml(kundeId){
     html += '<div class="empty">Keine Geräte hinterlegt</div>';
   } else {
     reihenfolge.forEach(function(kat){
+      var istPZ = (kat === 'Perchtl Zisch');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th><th>Baujahr</th><th>Letzte Innenrevision</th><th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th>' + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : '<th>Baujahr</th><th>Letzte Innenrevision</th>') + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].forEach(function(g, i){
-        html += '<tr><td class="pb-pos">' + (i+1) + '</td><td>' + escapeHtml(g.typ) + '</td><td>' + escapeHtml(g.standort||'-') + '</td><td>' + escapeHtml(g.seriennummer||'-') + '</td><td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td><td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
+        html += '<tr><td class="pb-pos">' + (i+1) + '</td><td>' + escapeHtml(g.typ) + '</td><td>' + escapeHtml(g.standort||'-') + '</td><td>' + escapeHtml(g.seriennummer||'-') + '</td>' + (istPZ ? ('<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>') : ('<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td>')) + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
       });
       html += '</tbody></table>';
     });
