@@ -2222,7 +2222,12 @@ function modalSammelbericht(kundeId){
       var istPZ = (g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch';
       var abfuellEl = istPZ ? document.getElementById('sbAbfuell_' + g.id) : null;
       var abfuellVal = abfuellEl ? abfuellEl.value : '';
-      if(abfuellVal){ g.abfuelldatum = abfuellVal; }
+      if(abfuellVal){
+        var jetzt = new Date();
+        var hh = jetzt.getHours(); if(hh<10) hh = '0'+hh;
+        var mm = jetzt.getMinutes(); if(mm<10) mm = '0'+mm;
+        g.abfuelldatum = abfuellVal + 'T' + hh + ':' + mm;
+      }
       var ergebnis;
       if(istRWA){
         var ausscheidenBox = document.querySelector('.sbAusscheidenRWA[data-gid="' + g.id + '"]');
@@ -2350,7 +2355,7 @@ function buildSammelberichtHtml(sb, k){
       html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
       var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
       if(kat === 'Perchtl Zisch'){
-        html += '<div class="rechts">Neufüllung am<br><strong>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</strong></div>';
+        html += '<div class="rechts">Neufüllung am<br><strong>' + fmtDatumZeitLokal(g.abfuelldatum) + '</strong></div>';
       } else {
         html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
       }
@@ -2361,7 +2366,7 @@ function buildSammelberichtHtml(sb, k){
           html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(d.text) + '</span><span class="' + (dOk ? 'pb-ok' : 'pb-rot') + '">Ergebnis: ' + (dOk ? 'OK' : 'nicht OK') + '</span></div>';
         });
       } else if(kat === 'Perchtl Zisch'){
-        var neufuellText = 'Neufüllung Sodawasser am ' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : fmtDate(sb.datum));
+        var neufuellText = 'Neufüllung Sodawasser am ' + (g.abfuelldatum ? fmtDatumZeitLokal(g.abfuelldatum) : fmtDate(sb.datum));
         html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(neufuellText) + '</span><span class="' + ei.cls + '">Ergebnis: ' + (istOk ? 'OK' : escapeHtml(ei.label)) + '</span></div>';
       } else {
         var dienste = dienstleistungenFuer(kat);
