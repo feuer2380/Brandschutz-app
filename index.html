@@ -1533,7 +1533,7 @@ function modalQrGeraet(geraetId){
 function modalGeraetBearbeiten(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
-  var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Sonstiges'];
+  var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','Sonstiges'];
   var aktKategorie = g.kategorie || 'Feuerlöscher';
   var html = '';
   html += '<div class="modal-head"><h3>Gerät bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
@@ -1754,7 +1754,7 @@ function bindTypChips(){
 }
 
 function modalNeuesGeraet(kundeId){
-  var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Sonstiges'];
+  var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','Sonstiges'];
   var html = '';
   html += '<div class="modal-head"><h3>Neues Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Kategorie</label><select id="fKategorie">';
