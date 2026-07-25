@@ -747,7 +747,7 @@ function schnellErgebnisSetzen(geraetId, ergebnis){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   var jetztIso = new Date().toISOString();
-  var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
+  var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
   var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
   if(!offenePruefung){
     offenePruefung = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: jetztIso.substring(0,10), erledigt: false };
@@ -776,11 +776,11 @@ function schnellErgebnisSetzen(geraetId, ergebnis){
           loadAll(function(){ render(); toast('Gerät ausgeschieden'); });
         };
       });
-    } else if(ergebnis === 'in_ordnung'){
+    } else if(ergebnis === 'in_ordnung' || ergebnis === 'begehung'){
       g.letztePruefung = jetztIso.substring(0,10);
       g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
       dbPut('geraete', g, function(){
-        loadAll(function(){ render(); toast('Gespeichert: In Ordnung (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
+        loadAll(function(){ render(); toast('Gespeichert: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
       });
     } else {
       loadAll(function(){ render(); toast('Gespeichert: Reparatur nötig'); });
@@ -981,6 +981,13 @@ function renderKundeDetail(kundeId){
       html += '</div>';
       if(!g.ausgeschieden){
         var aktLetzte = letztePruefungFuerGeraet(g.id);
+        var istBegehung = g.kategorie === 'Brandschutzbegehung';
+        if(istBegehung){
+          html += '<div style="display:flex; gap:6px; margin-top:8px;">';
+          html += '<button type="button" class="btn small" style="flex:1; background:var(--ok); color:#fff;" data-schnellcheck="' + g.id + '" data-erg="begehung">Begehung durchgeführt</button>';
+          html += '<button type="button" class="btn small secondary" style="flex:1;" data-maengelbtn="' + g.id + '">Mängel' + (g.maengel ? ' &middot; erfasst' : '') + '</button>';
+          html += '</div>';
+        } else {
         var aktErgSchnell = aktLetzte && aktLetzte.ergebnis === 'Reparatur nötig' ? 'reparatur' : (aktLetzte && aktLetzte.ergebnis === 'Ausgeschieden' ? 'ausscheiden' : 'in_ordnung');
         var farbeSchnell = function(key){ return key === 'in_ordnung' ? 'var(--ok)' : (key === 'reparatur' ? '#c98a1c' : '#c23f12'); };
         var stilSchnell = function(key){ return 'flex:1;' + (aktErgSchnell === key ? ' background:' + farbeSchnell(key) + '; color:#fff;' : ''); };
@@ -990,6 +997,7 @@ function renderKundeDetail(kundeId){
         html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
         html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
         html += '</div>';
+        }
       }
       html += '</div>';
     });
@@ -2668,6 +2676,13 @@ function bindDynamic(){
       var gid = b.getAttribute('data-schnellcheck');
       var erg = b.getAttribute('data-erg');
       schnellErgebnisSetzen(gid, erg);
+    };
+  });
+
+  document.querySelectorAll('[data-maengelbtn]').forEach(function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      modalGeraetBearbeiten(b.getAttribute('data-maengelbtn'));
     };
   });
 
