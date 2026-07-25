@@ -1311,13 +1311,22 @@ function renderBerichte(){
   if(sammelSortiert.length === 0){
     html += '<div class="empty">Noch keine Sammelberichte erstellt</div>';
   } else {
+    var letztesDatum = null;
     sammelSortiert.forEach(function(sb){
+      var tagLabel = fmtDate(sb.datum);
+      if(tagLabel !== letztesDatum){
+        html += '<div class="section-subtitle" style="margin-top:14px; font-weight:600; opacity:0.7;">' + escapeHtml(tagLabel) + '</div>';
+        letztesDatum = tagLabel;
+      }
       var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
       var katLabel = (sb.geraeteSnapshot && sb.geraeteSnapshot.length) ? (sb.geraeteSnapshot[0].kategorie || 'Feuerlöscher') : 'Feuerlöscher';
       html += '<div class="card">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge blau">' + escapeHtml(katLabel) + '</span></div>';
       html += '<div class="meta">' + (sb.geraeteSnapshot ? sb.geraeteSnapshot.length : 0) + ' Position(en) &middot; ' + fmtDate(sb.datum) + (sb.berichtNr ? ' &middot; ' + escapeHtml(sb.berichtNr) : '') + '</div>';
-      html += '<button class="btn small secondary" style="margin-top:8px;" data-viewsammelbericht="' + sb.id + '">Bericht ansehen</button>';
+      html += '<div style="display:flex; gap:8px; margin-top:8px;">';
+      html += '<button class="btn small secondary" data-viewsammelbericht="' + sb.id + '">Bericht ansehen</button>';
+      html += '<button class="btn small" style="background:#b02a2a; color:#fff;" data-loeschsammelbericht="' + sb.id + '">Löschen</button>';
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -2694,6 +2703,17 @@ function bindDynamic(){
 
   document.querySelectorAll('[data-viewsammelbericht]').forEach(function(b){
     b.onclick = function(){ modalSammelberichtAnsicht(b.getAttribute('data-viewsammelbericht')); };
+  });
+
+  document.querySelectorAll('[data-loeschsammelbericht]').forEach(function(b){
+    b.onclick = function(){
+      var sbId = b.getAttribute('data-loeschsammelbericht');
+      if(!confirm('Diesen Sammelbericht wirklich unwiderruflich löschen?')) return;
+      dbDelete('sammelberichte', sbId, function(){
+        state.sammelberichte = state.sammelberichte.filter(function(x){ return x.id !== sbId; });
+        render();
+      });
+    };
   });
 }
 
