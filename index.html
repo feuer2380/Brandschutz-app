@@ -1977,7 +1977,9 @@ function buildBerichtHtml(p, k){
   html += '<div class="bericht-brief">';
 
   html += '<div class="pb-kopfzeile">';
-  html += '<div class="pb-titel"><h1>Prüfergebnisbericht</h1><div class="sub">Prüfbericht Feuerlöscher</div><div class="norm">gemäß ÖNORM F1053</div></div>';
+  var katSingle = gRef ? (gRef.kategorie || 'Feuerlöscher') : 'Feuerlöscher';
+  var normSingle = normFuerKategorie(katSingle);
+  html += '<div class="pb-titel"><h1>Prüfergebnisbericht</h1><div class="sub">Prüfbericht ' + escapeHtml(katSingle) + '</div>' + (normSingle ? ('<div class="norm">' + escapeHtml(normSingle) + '</div>') : '') + '</div>';
   html += '<img src="' + ((gRef && gRef.kategorie === 'Perchtl Zisch') ? LOGO_DATA_PZ : LOGO_DATA) + '" class="pb-logo">';
   html += '</div>';
   html += '<div class="pb-berichtnr">Prüfbericht Nr.: ' + berichtNr + '</div>';
@@ -2003,19 +2005,32 @@ function buildBerichtHtml(p, k){
     html += '</div>';
   }
 
+  var istFeuerloescherSingle = (katSingle === 'Feuerlöscher');
   html += '<table class="pb-tabelle"><thead><tr>';
-  html += '<th>Gerät</th><th>Baujahr</th><th>Serien-Nr.</th><th>Innenrevision</th><th>Datum</th><th>Ergebnis</th>';
+  html += '<th>Gerät</th><th>Standort</th><th>Serien-Nr.</th>' + (istFeuerloescherSingle ? '<th>Baujahr</th><th>Innenrevision</th>' : '') + '<th>Datum</th><th>Ergebnis</th>';
   html += '</tr></thead><tbody><tr>';
   html += '<td>' + escapeHtml(p.typ||'-') + '</td>';
-  html += '<td>' + (gRef && gRef.baujahr ? gRef.baujahr : '-') + '</td>';
+  html += '<td>' + (gRef && gRef.standort ? escapeHtml(gRef.standort) : '-') + '</td>';
   html += '<td>' + (gRef && gRef.seriennummer ? escapeHtml(gRef.seriennummer) : '-') + '</td>';
-  var bjRefSingle = (gRef && (!gRef.kategorie || gRef.kategorie === 'Feuerlöscher')) ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
-  var innenrevKurzSingle = bjRefSingle ? bjRefSingle.label.replace(/^Innenrevision /, '') : '';
-  html += '<td>' + (gRef && gRef.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(gRef.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurzSingle ? 'Nächste fällig: ' + escapeHtml(innenrevKurzSingle) : '-') + '</td>';
+  if(istFeuerloescherSingle){
+    html += '<td>' + (gRef && gRef.baujahr ? gRef.baujahr : '-') + '</td>';
+    var bjRefSingle = (gRef && (!gRef.kategorie || gRef.kategorie === 'Feuerlöscher')) ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
+    var innenrevKurzSingle = bjRefSingle ? bjRefSingle.label.replace(/^Innenrevision /, '') : '';
+    html += '<td>' + (gRef && gRef.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(gRef.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurzSingle ? 'Nächste fällig: ' + escapeHtml(innenrevKurzSingle) : '-') + '</td>';
+  }
   html += '<td>' + fmtDate(p.erledigtAm || p.datum) + '</td>';
   var eiSingle = ergebnisInfo(p.ergebnis);
   html += '<td><span class="' + eiSingle.cls + '">' + eiSingle.label + '</span></td>';
   html += '</tr></tbody></table>';
+
+  if(!istFeuerloescherSingle){
+    var diensteSingle = (katSingle === 'RWA-Anlage') ? dienstleistungenFuerGeraet(katSingle, gRef ? gRef.typ : '') : dienstleistungenFuer(katSingle);
+    html += '<div style="margin-top:8px;">';
+    diensteSingle.forEach(function(dName){
+      html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(dName) + '</span><span class="' + eiSingle.cls + '">' + eiSingle.label + '</span></div>';
+    });
+    html += '</div>';
+  }
 
   if(p.bemerkung){
     html += '<div class="bericht-feld" style="margin-top:10px;"><div class="l">Bemerkung / Befund</div><div class="w">' + escapeHtml(p.bemerkung) + '</div></div>';
