@@ -1125,9 +1125,9 @@ function buildTerminlisteHtml(){
   return html;
 }
 
-function buildGeraeteuebersichtHtml(kundeId){
+function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
-  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!nurKategorie || (g.kategorie || 'Feuerlöscher') === nurKategorie); });
 
   var gruppen = {};
   var reihenfolge = [];
@@ -1140,7 +1140,7 @@ function buildGeraeteuebersichtHtml(kundeId){
   var html = '';
   html += '<div class="bericht-brief">';
   html += '<div class="pb-kopfzeile">';
-  html += '<div class="pb-titel"><h1>Ausstattungsliste</h1><div class="sub">Übersicht Brandschutzeinrichtungen im Gebäude</div></div>';
+  html += '<div class="pb-titel"><h1>Ausstattungsliste</h1><div class="sub">' + (nurKategorie ? escapeHtml(nurKategorie) : 'Übersicht Brandschutzeinrichtungen im Gebäude') + '</div></div>';
   html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
   html += '</div>';
   html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
@@ -1176,36 +1176,58 @@ function buildGeraeteuebersichtHtml(kundeId){
 }
 
 function modalGeraeteuebersicht(kundeId){
-  var html = '';
-  html += '<div class="modal-head no-print"><h3>Ausstattungsliste</h3><button class="close" id="mClose">&times;</button></div>';
-  html += buildGeraeteuebersichtHtml(kundeId);
-  html += '<div class="no-print" style="margin-top:16px;">';
-  html += '<button class="btn block" id="druckBtnAL">Drucken / Als PDF teilen</button>';
-  html += '<button class="btn block secondary" id="mailBtnAL" style="margin-top:10px;">Per E-Mail senden</button>';
-  html += '</div>';
-  openModal(html);
-  document.getElementById('mClose').onclick = closeModal;
-  document.getElementById('druckBtnAL').onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildGeraeteuebersichtHtml(kundeId);
-    window.print();
-  };
-  document.getElementById('mailBtnAL').onclick = function(){
-    var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
-    var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
-    var zeilen = [];
-    zeilen.push('Ausstattungsliste - ' + (k ? k.name : '') + (k && k.objekt ? ' / ' + k.objekt : ''));
-    zeilen.push('');
-    geraete.forEach(function(g){
-      var zusatz = (g.baujahr ? ', Baujahr ' + g.baujahr : '') + (g.letzteInnenrevision ? ', Innenrevision zuletzt ' + fmtDate(g.letzteInnenrevision) : '');
-      zeilen.push((g.kategorie || 'Feuerlöscher') + ': ' + g.typ + ' - ' + (g.standort || 'Standort unbekannt') + zusatz);
+  var alleGeraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+  var kategorienVorhanden = [];
+  alleGeraete.forEach(function(g){
+    var kat = g.kategorie || 'Feuerlöscher';
+    if(kategorienVorhanden.indexOf(kat) === -1) kategorienVorhanden.push(kat);
+  });
+  var aktKat = null;
+
+  function neuZeichnen(){
+    var html = '';
+    html += '<div class="modal-head no-print"><h3>Ausstattungsliste</h3><button class="close" id="mClose">&times;</button></div>';
+    if(kategorienVorhanden.length > 1){
+      html += '<div class="no-print" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">';
+      html += '<button type="button" class="btn small' + (!aktKat ? '' : ' secondary') + '" data-alkat="">Alle</button>';
+      kategorienVorhanden.forEach(function(kat){
+        html += '<button type="button" class="btn small' + (aktKat === kat ? '' : ' secondary') + '" data-alkat="' + escapeHtml(kat) + '">' + escapeHtml(kat) + '</button>';
+      });
+      html += '</div>';
+    }
+    html += '<div id="alInhalt">' + buildGeraeteuebersichtHtml(kundeId, aktKat) + '</div>';
+    html += '<div class="no-print" style="margin-top:16px;">';
+    html += '<button class="btn block" id="druckBtnAL">Drucken / Als PDF teilen</button>';
+    html += '<button class="btn block secondary" id="mailBtnAL" style="margin-top:10px;">Per E-Mail senden</button>';
+    html += '</div>';
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+    document.querySelectorAll('[data-alkat]').forEach(function(b){
+      b.onclick = function(){ aktKat = b.getAttribute('data-alkat') || null; neuZeichnen(); };
     });
-    zeilen.push('');
-    zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
-    var text = zeilen.join('\n');
-    var mailto = 'mailto:?subject=' + encodeURIComponent('Ausstattungsliste ' + (k ? k.name : '')) + '&body=' + encodeURIComponent(text);
-    window.location.href = mailto;
-  };
+    document.getElementById('druckBtnAL').onclick = function(){
+      var pa = document.getElementById('printArea');
+      pa.innerHTML = buildGeraeteuebersichtHtml(kundeId, aktKat);
+      window.print();
+    };
+    document.getElementById('mailBtnAL').onclick = function(){
+      var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+      var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!aktKat || (g.kategorie || 'Feuerlöscher') === aktKat); });
+      var zeilen = [];
+      zeilen.push('Ausstattungsliste - ' + (k ? k.name : '') + (k && k.objekt ? ' / ' + k.objekt : '') + (aktKat ? ' (' + aktKat + ')' : ''));
+      zeilen.push('');
+      geraete.forEach(function(g){
+        var zusatz = (g.baujahr ? ', Baujahr ' + g.baujahr : '') + (g.letzteInnenrevision ? ', Innenrevision zuletzt ' + fmtDate(g.letzteInnenrevision) : '');
+        zeilen.push((g.kategorie || 'Feuerlöscher') + ': ' + g.typ + ' - ' + (g.standort || 'Standort unbekannt') + zusatz);
+      });
+      zeilen.push('');
+      zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+      var text = zeilen.join('\n');
+      var mailto = 'mailto:?subject=' + encodeURIComponent('Ausstattungsliste ' + (k ? k.name : '') + (aktKat ? ' - ' + aktKat : '')) + '&body=' + encodeURIComponent(text);
+      window.location.href = mailto;
+    };
+  }
+  neuZeichnen();
 }
 
 function modalTerminliste(){
