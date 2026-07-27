@@ -1680,7 +1680,10 @@ function modalGeraetBearbeiten(geraetId){
     if(g.letzteInnenrevision){
       html += '<div class="meta" style="margin-top:4px;">Zuletzt durchgeführt: ' + fmtDate(g.letzteInnenrevision) + '</div>';
     }
-    html += '<button type="button" class="btn secondary small" id="btnInnenrevErledigt" style="margin-top:8px;">Innenrevision jetzt als durchgeführt markieren</button>';
+    html += '<label style="margin-top:8px;">Datum der zuletzt durchgeführten Innenrevision</label>';
+    html += '<input type="date" id="fLetzteInnenrevision" value="' + (g.letzteInnenrevision || '') + '">';
+    html += '<button type="button" class="btn secondary small" id="btnInnenrevSpeichern" style="margin-top:8px;">Innenrevisions-Datum speichern</button>';
+    html += '<button type="button" class="btn secondary small" id="btnInnenrevErledigt" style="margin-top:8px; margin-left:8px;">Heute als durchgeführt markieren</button>';
     html += '</div>';
   }
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
@@ -1725,6 +1728,17 @@ function modalGeraetBearbeiten(geraetId){
         dbPut('geraete', g, function(){
           loadAll(function(){ render(); closeModal(); toast('Innenrevision vermerkt'); });
         });
+      });
+    };
+  }
+  var btnInnenrevSpeichern = document.getElementById('btnInnenrevSpeichern');
+  if(btnInnenrevSpeichern){
+    btnInnenrevSpeichern.onclick = function(){
+      var val = document.getElementById('fLetzteInnenrevision').value;
+      if(!val) return;
+      g.letzteInnenrevision = val;
+      dbPut('geraete', g, function(){
+        loadAll(function(){ render(); closeModal(); toast('Innenrevisions-Datum gespeichert'); });
       });
     };
   }
