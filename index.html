@@ -466,7 +466,13 @@ function pruefungAnzeigeText(p){
   var g = geraetFuerPruefung(p);
   if(g){
     var kat = g.kategorie || 'Feuerlöscher';
-    return escapeHtml(kat) + (g.typ ? (' &middot; ' + escapeHtml(g.typ)) : '');
+    var text = escapeHtml(kat) + (g.typ ? (' &middot; ' + escapeHtml(g.typ)) : '');
+    if(kat === 'Brandschutzbegehung'){
+      var kBeg = kundeFuerPruefung(p);
+      if(kBeg && kBeg.objekt) text += ' &middot; ' + escapeHtml(kBeg.objekt);
+      else if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
+    }
+    return text;
   }
   return escapeHtml(p.typ || 'Prüfung');
 }
