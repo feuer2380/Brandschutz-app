@@ -1646,6 +1646,7 @@ function modalGeraetBearbeiten(geraetId){
   html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '">';
+  html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (g.letztePruefung || '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
   html += '<div style="display:flex; gap:8px; margin:-4px 0 10px 0;">';
   html += '<button type="button" class="btn secondary small" id="btnDatumHeute">Heute</button>';
@@ -1715,6 +1716,8 @@ function modalGeraetBearbeiten(geraetId){
     g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
     g.standort = document.getElementById('fStandort').value.trim();
+    var letztePruefungVal = document.getElementById('fLetztePruefung').value;
+    g.letztePruefung = letztePruefungVal || null;
     g.naechstePruefung = datum || null;
     var fAbfuelldatumEl = document.getElementById('fAbfuelldatum');
     var fZusatzdatenEl = document.getElementById('fZusatzdaten');
@@ -1883,6 +1886,7 @@ function modalNeuesGeraet(kundeId){
   html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links">';
+  html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date">';
   html += '<label>Prüfintervall</label>';
   html += '<select id="fIntervall"><option value="1">1 Monat</option><option value="3">3 Monate</option><option value="12">12 Monate</option><option value="24" selected>24 Monate</option><option value="36">36 Monate</option></select>';
@@ -1905,6 +1909,7 @@ function modalNeuesGeraet(kundeId){
       erstelltAm: new Date().toISOString(),
       seriennummer: document.getElementById('fSeriennr').value.trim(),
       standort: document.getElementById('fStandort').value.trim(),
+      letztePruefung: document.getElementById('fLetztePruefung').value || null,
       naechstePruefung: datum || null,
       abfuelldatum: document.getElementById('fAbfuelldatum').value || null,
       zusatzdaten: document.getElementById('fZusatzdaten').value.trim(),
