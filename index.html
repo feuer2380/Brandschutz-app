@@ -2352,7 +2352,7 @@ function modalBegehungEintragBearbeiten(kundeId, bericht, eintragIdx){
   html += '<label>Maßnahme</label><textarea id="eMassnahme" rows="3" placeholder="Empfohlene/erforderliche Maßnahme">' + escapeHtml(eintrag.massnahme) + '</textarea>';
   html += '<label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-weight:400;"><input type="checkbox" id="eMangel" style="width:auto;"' + (eintrag.istMangel ? ' checked' : '') + '> Als Mangel kennzeichnen</label>';
   html += '<label style="margin-top:10px;">Foto</label>';
-  html += '<input type="file" accept="image/*" capture="environment" id="eFoto">';
+  html += '<input type="file" accept="image/*" id="eFoto">';
   html += '<div id="eFotoVorschau">' + (eintrag.foto ? '<img src="' + eintrag.foto + '" style="max-width:200px; border-radius:8px; margin-top:8px; display:block;">' : '') + '</div>';
   html += '<button type="button" class="btn block" id="eSpeichernBtn" style="margin-top:18px;">Eintrag übernehmen</button>';
 
