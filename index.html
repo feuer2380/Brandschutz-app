@@ -744,10 +744,18 @@ function letztesErgebnisFuerGeraet(geraetId){
   return letzte ? letzte.ergebnis : 'In Ordnung';
 }
 
+function naechsterWerktag(datum){
+  var tag = datum.getDay();
+  if(tag === 6){ datum.setDate(datum.getDate() + 2); }
+  else if(tag === 0){ datum.setDate(datum.getDate() + 1); }
+  return datum;
+}
+
 function naechsterTerminNach(datumIso, intervallMonate){
   var basis = datumIso ? new Date(datumIso) : new Date();
   var monate = intervallMonate || 24;
   basis.setMonth(basis.getMonth() + monate);
+  basis = naechsterWerktag(basis);
   return basis.toISOString().substring(0,10);
 }
 
@@ -1685,11 +1693,11 @@ function modalGeraetBearbeiten(geraetId){
     document.getElementById('fDatum').value = new Date().toISOString().substring(0,10);
   };
   document.getElementById('btnDatum1J').onclick = function(){
-    var d = new Date(); d.setFullYear(d.getFullYear()+1);
+    var d = new Date(); d.setFullYear(d.getFullYear()+1); d = naechsterWerktag(d);
     document.getElementById('fDatum').value = d.toISOString().substring(0,10);
   };
   document.getElementById('btnDatum2J').onclick = function(){
-    var d = new Date(); d.setFullYear(d.getFullYear()+2);
+    var d = new Date(); d.setFullYear(d.getFullYear()+2); d = naechsterWerktag(d);
     document.getElementById('fDatum').value = d.toISOString().substring(0,10);
   };
 
