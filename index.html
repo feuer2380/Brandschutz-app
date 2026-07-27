@@ -457,6 +457,20 @@ function kundeFuerPruefung(p){
   return state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
 }
 
+function geraetFuerPruefung(p){
+  if(!p.geraetId) return null;
+  return state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] || null;
+}
+
+function pruefungAnzeigeText(p){
+  var g = geraetFuerPruefung(p);
+  if(g){
+    var kat = g.kategorie || 'Feuerlöscher';
+    return escapeHtml(kat) + (g.typ ? (' &middot; ' + escapeHtml(g.typ)) : '');
+  }
+  return escapeHtml(p.typ || 'Prüfung');
+}
+
 function kundeIstAktiv(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   return !!(k && !k.geloescht);
@@ -493,7 +507,7 @@ function renderDashboard(){
       var st = statusForDate(p.datum);
       html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-      html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
+      html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
       if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
       html += '</div>';
     });
@@ -522,7 +536,7 @@ function renderDashboard(){
       html += '<h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3>';
       gr.eintraege.forEach(function(p){
         var st = statusForDate(p.datum);
-        html += '<div class="row" style="margin-top:6px;"><div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+        html += '<div class="row" style="margin-top:6px;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
       });
       html += '</div>';
     });
@@ -1091,7 +1105,7 @@ function renderPruefungen(){
         eintraege.forEach(function(p, idx){
           var st = statusForDate(p.datum);
           html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : '') + '">';
-          html += '<div class="row"><span class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+          html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
           html += '<div class="row" style="margin-top:6px;">';
           html += '<button class="btn small erledigtBtn" data-pid="' + p.id + '">Als erledigt markieren</button>';
           html += '<button class="btn small secondary pruefungLoeschenBtn" data-pid="' + p.id + '" style="margin-left:8px;">Löschen</button>';
@@ -1116,7 +1130,7 @@ function renderPruefungen(){
         var ei = ergebnisInfo(p.ergebnis);
         html += '<div class="card">';
         html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
-        html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
+        html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
         if(p.bemerkung) html += '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>';
         if(filter === 'reparatur' && p.geraetId){
           html += '<button class="btn small" style="margin-top:8px;" data-erneutpruefen="' + p.geraetId + '">Erneut prüfen</button>';
@@ -1367,7 +1381,7 @@ function renderStatistik(){
       var ei = ergebnisInfo(p.ergebnis);
       html += '<div class="card">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
-      html += '<div class="meta">' + escapeHtml(p.typ || 'Prüfung') + '</div>';
+      html += '<div class="meta">' + pruefungAnzeigeText(p) + '</div>';
       html += '<div class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</div>';
       html += '</div>';
     });
