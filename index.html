@@ -531,7 +531,7 @@ function renderDashboard(){
   html += '<div class="section-title">Fällige Innenrevisionen</div>';
   var innenrevListe = [];
   state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); }).forEach(function(g){
-    var bj = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+    var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
     if(bj && bj.cls === 'soon' && bj.label.indexOf('Innenrevision') === 0){
       innenrevListe.push({ geraet:g, bj:bj });
     }
@@ -686,7 +686,7 @@ function renderGeraetCheck(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return '<div class="empty">Gerät nicht gefunden</div>';
   var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-  var bj = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+  var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
 
   var html = '';
   html += '<button class="btn secondary small" id="backToScan">&larr; Zurück</button>';
@@ -742,6 +742,12 @@ function letztePruefungFuerGeraet(geraetId){
 function letztesErgebnisFuerGeraet(geraetId){
   var letzte = letztePruefungFuerGeraet(geraetId);
   return letzte ? letzte.ergebnis : 'In Ordnung';
+}
+
+function istInnenrevisionspflichtig(g){
+  if(g.kategorie && g.kategorie !== 'Feuerlöscher') return false;
+  if(/kohlendioxid|co2/i.test(g.typ || '')) return false;
+  return true;
 }
 
 function naechsterWerktag(datum){
@@ -985,7 +991,7 @@ function renderKundeDetail(kundeId){
     html += '<div class="card">';
     geraeteSortiert.forEach(function(g, idx){
       var st = statusForDate(g.naechstePruefung);
-      var bj = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+      var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
       html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
@@ -1667,7 +1673,8 @@ function modalGeraetBearbeiten(geraetId){
     html += '<option value="' + m + '"' + ((g.intervallMonate||24) === m ? ' selected' : '') + '>' + m + ' Monate</option>';
   });
   html += '</select>';
-  var bjStatus = aktKategorie === 'Feuerlöscher' ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
+  var istCO2Loescher = /kohlendioxid|co2/i.test(g.typ || '');
+  var bjStatus = (aktKategorie === 'Feuerlöscher' && !istCO2Loescher) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
   if(bjStatus){
     html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Innenrevisionen: ' + (g.baujahr+6) + ', ' + (g.baujahr+12) + ', ' + (g.baujahr+18) + ' &middot; Ausscheiden: ' + bjStatus.ausscheideJahr + '</div>';
     if(g.letzteInnenrevision){
@@ -1688,6 +1695,15 @@ function modalGeraetBearbeiten(geraetId){
   document.getElementById('mClose').onclick = closeModal;
   bindTypChips();
   bindKategorieToggle();
+
+  function aktualisiereNaechstePruefungAusPruefdatum(){
+    var lp = document.getElementById('fLetztePruefung').value;
+    if(!lp) return;
+    var intervall = parseInt(document.getElementById('fIntervall').value, 10) || 24;
+    document.getElementById('fDatum').value = naechsterTerminNach(lp, intervall);
+  }
+  document.getElementById('fLetztePruefung').onchange = aktualisiereNaechstePruefungAusPruefdatum;
+  document.getElementById('fIntervall').addEventListener('change', aktualisiereNaechstePruefungAusPruefdatum);
 
   document.getElementById('btnDatumHeute').onclick = function(){
     document.getElementById('fDatum').value = new Date().toISOString().substring(0,10);
@@ -1903,6 +1919,16 @@ function modalNeuesGeraet(kundeId){
   document.getElementById('mClose').onclick = closeModal;
   bindTypChips();
   bindKategorieToggle();
+
+  function aktualisiereNaechstePruefungAusPruefdatum(){
+    var lp = document.getElementById('fLetztePruefung').value;
+    if(!lp) return;
+    var intervall = parseInt(document.getElementById('fIntervall').value, 10) || 24;
+    document.getElementById('fDatum').value = naechsterTerminNach(lp, intervall);
+  }
+  document.getElementById('fLetztePruefung').onchange = aktualisiereNaechstePruefungAusPruefdatum;
+  document.getElementById('fIntervall').addEventListener('change', aktualisiereNaechstePruefungAusPruefdatum);
+
   document.getElementById('fSave').onclick = function(){
     var typ = document.getElementById('fTyp').value;
     var datum = document.getElementById('fDatum').value;
@@ -2076,7 +2102,7 @@ function buildBerichtHtml(p, k){
   html += '<td>' + (gRef && gRef.seriennummer ? escapeHtml(gRef.seriennummer) : '-') + '</td>';
   if(istFeuerloescherSingle){
     html += '<td>' + (gRef && gRef.baujahr ? gRef.baujahr : '-') + '</td>';
-    var bjRefSingle = (gRef && (!gRef.kategorie || gRef.kategorie === 'Feuerlöscher')) ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
+    var bjRefSingle = (gRef && istInnenrevisionspflichtig(gRef)) ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
     var innenrevKurzSingle = bjRefSingle ? bjRefSingle.label.replace(/^Innenrevision /, '') : '';
     html += '<td>' + (gRef && gRef.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(gRef.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurzSingle ? 'Nächste fällig: ' + escapeHtml(innenrevKurzSingle) : '-') + '</td>';
   }
@@ -2584,7 +2610,7 @@ function modalSammelbericht(kundeId){
 
       dbPut('pruefungen', offenePruefung, function(){
         var weiter = function(naechstePruefungWert){
-          var bjSnap = ((!g.kategorie || g.kategorie === "Feuerlöscher") ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+          var bjSnap = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
           snapshot.push({
             nr: idx+1,
             typ: g.typ,
