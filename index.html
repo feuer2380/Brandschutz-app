@@ -2357,7 +2357,13 @@ function modalBegehungEintragBearbeiten(kundeId, bericht, eintragIdx){
   html += '<button type="button" class="btn block" id="eSpeichernBtn" style="margin-top:18px;">Eintrag übernehmen</button>';
 
   openModal(html);
-  document.getElementById('mClose').onclick = function(){ modalBegehungsberichtBearbeiten(kundeId, bericht.id); };
+  document.getElementById('mClose').onclick = function(){
+    dbPut('begehungsberichte', bericht, function(){
+      var idx = state.begehungsberichte.findIndex(function(x){ return x.id === bericht.id; });
+      if(idx === -1) state.begehungsberichte.push(bericht); else state.begehungsberichte[idx] = bericht;
+      modalBegehungsberichtBearbeiten(kundeId, bericht.id);
+    });
+  };
 
   document.getElementById('eFoto').onchange = function(ev){
     var file = ev.target.files && ev.target.files[0];
@@ -2381,7 +2387,11 @@ function modalBegehungEintragBearbeiten(kundeId, bericht, eintragIdx){
     } else {
       bericht.eintraege.push(eintrag);
     }
-    modalBegehungsberichtBearbeiten(kundeId, bericht.id);
+    dbPut('begehungsberichte', bericht, function(){
+      var idx = state.begehungsberichte.findIndex(function(x){ return x.id === bericht.id; });
+      if(idx === -1) state.begehungsberichte.push(bericht); else state.begehungsberichte[idx] = bericht;
+      modalBegehungsberichtBearbeiten(kundeId, bericht.id);
+    });
   };
 }
 
