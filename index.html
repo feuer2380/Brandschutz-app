@@ -236,7 +236,7 @@ var LOGO_DATA_PZ = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDB
 
 // ---------- DB ----------
 var DB_NAME = 'bsv_db';
-var DB_VERSION = 2;
+var DB_VERSION = 3;
 var db = null;
 
 function openDb(cb){
@@ -257,6 +257,10 @@ function openDb(cb){
     if(!d.objectStoreNames.contains('sammelberichte')){
       var ss = d.createObjectStore('sammelberichte', {keyPath:'id'});
       ss.createIndex('kundeId', 'kundeId', {unique:false});
+    }
+    if(!d.objectStoreNames.contains('begehungsberichte')){
+      var bs = d.createObjectStore('begehungsberichte', {keyPath:'id'});
+      bs.createIndex('kundeId', 'kundeId', {unique:false});
     }
   };
   req.onsuccess = function(e){
@@ -300,6 +304,7 @@ var state = {
   geraete: [],
   pruefungen: [],
   sammelberichte: [],
+  begehungsberichte: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
   geraeteFilter: 'alle',
@@ -315,7 +320,10 @@ function loadAll(cb){
         state.pruefungen = p;
         dbGetAll('sammelberichte', function(s){
           state.sammelberichte = s;
-          cb();
+          dbGetAll('begehungsberichte', function(bg){
+            state.begehungsberichte = bg;
+            cb();
+          });
         });
       });
     });
@@ -1005,6 +1013,7 @@ function renderKundeDetail(kundeId){
   }
 
   html += '<button class="btn block" style="margin-top:14px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="begehungsberichtBtn">Begehungsbericht (Mängel, Fotos, Tätigkeiten)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="ausstattungBtn">Ausstattungsliste (was ist wo im Gebäude)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
@@ -2134,6 +2143,219 @@ function modalBerichtAnsicht(pruefungId){
   };
 }
 
+// ---------- Begehungsbericht (Mängel, Tätigkeiten, Fotos) ----------
+function modalBegehungsberichtListe(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var berichte = state.begehungsberichte.filter(function(b){ return b.kundeId === kundeId; })
+    .slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Begehungsberichte</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<button class="btn block" id="neuerBegehungBtn" style="margin-bottom:14px;">+ Neuer Begehungsbericht</button>';
+  if(berichte.length === 0){
+    html += '<div class="empty">Noch keine Begehungsberichte erstellt</div>';
+  } else {
+    berichte.forEach(function(b){
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + fmtDate(b.datum) + '</h3><span class="badge blau">' + (b.eintraege ? b.eintraege.length : 0) + ' Eintrag/Einträge</span></div>';
+      html += '<div class="meta">' + escapeHtml(b.objektBeschreibung || '') + '</div>';
+      html += '<div style="display:flex; gap:8px; margin-top:8px;">';
+      html += '<button class="btn small secondary" data-begbearbeiten="' + b.id + '">Bearbeiten</button>';
+      html += '<button class="btn small" style="background:#b02a2a; color:#fff;" data-begloeschen="' + b.id + '">Löschen</button>';
+      html += '</div></div>';
+    });
+  }
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('neuerBegehungBtn').onclick = function(){ modalBegehungsberichtBearbeiten(kundeId, null); };
+  document.querySelectorAll('[data-begbearbeiten]').forEach(function(b){
+    b.onclick = function(){ modalBegehungsberichtBearbeiten(kundeId, b.getAttribute('data-begbearbeiten')); };
+  });
+  document.querySelectorAll('[data-begloeschen]').forEach(function(b){
+    b.onclick = function(){
+      var bid = b.getAttribute('data-begloeschen');
+      if(!confirm('Diesen Begehungsbericht wirklich löschen?')) return;
+      dbDelete('begehungsberichte', bid, function(){
+        state.begehungsberichte = state.begehungsberichte.filter(function(x){ return x.id !== bid; });
+        modalBegehungsberichtListe(kundeId);
+      });
+    };
+  });
+}
+
+function modalBegehungsberichtBearbeiten(kundeId, berichtId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var bestehend = berichtId ? state.begehungsberichte.filter(function(x){ return x.id === berichtId; })[0] : null;
+  var bericht = bestehend || {
+    id: uid(),
+    kundeId: kundeId,
+    datum: new Date().toISOString().substring(0,10),
+    objektBeschreibung: '',
+    eintraege: []
+  };
+
+  function neuZeichnen(){
+    var html = '';
+    html += '<div class="modal-head no-print"><h3>Begehungsbericht</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<label>Datum</label><input type="date" id="begDatum" value="' + bericht.datum + '">';
+    html += '<label>Projektbeschreibung</label><input type="text" id="begObjekt" value="' + escapeHtml(bericht.objektBeschreibung || '') + '" placeholder="z.B. Brandschutzbegehung vom ...">';
+
+    html += '<div class="section-title" style="margin-top:16px;">Einträge (Tätigkeiten / Mängel)</div>';
+    if(bericht.eintraege.length === 0){
+      html += '<div class="empty">Noch keine Einträge</div>';
+    } else {
+      bericht.eintraege.forEach(function(e, idx){
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + escapeHtml(e.titel || 'Eintrag') + '</h3><span class="badge ' + (e.istMangel ? 'warn' : 'ok') + '">' + (e.istMangel ? 'Mangel' : 'OK') + '</span></div>';
+        if(e.standort) html += '<div class="meta">Standort: ' + escapeHtml(e.standort) + '</div>';
+        if(e.beschreibung) html += '<div class="meta">' + escapeHtml(e.beschreibung) + '</div>';
+        if(e.massnahme) html += '<div class="meta"><strong>Maßnahme:</strong> ' + escapeHtml(e.massnahme) + '</div>';
+        if(e.foto) html += '<img src="' + e.foto + '" style="max-width:160px; border-radius:8px; margin-top:8px; display:block;">';
+        html += '<div style="display:flex; gap:8px; margin-top:8px;">';
+        html += '<button type="button" class="btn small secondary" data-eintragbearbeiten="' + idx + '">Bearbeiten</button>';
+        html += '<button type="button" class="btn small" style="background:#b02a2a; color:#fff;" data-eintragloeschen="' + idx + '">Löschen</button>';
+        html += '</div></div>';
+      });
+    }
+    html += '<button type="button" class="btn block secondary" id="neuerEintragBtn" style="margin-top:8px;">+ Eintrag hinzufügen</button>';
+
+    html += '<button type="button" class="btn block" id="begSpeichernBtn" style="margin-top:18px;">Bericht speichern</button>';
+    if(bericht.eintraege.length > 0){
+      html += '<button type="button" class="btn block secondary" id="begDruckenBtn" style="margin-top:10px;">Drucken / Als PDF teilen</button>';
+    }
+
+    openModal(html);
+    document.getElementById('mClose').onclick = function(){ modalBegehungsberichtListe(kundeId); };
+
+    document.getElementById('neuerEintragBtn').onclick = function(){
+      speichereKopfdaten();
+      modalBegehungEintragBearbeiten(kundeId, bericht, null);
+    };
+    document.querySelectorAll('[data-eintragbearbeiten]').forEach(function(b){
+      b.onclick = function(){
+        speichereKopfdaten();
+        modalBegehungEintragBearbeiten(kundeId, bericht, parseInt(b.getAttribute('data-eintragbearbeiten'), 10));
+      };
+    });
+    document.querySelectorAll('[data-eintragloeschen]').forEach(function(b){
+      b.onclick = function(){
+        var idx = parseInt(b.getAttribute('data-eintragloeschen'), 10);
+        if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+        bericht.eintraege.splice(idx, 1);
+        neuZeichnen();
+      };
+    });
+
+    function speichereKopfdaten(){
+      bericht.datum = document.getElementById('begDatum').value || bericht.datum;
+      bericht.objektBeschreibung = document.getElementById('begObjekt').value.trim();
+    }
+
+    document.getElementById('begSpeichernBtn').onclick = function(){
+      speichereKopfdaten();
+      dbPut('begehungsberichte', bericht, function(){
+        var idx = state.begehungsberichte.findIndex(function(x){ return x.id === bericht.id; });
+        if(idx === -1) state.begehungsberichte.push(bericht); else state.begehungsberichte[idx] = bericht;
+        toast('Begehungsbericht gespeichert');
+        modalBegehungsberichtListe(kundeId);
+      });
+    };
+
+    var druckBtn = document.getElementById('begDruckenBtn');
+    if(druckBtn){
+      druckBtn.onclick = function(){
+        speichereKopfdaten();
+        dbPut('begehungsberichte', bericht, function(){
+          var pa = document.getElementById('printArea');
+          pa.innerHTML = buildBegehungsberichtHtml(bericht, k);
+          window.print();
+        });
+      };
+    }
+  }
+  neuZeichnen();
+}
+
+function modalBegehungEintragBearbeiten(kundeId, bericht, eintragIdx){
+  var bestehend = (eintragIdx !== null && eintragIdx !== undefined) ? bericht.eintraege[eintragIdx] : null;
+  var eintrag = bestehend ? Object.assign({}, bestehend) : { titel: '', standort: 'Ganzes Gebäude', beschreibung: '', massnahme: '', istMangel: false, foto: null };
+
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>' + (bestehend ? 'Eintrag bearbeiten' : 'Neuer Eintrag') + '</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>Titel</label><input type="text" id="eTitel" value="' + escapeHtml(eintrag.titel) + '" placeholder="z.B. Überprüfung der Rauchmelder">';
+  html += '<label>Standort</label><input type="text" id="eStandort" value="' + escapeHtml(eintrag.standort) + '">';
+  html += '<label>Beschreibung</label><textarea id="eBeschreibung" rows="4" placeholder="Was wurde gemacht / festgestellt?">' + escapeHtml(eintrag.beschreibung) + '</textarea>';
+  html += '<label>Maßnahme</label><textarea id="eMassnahme" rows="3" placeholder="Empfohlene/erforderliche Maßnahme">' + escapeHtml(eintrag.massnahme) + '</textarea>';
+  html += '<label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-weight:400;"><input type="checkbox" id="eMangel" style="width:auto;"' + (eintrag.istMangel ? ' checked' : '') + '> Als Mangel kennzeichnen</label>';
+  html += '<label style="margin-top:10px;">Foto</label>';
+  html += '<input type="file" accept="image/*" capture="environment" id="eFoto">';
+  html += '<div id="eFotoVorschau">' + (eintrag.foto ? '<img src="' + eintrag.foto + '" style="max-width:200px; border-radius:8px; margin-top:8px; display:block;">' : '') + '</div>';
+  html += '<button type="button" class="btn block" id="eSpeichernBtn" style="margin-top:18px;">Eintrag übernehmen</button>';
+
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ modalBegehungsberichtBearbeiten(kundeId, bericht.id); };
+
+  document.getElementById('eFoto').onchange = function(ev){
+    var file = ev.target.files && ev.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      eintrag.foto = reader.result;
+      document.getElementById('eFotoVorschau').innerHTML = '<img src="' + eintrag.foto + '" style="max-width:200px; border-radius:8px; margin-top:8px; display:block;">';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  document.getElementById('eSpeichernBtn').onclick = function(){
+    eintrag.titel = document.getElementById('eTitel').value.trim() || 'Eintrag';
+    eintrag.standort = document.getElementById('eStandort').value.trim();
+    eintrag.beschreibung = document.getElementById('eBeschreibung').value.trim();
+    eintrag.massnahme = document.getElementById('eMassnahme').value.trim();
+    eintrag.istMangel = document.getElementById('eMangel').checked;
+    if(eintragIdx !== null && eintragIdx !== undefined){
+      bericht.eintraege[eintragIdx] = eintrag;
+    } else {
+      bericht.eintraege.push(eintrag);
+    }
+    modalBegehungsberichtBearbeiten(kundeId, bericht.id);
+  };
+}
+
+function buildBegehungsberichtHtml(bericht, k){
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Gesamtübersicht</h1><div class="sub">' + fmtDate(bericht.datum) + '</div><div class="sub">' + escapeHtml(k ? (k.objekt || k.name) : '') + '</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-kundenbox">';
+  html += '<div class="knr">Projektadresse</div>';
+  html += '<div>' + escapeHtml(k ? (k.objektAdresse || k.adresse || '') : '') + '</div>';
+  if(bericht.objektBeschreibung){
+    html += '<div class="knr" style="margin-top:8px;">Projektbeschreibung</div>';
+    html += '<div>' + escapeHtml(bericht.objektBeschreibung) + '</div>';
+  }
+  html += '</div>';
+
+  (bericht.eintraege || []).forEach(function(e){
+    html += '<div class="pos-karte" style="margin-top:14px;">';
+    html += '<div style="font-weight:700; margin-bottom:4px;">Tätigkeitsnachweis: ' + escapeHtml(e.titel) + '</div>';
+    if(e.standort) html += '<div class="meta2">Standort: ' + escapeHtml(e.standort) + '</div>';
+    if(e.beschreibung) html += '<div style="margin-top:6px;">' + escapeHtml(e.beschreibung).replace(/\n/g, '<br>') + '</div>';
+    if(e.massnahme) html += '<div style="margin-top:6px;"><strong>Maßnahme:</strong> ' + escapeHtml(e.massnahme).replace(/\n/g, '<br>') + '</div>';
+    html += '<div style="margin-top:6px;"><strong>Status:</strong> ' + (e.istMangel ? 'Mangel festgestellt' : 'Ohne Beanstandung') + '</div>';
+    if(e.foto) html += '<img src="' + e.foto + '" style="max-width:260px; border-radius:8px; margin-top:8px; display:block;">';
+    html += '</div>';
+  });
+
+  html += '<div class="bericht-fuss">' + escapeHtml(k ? k.name : '') + ' &middot; Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+
 function modalSammelbericht(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -2743,6 +2965,9 @@ function bindDynamic(){
 
   var sammelberichtBtn = document.getElementById('sammelberichtBtn');
   if(sammelberichtBtn) sammelberichtBtn.onclick = function(){ modalSammelbericht(state.activeKundeId); };
+
+  var begehungsberichtBtn = document.getElementById('begehungsberichtBtn');
+  if(begehungsberichtBtn) begehungsberichtBtn.onclick = function(){ modalBegehungsberichtListe(state.activeKundeId); };
 
   var ausstattungBtn = document.getElementById('ausstattungBtn');
   if(ausstattungBtn) ausstattungBtn.onclick = function(){ modalGeraeteuebersicht(state.activeKundeId); };
