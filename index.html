@@ -1676,7 +1676,7 @@ function modalGeraetBearbeiten(geraetId){
   var istCO2Loescher = /kohlendioxid|co2/i.test(g.typ || '');
   var bjStatus = (aktKategorie === 'Feuerlöscher' && !istCO2Loescher) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
   if(bjStatus){
-    html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Innenrevisionen: ' + (g.baujahr+6) + ', ' + (g.baujahr+12) + ', ' + (g.baujahr+18) + ' &middot; Ausscheiden: ' + bjStatus.ausscheideJahr + '</div>';
+    html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Alle 6 Jahre ab letzter Innenrevision (bzw. ab Baujahr) &middot; Ausscheiden spätestens: ' + bjStatus.ausscheideJahr + '</div>';
     if(g.letzteInnenrevision){
       html += '<div class="meta" style="margin-top:4px;">Zuletzt durchgeführt: ' + fmtDate(g.letzteInnenrevision) + '</div>';
     }
@@ -1822,32 +1822,19 @@ function baujahrStatus(baujahr, letzteInnenrevision){
   var jetzt = new Date().getFullYear();
   var alter = jetzt - baujahr;
   var ausscheideJahr = baujahr + 20;
-  var meilensteinJahre = [6,12,18];
-  var erledigtBisIndex = -1;
-  if(letzteInnenrevision){
-    var revJahr = new Date(letzteInnenrevision).getFullYear();
-    for(var j=0; j<meilensteinJahre.length; j++){
-      if(baujahr + meilensteinJahre[j] <= revJahr) erledigtBisIndex = j;
-    }
-  }
   if(alter >= 20){
     return { cls:'warn', label:'Zu alt (' + alter + ' J.) - ausscheiden', ausscheideJahr: ausscheideJahr };
   }
-  var naechstes = null;
-  var naechstesMeilenstein = null;
-  for(var i=erledigtBisIndex+1; i<meilensteinJahre.length; i++){
-    naechstes = baujahr + meilensteinJahre[i];
-    naechstesMeilenstein = meilensteinJahre[i];
-    break;
-  }
-  if(naechstes === null){
+  var basisJahr = letzteInnenrevision ? new Date(letzteInnenrevision).getFullYear() : baujahr;
+  var naechstes = basisJahr + 6;
+  if(naechstes >= ausscheideJahr){
     return { cls:'warn', label:'Zu alt - ausscheiden', ausscheideJahr: ausscheideJahr };
   }
   var restJahre = naechstes - jetzt;
   if(restJahre <= 0){
-    return { cls:'soon', label:'Innenrevision ' + naechstesMeilenstein + ' Jahre fällig (' + naechstes + ')', ausscheideJahr: ausscheideJahr, faelligJahr: naechstes, meilenstein: naechstesMeilenstein };
+    return { cls:'soon', label:'Innenrevision fällig (' + naechstes + ')', ausscheideJahr: ausscheideJahr, faelligJahr: naechstes };
   }
-  return { cls:'ok', label:'Innenrevision ' + naechstesMeilenstein + ' Jahre: ' + naechstes, ausscheideJahr: ausscheideJahr, faelligJahr: naechstes, meilenstein: naechstesMeilenstein };
+  return { cls:'ok', label:'Innenrevision: ' + naechstes, ausscheideJahr: ausscheideJahr, faelligJahr: naechstes };
 }
 
 function typListeAlle(){
