@@ -2273,7 +2273,20 @@ function modalDokumenteListe(kundeId){
       var d = state.dokumente.filter(function(x){ return x.id === b.getAttribute('data-dokansehen'); })[0];
       if(!d) return;
       var w = window.open();
-      if(w){ w.location.href = d.dataUrl; }
+      try {
+        var parts = d.dataUrl.split(',');
+        var mimeMatch = parts[0].match(/:(.*?);/);
+        var mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+        var bstr = atob(parts[1]);
+        var n = bstr.length;
+        var u8arr = new Uint8Array(n);
+        for(var i=0; i<n; i++){ u8arr[i] = bstr.charCodeAt(i); }
+        var blob = new Blob([u8arr], {type: mime});
+        var url = URL.createObjectURL(blob);
+        if(w){ w.location.href = url; } else { window.location.href = url; }
+      } catch(err){
+        if(w){ w.location.href = d.dataUrl; }
+      }
     };
   });
   document.querySelectorAll('[data-dokloeschen]').forEach(function(b){
