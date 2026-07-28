@@ -772,6 +772,13 @@ function letztesErgebnisFuerGeraet(geraetId){
   return letzte ? letzte.ergebnis : 'In Ordnung';
 }
 
+function literAusTyp(typ){
+  if(!typ) return null;
+  var m = typ.match(/(\d+([.,]\d+)?)\s*Liter/i);
+  if(!m) return null;
+  return parseFloat(m[1].replace(',', '.'));
+}
+
 function istInnenrevisionspflichtig(g){
   if(g.kategorie && g.kategorie !== 'Feuerlöscher') return false;
   if(/kohlendioxid|co2/i.test(g.typ || '')) return false;
@@ -1685,6 +1692,7 @@ function modalGeraetBearbeiten(geraetId){
   html += '<div id="fjBlockPerchtlZisch">';
   html += '<label>Abfülldatum</label><input id="fAbfuelldatum" type="date" value="' + (g.abfuelldatum || '') + '">';
   html += '<label>Zusatzdaten</label><input id="fZusatzdaten" type="text" value="' + escapeHtml(g.zusatzdaten || '') + '">';
+  html += '<button type="button" class="btn secondary small" id="btnFuellhistorie" style="margin-top:8px;">Füllhistorie anzeigen (' + ((g.fuellungen ? g.fuellungen.length : 0)) + ')</button>';
   html += '</div>';
   html += '<div id="fjBlockMaengel">';
   html += '<label>Mängel</label><textarea id="fMaengel" rows="4" placeholder="Festgestellte Mängel eintragen...">' + escapeHtml(g.maengel || '') + '</textarea>';
@@ -1772,6 +1780,11 @@ function modalGeraetBearbeiten(geraetId){
         loadAll(function(){ render(); closeModal(); toast('Innenrevisions-Datum gespeichert'); });
       });
     };
+  }
+
+  var btnFuellhistorie = document.getElementById('btnFuellhistorie');
+  if(btnFuellhistorie){
+    btnFuellhistorie.onclick = function(){ modalFuellhistorie(g.id); };
   }
 
   document.getElementById('fSave').onclick = function(){
@@ -2216,6 +2229,60 @@ function modalBerichtAnsicht(pruefungId){
 
 // ---------- Begehungsbericht (Mängel, Tätigkeiten, Fotos) ----------
 // ---------- Dokumente (fertige PDF-Berichte ablegen) ----------
+// ---------- Füllhistorie (Perchtl Zisch) ----------
+function modalFuellhistorie(geraetId){
+  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  if(!g) return;
+  var fuellungen = (g.fuellungen || []).slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Füllhistorie</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:12px;">' + escapeHtml(g.typ || '') + (g.standort ? (' &middot; ' + escapeHtml(g.standort)) : '') + '</div>';
+
+  if(fuellungen.length === 0){
+    html += '<div class="empty">Noch keine Füllungen erfasst</div>';
+  } else {
+    var gesamtLiter = 0;
+    var hatUnbekannt = false;
+    fuellungen.forEach(function(f){
+      if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiter += f.liter; else hatUnbekannt = true;
+    });
+    var ersteDatum = fuellungen[fuellungen.length - 1].datum;
+    var letzteDatum = fuellungen[0].datum;
+
+    html += '<div class="card">';
+    html += '<div class="row"><h3>' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + '</h3></div>';
+    html += '<div class="meta">Zeitraum: ' + fmtDatumZeitLokal(ersteDatum) + ' bis ' + fmtDatumZeitLokal(letzteDatum) + '</div>';
+    html += '<div class="meta">Gesamtmenge: ' + gesamtLiter.toLocaleString('de-AT') + ' Liter' + (hatUnbekannt ? ' (unvollständig, nicht alle Mengen bekannt)' : '') + '</div>';
+    html += '</div>';
+
+    html += '<div class="section-title" style="margin-top:16px;">Einzelne Füllungen</div>';
+    fuellungen.forEach(function(f, idx){
+      html += '<div class="card" style="padding:10px 12px;">';
+      html += '<div class="row"><span class="meta">' + fmtDatumZeitLokal(f.datum) + '</span><span class="meta">' + (typeof f.liter === 'number' ? (f.liter.toLocaleString('de-AT') + ' Liter') : '-') + '</span></div>';
+      html += '<button type="button" class="btn small secondary" data-fuellungloeschen="' + idx + '" style="margin-top:6px;">Löschen</button>';
+      html += '</div>';
+    });
+  }
+
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ modalGeraetBearbeiten(geraetId); };
+  document.querySelectorAll('[data-fuellungloeschen]').forEach(function(b){
+    b.onclick = function(){
+      var idx = parseInt(b.getAttribute('data-fuellungloeschen'), 10);
+      if(!confirm('Diese Füllung wirklich löschen?')) return;
+      var sortiert = (g.fuellungen || []).slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+      var zuLoeschen = sortiert[idx];
+      g.fuellungen = (g.fuellungen || []).filter(function(f){ return f !== zuLoeschen; });
+      dbPut('geraete', g, function(){
+        state.geraete = state.geraete.map(function(x){ return x.id === g.id ? g : x; });
+        modalFuellhistorie(geraetId);
+      });
+    };
+  });
+}
+
+
 function modalDokumenteListe(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -2705,6 +2772,8 @@ function modalSammelbericht(kundeId){
         var hh = jetzt.getHours(); if(hh<10) hh = '0'+hh;
         var mm = jetzt.getMinutes(); if(mm<10) mm = '0'+mm;
         g.abfuelldatum = abfuellVal + 'T' + hh + ':' + mm;
+        if(!g.fuellungen) g.fuellungen = [];
+        g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
       }
       var istBegehung = (g.kategorie || 'Feuerlöscher') === 'Brandschutzbegehung';
       var maengelEl = istBegehung ? document.getElementById('sbMaengel_' + g.id) : null;
