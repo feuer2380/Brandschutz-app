@@ -236,7 +236,7 @@ var LOGO_DATA_PZ = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDB
 
 // ---------- DB ----------
 var DB_NAME = 'bsv_db';
-var DB_VERSION = 3;
+var DB_VERSION = 4;
 var db = null;
 
 function openDb(cb){
@@ -261,6 +261,10 @@ function openDb(cb){
     if(!d.objectStoreNames.contains('begehungsberichte')){
       var bs = d.createObjectStore('begehungsberichte', {keyPath:'id'});
       bs.createIndex('kundeId', 'kundeId', {unique:false});
+    }
+    if(!d.objectStoreNames.contains('dokumente')){
+      var ds = d.createObjectStore('dokumente', {keyPath:'id'});
+      ds.createIndex('kundeId', 'kundeId', {unique:false});
     }
   };
   req.onsuccess = function(e){
@@ -305,6 +309,7 @@ var state = {
   pruefungen: [],
   sammelberichte: [],
   begehungsberichte: [],
+  dokumente: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
   geraeteFilter: 'alle',
@@ -322,7 +327,10 @@ function loadAll(cb){
           state.sammelberichte = s;
           dbGetAll('begehungsberichte', function(bg){
             state.begehungsberichte = bg;
-            cb();
+            dbGetAll('dokumente', function(dk){
+              state.dokumente = dk;
+              cb();
+            });
           });
         });
       });
@@ -1048,6 +1056,7 @@ function renderKundeDetail(kundeId){
 
   html += '<button class="btn block" style="margin-top:14px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="begehungsberichtBtn">Begehungsbericht (Mängel, Fotos, Tätigkeiten)</button>';
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="dokumenteBtn">Dokumente ablegen (fertige PDF-Berichte)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="ausstattungBtn">Ausstattungsliste (was ist wo im Gebäude)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
@@ -2206,6 +2215,80 @@ function modalBerichtAnsicht(pruefungId){
 }
 
 // ---------- Begehungsbericht (Mängel, Tätigkeiten, Fotos) ----------
+// ---------- Dokumente (fertige PDF-Berichte ablegen) ----------
+function modalDokumenteListe(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var dokumente = state.dokumente.filter(function(d){ return d.kundeId === kundeId; })
+    .slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Dokumente</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>PDF-Datei auswählen</label>';
+  html += '<input type="file" accept="application/pdf" id="dokFile">';
+  html += '<label style="margin-top:8px;">Bezeichnung</label>';
+  html += '<input type="text" id="dokName" placeholder="z.B. Gesamtübersicht Brandschutzbegehung">';
+  html += '<label style="margin-top:8px;">Datum</label>';
+  html += '<input type="date" id="dokDatum" value="' + new Date().toISOString().substring(0,10) + '">';
+  html += '<button class="btn block" id="dokHochladenBtn" style="margin-top:12px;">Dokument speichern</button>';
+
+  html += '<div class="section-title" style="margin-top:20px;">Abgelegte Dokumente</div>';
+  if(dokumente.length === 0){
+    html += '<div class="empty">Noch keine Dokumente abgelegt</div>';
+  } else {
+    dokumente.forEach(function(d){
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + escapeHtml(d.name || 'Dokument') + '</h3></div>';
+      html += '<div class="meta">' + fmtDate(d.datum) + '</div>';
+      html += '<div style="display:flex; gap:8px; margin-top:8px;">';
+      html += '<button class="btn small secondary" data-dokansehen="' + d.id + '">Öffnen</button>';
+      html += '<button class="btn small" style="background:#b02a2a; color:#fff;" data-dokloeschen="' + d.id + '">Löschen</button>';
+      html += '</div></div>';
+    });
+  }
+
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+
+  document.getElementById('dokHochladenBtn').onclick = function(){
+    var fileEl = document.getElementById('dokFile');
+    var file = fileEl.files && fileEl.files[0];
+    if(!file){ toast('Bitte zuerst eine PDF-Datei auswählen'); return; }
+    var name = document.getElementById('dokName').value.trim() || file.name;
+    var datum = document.getElementById('dokDatum').value || new Date().toISOString().substring(0,10);
+    var reader = new FileReader();
+    reader.onload = function(){
+      var dok = { id: uid(), kundeId: kundeId, name: name, datum: datum, dataUrl: reader.result };
+      dbPut('dokumente', dok, function(){
+        state.dokumente.push(dok);
+        toast('Dokument gespeichert');
+        modalDokumenteListe(kundeId);
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  document.querySelectorAll('[data-dokansehen]').forEach(function(b){
+    b.onclick = function(){
+      var d = state.dokumente.filter(function(x){ return x.id === b.getAttribute('data-dokansehen'); })[0];
+      if(!d) return;
+      var w = window.open();
+      if(w){ w.location.href = d.dataUrl; }
+    };
+  });
+  document.querySelectorAll('[data-dokloeschen]').forEach(function(b){
+    b.onclick = function(){
+      var did = b.getAttribute('data-dokloeschen');
+      if(!confirm('Dieses Dokument wirklich löschen?')) return;
+      dbDelete('dokumente', did, function(){
+        state.dokumente = state.dokumente.filter(function(x){ return x.id !== did; });
+        modalDokumenteListe(kundeId);
+      });
+    };
+  });
+}
+
+
 function modalBegehungsberichtListe(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -3040,6 +3123,9 @@ function bindDynamic(){
 
   var begehungsberichtBtn = document.getElementById('begehungsberichtBtn');
   if(begehungsberichtBtn) begehungsberichtBtn.onclick = function(){ modalBegehungsberichtListe(state.activeKundeId); };
+
+  var dokumenteBtn = document.getElementById('dokumenteBtn');
+  if(dokumenteBtn) dokumenteBtn.onclick = function(){ modalDokumenteListe(state.activeKundeId); };
 
   var ausstattungBtn = document.getElementById('ausstattungBtn');
   if(ausstattungBtn) ausstattungBtn.onclick = function(){ modalGeraeteuebersicht(state.activeKundeId); };
