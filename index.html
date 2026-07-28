@@ -1064,6 +1064,7 @@ function renderKundeDetail(kundeId){
   html += '<button class="btn block" style="margin-top:14px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="begehungsberichtBtn">Begehungsbericht (Mängel, Fotos, Tätigkeiten)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="dokumenteBtn">Dokumente ablegen (fertige PDF-Berichte)</button>';
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="fuellhistorieKundeBtn">Füllhistorie (Perchtl Zisch)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="ausstattungBtn">Ausstattungsliste (was ist wo im Gebäude)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
@@ -2230,7 +2231,47 @@ function modalBerichtAnsicht(pruefungId){
 // ---------- Begehungsbericht (Mängel, Tätigkeiten, Fotos) ----------
 // ---------- Dokumente (fertige PDF-Berichte ablegen) ----------
 // ---------- Füllhistorie (Perchtl Zisch) ----------
-function modalFuellhistorie(geraetId){
+
+// ---------- Füllhistorie-Liste (alle Perchtl-Zisch-Geräte eines Kunden) ----------
+function modalFuellhistorieListe(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (g.kategorie === 'Perchtl Zisch'); });
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Füllhistorie</h3><button class="close" id="mClose">&times;</button></div>';
+  if(geraete.length === 0){
+    html += '<div class="empty">Keine Perchtl-Zisch-Flaschen bei diesem Kunden vorhanden</div>';
+  } else {
+    geraete.forEach(function(g){
+      var fuellungen = (g.fuellungen || []);
+      var gesamtLiter = 0;
+      var hatUnbekannt = false;
+      fuellungen.forEach(function(f){
+        if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiter += f.liter; else hatUnbekannt = true;
+      });
+      var sortiert = fuellungen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+      var zeitraum = fuellungen.length > 0 ? (fmtDatumZeitLokal(sortiert[sortiert.length-1].datum) + ' bis ' + fmtDatumZeitLokal(sortiert[0].datum)) : null;
+
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + escapeHtml(g.typ || 'Flasche') + '</h3><span class="badge blau">' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + '</span></div>';
+      html += '<div class="meta">' + escapeHtml(g.standort || '') + (g.seriennummer ? (' &middot; SN ' + escapeHtml(g.seriennummer)) : '') + '</div>';
+      if(fuellungen.length > 0){
+        html += '<div class="meta">Zeitraum: ' + zeitraum + '</div>';
+        html += '<div class="meta">Gesamtmenge: ' + gesamtLiter.toLocaleString('de-AT') + ' Liter' + (hatUnbekannt ? ' (unvollständig)' : '') + '</div>';
+      }
+      html += '<button type="button" class="btn small secondary" data-fuellhistoriedetail="' + g.id + '" style="margin-top:8px;">Details</button>';
+      html += '</div>';
+    });
+  }
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('[data-fuellhistoriedetail]').forEach(function(b){
+    b.onclick = function(){ modalFuellhistorie(b.getAttribute('data-fuellhistoriedetail'), kundeId); };
+  });
+}
+
+function modalFuellhistorie(geraetId, zurueckKundeId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   var fuellungen = (g.fuellungen || []).slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
@@ -2266,7 +2307,9 @@ function modalFuellhistorie(geraetId){
   }
 
   openModal(html);
-  document.getElementById('mClose').onclick = function(){ modalGeraetBearbeiten(geraetId); };
+  document.getElementById('mClose').onclick = function(){
+    if(zurueckKundeId) modalFuellhistorieListe(zurueckKundeId); else modalGeraetBearbeiten(geraetId);
+  };
   document.querySelectorAll('[data-fuellungloeschen]').forEach(function(b){
     b.onclick = function(){
       var idx = parseInt(b.getAttribute('data-fuellungloeschen'), 10);
@@ -2276,7 +2319,7 @@ function modalFuellhistorie(geraetId){
       g.fuellungen = (g.fuellungen || []).filter(function(f){ return f !== zuLoeschen; });
       dbPut('geraete', g, function(){
         state.geraete = state.geraete.map(function(x){ return x.id === g.id ? g : x; });
-        modalFuellhistorie(geraetId);
+        modalFuellhistorie(geraetId, zurueckKundeId);
       });
     };
   });
@@ -3208,6 +3251,9 @@ function bindDynamic(){
 
   var dokumenteBtn = document.getElementById('dokumenteBtn');
   if(dokumenteBtn) dokumenteBtn.onclick = function(){ modalDokumenteListe(state.activeKundeId); };
+
+  var fuellhistorieKundeBtn = document.getElementById('fuellhistorieKundeBtn');
+  if(fuellhistorieKundeBtn) fuellhistorieKundeBtn.onclick = function(){ modalFuellhistorieListe(state.activeKundeId); };
 
   var ausstattungBtn = document.getElementById('ausstattungBtn');
   if(ausstattungBtn) ausstattungBtn.onclick = function(){ modalGeraeteuebersicht(state.activeKundeId); };
