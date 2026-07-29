@@ -2859,6 +2859,7 @@ function modalSammelbericht(kundeId){
         html += '<label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-weight:400;"><input type="checkbox" class="sbAusscheidenRWA" data-gid="' + g.id + '" style="width:auto;"> Gerät ausscheiden (defekt)</label>';
         html += '<label style="margin-top:6px;">Akkutausch (Datum, falls heute gemacht)</label><input type="date" id="sbAkku_' + g.id + '" value="' + (g.akkuTauschDatum || '') + '">';
       } else {
+        html += '<label style="margin-top:6px;">Prüfdatum</label><input type="date" id="sbPruefdatum_' + g.id + '" value="' + (g.letztePruefung || new Date().toISOString().substring(0,10)) + '">';
         html += '<div style="display:flex; gap:6px; margin-top:10px;">';
         html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">In Ordnung</button>';
         html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
@@ -3054,8 +3055,10 @@ function modalSammelbericht(kundeId){
           g.ausgeschiedenAm = jetztIso;
           dbPut('geraete', g, function(){ weiter(null); });
         } else if(ergebnis === 'in_ordnung'){
-          g.letztePruefung = jetztIso.substring(0,10);
-          g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+          var pruefdatumEl = document.getElementById('sbPruefdatum_' + g.id);
+          var pruefdatumWert = (pruefdatumEl && pruefdatumEl.value) ? pruefdatumEl.value : jetztIso.substring(0,10);
+          g.letztePruefung = pruefdatumWert;
+          g.naechstePruefung = naechsterTerminNach(pruefdatumWert, g.intervallMonate);
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
         } else if(akkuVal || abfuellVal || maengelEl){
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
