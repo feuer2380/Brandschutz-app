@@ -801,6 +801,16 @@ function istInnenrevisionspflichtig(g){
   return true;
 }
 
+function jetztLokalDatumZeit(){
+  var d = new Date();
+  var jj = d.getFullYear();
+  var mm = d.getMonth()+1; if(mm<10) mm = '0'+mm;
+  var tt = d.getDate(); if(tt<10) tt = '0'+tt;
+  var hh = d.getHours(); if(hh<10) hh = '0'+hh;
+  var min = d.getMinutes(); if(min<10) min = '0'+min;
+  return jj + '-' + mm + '-' + tt + 'T' + hh + ':' + min;
+}
+
 function naechsterWerktag(datum){
   var tag = datum.getDay();
   if(tag === 6){ datum.setDate(datum.getDate() + 2); }
@@ -853,7 +863,7 @@ function schnellErgebnisSetzen(geraetId, ergebnis){
       g.letztePruefung = jetztIso.substring(0,10);
       g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
       if(ergebnis === 'in_ordnung' && (g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch'){
-        g.abfuelldatum = jetztIso.substring(0,16);
+        g.abfuelldatum = jetztLokalDatumZeit();
         if(!g.fuellungen) g.fuellungen = [];
         g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
       }
@@ -937,7 +947,7 @@ function checkAbschliessen(geraetId, ergebnis){
         g.letztePruefung = jetztIso.substring(0,10);
         g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
         if((g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch'){
-          g.abfuelldatum = jetztIso.substring(0,16);
+          g.abfuelldatum = jetztLokalDatumZeit();
           if(!g.fuellungen) g.fuellungen = [];
           g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
         }
