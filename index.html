@@ -235,6 +235,19 @@ var LOGO_DATA_PZ = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDB
 
 
 // ---------- DB ----------
+window.addEventListener('error', function(e){
+  console.error('Globaler Fehler', e.error || e.message);
+  try {
+    zeigeStartFehler('Es ist ein unerwarteter Fehler aufgetreten: ' + (e && e.message ? e.message : 'Unbekannt') + '. Bitte Seite neu laden. Falls das öfter passiert, bitte Screenshot davon senden.');
+  } catch(err2){}
+});
+window.addEventListener('unhandledrejection', function(e){
+  console.error('Unbehandelter Promise-Fehler', e.reason);
+  try {
+    zeigeStartFehler('Es ist ein unerwarteter Fehler aufgetreten: ' + (e && e.reason && e.reason.message ? e.reason.message : 'Unbekannt') + '. Bitte Seite neu laden. Falls das öfter passiert, bitte Screenshot davon senden.');
+  } catch(err2){}
+});
+
 var DB_NAME = 'bsv_db';
 var DB_VERSION = 4;
 var db = null;
