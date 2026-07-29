@@ -2432,12 +2432,13 @@ function buildFuellstatistikHtml(eintraege, suchtext){
     });
     html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(standort) + '</h3>';
     html += '<div class="meta2" style="margin-bottom:6px;">' + liste.length + ' Flasche' + (liste.length === 1 ? '' : 'n') + ' &middot; ' + anzahlFuellungen + ' Füllung' + (anzahlFuellungen === 1 ? '' : 'en') + ' &middot; ' + liter.toLocaleString('de-AT') + ' Liter</div>';
-    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Serien-Nr.</th><th>Füllungen</th><th>Liter</th></tr></thead><tbody>';
+    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Serien-Nr.</th><th>Datum/Uhrzeit</th><th>Füllungen</th><th>Liter</th></tr></thead><tbody>';
     liste.forEach(function(e){
-      var fuellungen = e.g.fuellungen || [];
+      var fuellungen = (e.g.fuellungen || []).slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
       var gLiter = 0;
       fuellungen.forEach(function(f){ if(typeof f.liter === 'number' && !isNaN(f.liter)) gLiter += f.liter; });
-      html += '<tr><td>' + (e.k ? escapeHtml(e.k.name) : '-') + '</td><td>' + escapeHtml(e.g.typ || '-') + '</td><td>' + escapeHtml(e.g.seriennummer || '-') + '</td><td>' + fuellungen.length + '</td><td>' + gLiter.toLocaleString('de-AT') + '</td></tr>';
+      var datumZeitZellen = fuellungen.length > 0 ? fuellungen.map(function(f){ return fmtDatumZeitLokal(f.datum); }).join('<br>') : '-';
+      html += '<tr><td>' + (e.k ? escapeHtml(e.k.name) : '-') + '</td><td>' + escapeHtml(e.g.typ || '-') + '</td><td>' + escapeHtml(e.g.seriennummer || '-') + '</td><td>' + datumZeitZellen + '</td><td>' + fuellungen.length + '</td><td>' + gLiter.toLocaleString('de-AT') + '</td></tr>';
     });
     html += '</tbody></table>';
   });
