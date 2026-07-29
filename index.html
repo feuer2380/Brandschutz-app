@@ -836,6 +836,11 @@ function schnellErgebnisSetzen(geraetId, ergebnis){
     } else if(ergebnis === 'in_ordnung' || ergebnis === 'begehung'){
       g.letztePruefung = jetztIso.substring(0,10);
       g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+      if(ergebnis === 'in_ordnung' && (g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch'){
+        g.abfuelldatum = jetztIso.substring(0,16);
+        if(!g.fuellungen) g.fuellungen = [];
+        g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
+      }
       dbPut('geraete', g, function(){
         loadAll(function(){ render(); toast('Gespeichert: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
       });
@@ -915,6 +920,11 @@ function checkAbschliessen(geraetId, ergebnis){
       if(ergebnis === 'in_ordnung'){
         g.letztePruefung = jetztIso.substring(0,10);
         g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+        if((g.kategorie || 'Feuerlöscher') === 'Perchtl Zisch'){
+          g.abfuelldatum = jetztIso.substring(0,16);
+          if(!g.fuellungen) g.fuellungen = [];
+          g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
+        }
         dbPut('geraete', g, function(){
           nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
         });
