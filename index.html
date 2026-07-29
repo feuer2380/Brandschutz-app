@@ -3039,6 +3039,7 @@ function modalSammelbericht(kundeId){
             ergebnis: ergebnisLabel,
             notiz: notiz,
             naechstePruefung: naechstePruefungWert || null,
+            letztePruefung: g.letztePruefung || null,
             innenrevision: bjSnap ? bjSnap.label : null,
             letzteInnenrevision: g.letzteInnenrevision || null,
             akkuTausch: akkuVal || null,
@@ -3128,7 +3129,7 @@ function buildSammelberichtHtml(sb, k){
       if(kat === 'Perchtl Zisch'){
         html += '<div class="rechts">Neufüllung am<br><strong>' + fmtDatumZeitLokal(g.abfuelldatum) + '</strong></div>';
       } else {
-        html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+        html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(g.letztePruefung || sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
       }
       html += '</div>';
       if(g.dienstErgebnisse && g.dienstErgebnisse.length){
