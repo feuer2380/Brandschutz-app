@@ -2244,41 +2244,80 @@ function modalBerichtAnsicht(pruefungId){
 
 // ---------- Füllhistorie-Liste (alle Perchtl-Zisch-Geräte eines Kunden) ----------
 function modalFuellhistorieListe(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
-  if(!k) return;
-  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (g.kategorie === 'Perchtl Zisch'); });
-
-  var html = '';
-  html += '<div class="modal-head"><h3>Füllhistorie</h3><button class="close" id="mClose">&times;</button></div>';
-  if(geraete.length === 0){
-    html += '<div class="empty">Keine Perchtl-Zisch-Flaschen bei diesem Kunden vorhanden</div>';
-  } else {
-    geraete.forEach(function(g){
-      var fuellungen = (g.fuellungen || []);
-      var gesamtLiter = 0;
-      var hatUnbekannt = false;
-      fuellungen.forEach(function(f){
-        if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiter += f.liter; else hatUnbekannt = true;
+  function alleGeraeteMitKunde(){
+    return state.geraete
+      .filter(function(g){ return !g.ausgeschieden && g.kategorie === 'Perchtl Zisch'; })
+      .map(function(g){
+        var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+        return { g: g, k: k };
       });
-      var sortiert = fuellungen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
-      var zeitraum = fuellungen.length > 0 ? (fmtDatumZeitLokal(sortiert[sortiert.length-1].datum) + ' bis ' + fmtDatumZeitLokal(sortiert[0].datum)) : null;
+  }
 
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + escapeHtml(g.typ || 'Flasche') + '</h3><span class="badge blau">' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + '</span></div>';
-      html += '<div class="meta">' + escapeHtml(g.standort || '') + (g.seriennummer ? (' &middot; SN ' + escapeHtml(g.seriennummer)) : '') + '</div>';
-      if(fuellungen.length > 0){
-        html += '<div class="meta">Zeitraum: ' + zeitraum + '</div>';
-        html += '<div class="meta">Gesamtmenge: ' + gesamtLiter.toLocaleString('de-AT') + ' Liter' + (hatUnbekannt ? ' (unvollständig)' : '') + '</div>';
-      }
-      html += '<button type="button" class="btn small secondary" data-fuellhistoriedetail="' + g.id + '" style="margin-top:8px;">Details</button>';
-      html += '</div>';
+  function neuZeichnen(suchtext){
+    var q = (suchtext || '').trim().toLowerCase();
+    var alle = alleGeraeteMitKunde();
+    var gefiltert = q ? alle.filter(function(e){
+      var standort = (e.g.standort || '').toLowerCase();
+      var kundeName = (e.k ? e.k.name : '').toLowerCase();
+      var typ = (e.g.typ || '').toLowerCase();
+      return standort.indexOf(q) !== -1 || kundeName.indexOf(q) !== -1 || typ.indexOf(q) !== -1;
+    }) : alle;
+
+    var html = '';
+    html += '<div class="modal-head"><h3>Füllhistorie</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<input type="text" id="fuellSuche" placeholder="Suche nach Standort, Kunde oder Typ..." value="' + escapeHtml(suchtext || '') + '">';
+
+    var gesamtFuellungen = 0;
+    var gesamtLiterAlle = 0;
+    var hatUnbekanntGesamt = false;
+    gefiltert.forEach(function(e){
+      (e.g.fuellungen || []).forEach(function(f){
+        gesamtFuellungen++;
+        if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiterAlle += f.liter; else hatUnbekanntGesamt = true;
+      });
+    });
+    html += '<div class="card" style="margin-top:12px; background:#f3e9da;">';
+    html += '<div class="row"><h3>Gesamt' + (q ? ' (gefiltert)' : '') + '</h3><span class="badge blau">' + gefiltert.length + ' Flasche' + (gefiltert.length === 1 ? '' : 'n') + '</span></div>';
+    html += '<div class="meta">' + gesamtFuellungen + ' Füllung' + (gesamtFuellungen === 1 ? '' : 'en') + ' insgesamt</div>';
+    html += '<div class="meta">Gesamtmenge: ' + gesamtLiterAlle.toLocaleString('de-AT') + ' Liter' + (hatUnbekanntGesamt ? ' (unvollständig)' : '') + '</div>';
+    html += '</div>';
+
+    if(gefiltert.length === 0){
+      html += '<div class="empty">Keine Perchtl-Zisch-Flaschen gefunden</div>';
+    } else {
+      gefiltert.forEach(function(e){
+        var g = e.g;
+        var fuellungen = (g.fuellungen || []);
+        var gesamtLiter = 0;
+        var hatUnbekannt = false;
+        fuellungen.forEach(function(f){
+          if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiter += f.liter; else hatUnbekannt = true;
+        });
+        var sortiert = fuellungen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+        var zeitraum = fuellungen.length > 0 ? (fmtDatumZeitLokal(sortiert[sortiert.length-1].datum) + ' bis ' + fmtDatumZeitLokal(sortiert[0].datum)) : null;
+
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + escapeHtml(g.typ || 'Flasche') + '</h3><span class="badge blau">' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + '</span></div>';
+        html += '<div class="meta">' + (e.k ? escapeHtml(e.k.name) + ' &middot; ' : '') + escapeHtml(g.standort || '') + (g.seriennummer ? (' &middot; SN ' + escapeHtml(g.seriennummer)) : '') + '</div>';
+        if(fuellungen.length > 0){
+          html += '<div class="meta">Zeitraum: ' + zeitraum + '</div>';
+          html += '<div class="meta">Gesamtmenge: ' + gesamtLiter.toLocaleString('de-AT') + ' Liter' + (hatUnbekannt ? ' (unvollständig)' : '') + '</div>';
+        }
+        html += '<button type="button" class="btn small secondary" data-fuellhistoriedetail="' + g.id + '" style="margin-top:8px;">Details</button>';
+        html += '</div>';
+      });
+    }
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+    var suchEl = document.getElementById('fuellSuche');
+    suchEl.focus();
+    suchEl.setSelectionRange(suchEl.value.length, suchEl.value.length);
+    suchEl.oninput = function(){ neuZeichnen(suchEl.value); };
+    document.querySelectorAll('[data-fuellhistoriedetail]').forEach(function(b){
+      b.onclick = function(){ modalFuellhistorie(b.getAttribute('data-fuellhistoriedetail'), kundeId, suchtext); };
     });
   }
-  openModal(html);
-  document.getElementById('mClose').onclick = closeModal;
-  document.querySelectorAll('[data-fuellhistoriedetail]').forEach(function(b){
-    b.onclick = function(){ modalFuellhistorie(b.getAttribute('data-fuellhistoriedetail'), kundeId); };
-  });
+  neuZeichnen('');
 }
 
 function modalFuellhistorie(geraetId, zurueckKundeId){
