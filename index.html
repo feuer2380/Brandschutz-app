@@ -722,6 +722,29 @@ function verarbeiteScan(text){
       render();
       return;
     }
+  } else {
+    var externMatch = id.match(/admin\.loeschtechnik\.at\/extinguishers\/[^?]*\?([^\s]*)/i);
+    if(externMatch){
+      var query = externMatch[1];
+      var params = {};
+      query.split('&').forEach(function(paar){
+        var teile = paar.split('=');
+        params[decodeURIComponent(teile[0])] = decodeURIComponent(teile[1] || '');
+      });
+      if(params.id){
+        var gExtern = state.geraete.filter(function(x){ return x.externeId === params.id; })[0];
+        if(gExtern){
+          state.activeGeraetId = gExtern.id;
+          state.checkRueckkehrZuKunde = null;
+          state.tab = 'geraetCheck';
+          render();
+          return;
+        }
+        toast('Kein Gerät mit externer ID ' + params.id + ' verknüpft. Bitte im Gerät eintragen (Feld "Externe ID").');
+        setTimeout(startScanner, 400);
+        return;
+      }
+    }
   }
   var g = state.geraete.filter(function(x){ return x.id === id; })[0];
   if(!g){
@@ -1744,6 +1767,7 @@ function modalGeraetBearbeiten(geraetId){
   html += '<label>Mängel</label><textarea id="fMaengel" rows="4" placeholder="Festgestellte Mängel eintragen...">' + escapeHtml(g.maengel || '') + '</textarea>';
   html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
+  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269">';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '">';
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (g.letztePruefung || '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
@@ -1843,6 +1867,7 @@ function modalGeraetBearbeiten(geraetId){
     g.baujahr = baujahrVal ? parseInt(baujahrVal, 10) : null;
     g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
+    g.externeId = document.getElementById('fExterneId').value.trim();
     g.standort = document.getElementById('fStandort').value.trim();
     var letztePruefungVal = document.getElementById('fLetztePruefung').value;
     g.letztePruefung = letztePruefungVal || null;
@@ -2000,6 +2025,7 @@ function modalNeuesGeraet(kundeId){
   html += '<label>Mängel</label><textarea id="fMaengel" rows="4" placeholder="Festgestellte Mängel eintragen..."></textarea>';
   html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
+  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" placeholder="z.B. 2269">';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links">';
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date">';
@@ -2033,6 +2059,7 @@ function modalNeuesGeraet(kundeId){
       intervallMonate: parseInt(document.getElementById('fIntervall').value, 10),
       erstelltAm: new Date().toISOString(),
       seriennummer: document.getElementById('fSeriennr').value.trim(),
+      externeId: document.getElementById('fExterneId').value.trim(),
       standort: document.getElementById('fStandort').value.trim(),
       letztePruefung: document.getElementById('fLetztePruefung').value || null,
       naechstePruefung: datum || null,
