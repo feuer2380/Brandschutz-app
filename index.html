@@ -451,6 +451,15 @@ function statusForDate(iso){
 
 // ---------- Render Router ----------
 function render(){
+  try {
+    renderInner();
+  } catch(err){
+    console.error('Render-Fehler', err);
+    zeigeStartFehler('Es ist ein Fehler beim Anzeigen aufgetreten: ' + (err && err.message ? err.message : err) + '. Bitte Seite neu laden. Falls das Problem bleibt, bitte Screenshot davon senden.');
+  }
+}
+
+function renderInner(){
   var m = document.getElementById('main');
   document.querySelectorAll('.tabbtn').forEach(function(b){
     b.className = 'tabbtn' + (b.getAttribute('data-tab') === state.tab ? ' active' : '');
@@ -3484,12 +3493,27 @@ document.getElementById('fabBtn').addEventListener('click', function(){
 
 // ---------- Start ----------
 var appGestartet = false;
-openDb(function(){
-  loadAll(function(){
-    appGestartet = true;
-    render();
+try {
+  openDb(function(){
+    try {
+      loadAll(function(){
+        try {
+          render();
+          appGestartet = true;
+        } catch(err){
+          console.error('Startfehler beim Rendern', err);
+          zeigeStartFehler('Fehler beim Starten: ' + (err && err.message ? err.message : err) + '. Bitte Seite neu laden.');
+        }
+      });
+    } catch(err){
+      console.error('Startfehler beim Laden', err);
+      zeigeStartFehler('Fehler beim Laden der Daten: ' + (err && err.message ? err.message : err) + '. Bitte Seite neu laden.');
+    }
   });
-});
+} catch(err){
+  console.error('Startfehler beim Öffnen der Datenbank', err);
+  zeigeStartFehler('Fehler beim Öffnen der Datenbank: ' + (err && err.message ? err.message : err) + '. Bitte Seite neu laden.');
+}
 setTimeout(function(){
   if(!appGestartet){
     zeigeStartFehler('Die App braucht ungewöhnlich lange zum Laden. Bitte alle anderen offenen Tabs/Instanzen dieser App schließen und danach diese Seite neu laden.');
