@@ -315,15 +315,47 @@ function dbGetAll(store, cb){
 }
 
 function dbPut(store, obj, cb){
-  var tx = db.transaction(store, 'readwrite');
-  tx.objectStore(store).put(obj);
-  tx.oncomplete = function(){ if(cb) cb(); };
+  try {
+    var tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(obj);
+    tx.oncomplete = function(){ if(cb) cb(); };
+    tx.onerror = function(e){
+      console.error('dbPut Fehler', e);
+      zeigeSpeicherFehler(tx.error);
+    };
+    tx.onabort = function(e){
+      console.error('dbPut abgebrochen', e);
+      zeigeSpeicherFehler(tx.error);
+    };
+  } catch(err){
+    console.error('dbPut Ausnahme', err);
+    zeigeSpeicherFehler(err);
+  }
+}
+
+function zeigeSpeicherFehler(err){
+  var msg = 'Speichern fehlgeschlagen: ' + (err && err.message ? err.message : (err && err.name ? err.name : 'Unbekannter Fehler')) + '. Möglicherweise ist der Speicherplatz auf dem Gerät voll (z.B. durch viele gespeicherte PDF-Dokumente). Bitte Speicherplatz prüfen und erneut versuchen.';
+  toast(msg);
+  console.error(msg);
 }
 
 function dbDelete(store, id, cb){
-  var tx = db.transaction(store, 'readwrite');
-  tx.objectStore(store).delete(id);
-  tx.oncomplete = function(){ if(cb) cb(); };
+  try {
+    var tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(id);
+    tx.oncomplete = function(){ if(cb) cb(); };
+    tx.onerror = function(e){
+      console.error('dbDelete Fehler', e);
+      zeigeSpeicherFehler(tx.error);
+    };
+    tx.onabort = function(e){
+      console.error('dbDelete abgebrochen', e);
+      zeigeSpeicherFehler(tx.error);
+    };
+  } catch(err){
+    console.error('dbDelete Ausnahme', err);
+    zeigeSpeicherFehler(err);
+  }
 }
 
 function uid(){
