@@ -869,11 +869,16 @@ function istFuellKategorie(kat){
   return kat === 'Perchtl Zisch' || kat === 'CO2-Flaschen';
 }
 
-function literAusTyp(typ){
-  if(!typ) return null;
-  var m = typ.match(/(\d+([.,]\d+)?)\s*Liter/i);
-  if(!m) return null;
-  return parseFloat(m[1].replace(',', '.'));
+function mengeAusTyp(typ, kategorie){
+  if(!typ) return { wert: null, einheit: (kategorie === 'CO2-Flaschen') ? 'g' : 'Liter' };
+  if(kategorie === 'CO2-Flaschen'){
+    var mg = typ.match(/(\d+([.,]\d+)?)\s*g\b/i);
+    if(mg) return { wert: parseFloat(mg[1].replace(',', '.')), einheit: 'g' };
+    return { wert: null, einheit: 'g' };
+  }
+  var ml = typ.match(/(\d+([.,]\d+)?)\s*Liter/i);
+  if(ml) return { wert: parseFloat(ml[1].replace(',', '.')), einheit: 'Liter' };
+  return { wert: null, einheit: 'Liter' };
 }
 
 function istInnenrevisionspflichtig(g){
@@ -946,7 +951,8 @@ function schnellErgebnisSetzen(geraetId, ergebnis){
       if(ergebnis === 'in_ordnung' && istFuellKategorie(g.kategorie || 'Feuerlöscher')){
         g.abfuelldatum = jetztLokalDatumZeit();
         if(!g.fuellungen) g.fuellungen = [];
-        g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
+        var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
+        g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit });
       }
       dbPut('geraete', g, function(){
         loadAll(function(){ render(); toast('Gespeichert: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
@@ -1030,7 +1036,8 @@ function checkAbschliessen(geraetId, ergebnis){
         if(istFuellKategorie(g.kategorie || 'Feuerlöscher')){
           g.abfuelldatum = jetztLokalDatumZeit();
           if(!g.fuellungen) g.fuellungen = [];
-          g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
+          var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
+        g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit });
         }
         dbPut('geraete', g, function(){
           nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
@@ -2376,9 +2383,29 @@ function modalFuellhistorieListe(kundeId){
       });
   }
 
-  function neuZeichnen(suchtext){
+  function summeProEinheit(liste){
+    var summen = {};
+    liste.forEach(function(e){
+      (e.g.fuellungen || []).forEach(function(f){
+        var einheit = f.einheit || 'Liter';
+        if(!summen[einheit]) summen[einheit] = 0;
+        if(typeof f.menge === 'number' && !isNaN(f.menge)) summen[einheit] += f.menge;
+      });
+    });
+    return summen;
+  }
+  function formatiereSummen(summen){
+    var teile = [];
+    Object.keys(summen).forEach(function(einheit){
+      teile.push(summen[einheit].toLocaleString('de-AT') + ' ' + einheit);
+    });
+    return teile.length ? teile.join(', ') : '0';
+  }
+
+  function neuZeichnen(suchtext, katFilter){
     var q = (suchtext || '').trim().toLowerCase();
     var alle = alleGeraeteMitKunde();
+    if(katFilter) alle = alle.filter(function(e){ return (e.g.kategorie || 'Perchtl Zisch') === katFilter; });
     var gefiltert = q ? alle.filter(function(e){
       var standort = (e.g.standort || '').toLowerCase();
       var kundeName = (e.k ? e.k.name : '').toLowerCase();
@@ -2388,36 +2415,31 @@ function modalFuellhistorieListe(kundeId){
 
     var html = '';
     html += '<div class="modal-head"><h3>Füllhistorie</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<div style="display:flex; gap:6px; margin-bottom:10px;">';
+    html += '<button type="button" class="btn small' + (!katFilter ? '' : ' secondary') + '" data-katfilter="">Alle</button>';
+    html += '<button type="button" class="btn small' + (katFilter === 'Perchtl Zisch' ? '' : ' secondary') + '" data-katfilter="Perchtl Zisch">Perchtl Zisch</button>';
+    html += '<button type="button" class="btn small' + (katFilter === 'CO2-Flaschen' ? '' : ' secondary') + '" data-katfilter="CO2-Flaschen">CO2-Flaschen</button>';
+    html += '</div>';
     html += '<input type="text" id="fuellSuche" placeholder="Suche nach Standort, Kunde oder Typ..." value="' + escapeHtml(suchtext || '') + '">';
 
     var gesamtFuellungen = 0;
-    var gesamtLiterAlle = 0;
-    var hatUnbekanntGesamt = false;
-    gefiltert.forEach(function(e){
-      (e.g.fuellungen || []).forEach(function(f){
-        gesamtFuellungen++;
-        if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiterAlle += f.liter; else hatUnbekanntGesamt = true;
-      });
-    });
+    gefiltert.forEach(function(e){ gesamtFuellungen += (e.g.fuellungen || []).length; });
+    var summen = summeProEinheit(gefiltert);
     html += '<div class="card" style="margin-top:12px; background:#f3e9da;">';
-    html += '<div class="row"><h3>Gesamt' + (q ? ' (gefiltert)' : '') + '</h3><span class="badge blau">' + gefiltert.length + ' Flasche' + (gefiltert.length === 1 ? '' : 'n') + '</span></div>';
+    html += '<div class="row"><h3>Gesamt' + ((q || katFilter) ? ' (gefiltert)' : '') + '</h3><span class="badge blau">' + gefiltert.length + ' Flasche' + (gefiltert.length === 1 ? '' : 'n') + '</span></div>';
     html += '<div class="meta">' + gesamtFuellungen + ' Füllung' + (gesamtFuellungen === 1 ? '' : 'en') + ' insgesamt</div>';
-    html += '<div class="meta">Gesamtmenge: ' + gesamtLiterAlle.toLocaleString('de-AT') + ' Liter' + (hatUnbekanntGesamt ? ' (unvollständig)' : '') + '</div>';
+    html += '<div class="meta">Gesamtmenge: ' + formatiereSummen(summen) + '</div>';
     html += '</div>';
 
     html += '<button type="button" class="btn block" id="fuellDruckenBtn" style="margin-top:14px;">Statistik drucken / als PDF teilen</button>';
 
     if(gefiltert.length === 0){
-      html += '<div class="empty">Keine Perchtl-Zisch-Flaschen gefunden</div>';
+      html += '<div class="empty">Keine Flaschen gefunden</div>';
     } else {
       gefiltert.forEach(function(e){
         var g = e.g;
         var fuellungen = (g.fuellungen || []);
-        var gesamtLiter = 0;
-        var hatUnbekannt = false;
-        fuellungen.forEach(function(f){
-          if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiter += f.liter; else hatUnbekannt = true;
-        });
+        var summenGeraet = summeProEinheit([e]);
         var sortiert = fuellungen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
         var zeitraum = fuellungen.length > 0 ? (fmtDatumZeitLokal(sortiert[sortiert.length-1].datum) + ' bis ' + fmtDatumZeitLokal(sortiert[0].datum)) : null;
 
@@ -2426,7 +2448,7 @@ function modalFuellhistorieListe(kundeId){
         html += '<div class="meta">' + (e.k ? escapeHtml(e.k.name) + ' &middot; ' : '') + escapeHtml(g.standort || '') + (g.seriennummer ? (' &middot; SN ' + escapeHtml(g.seriennummer)) : '') + '</div>';
         if(fuellungen.length > 0){
           html += '<div class="meta">Zeitraum: ' + zeitraum + '</div>';
-          html += '<div class="meta">Gesamtmenge: ' + gesamtLiter.toLocaleString('de-AT') + ' Liter' + (hatUnbekannt ? ' (unvollständig)' : '') + '</div>';
+          html += '<div class="meta">Gesamtmenge: ' + formatiereSummen(summenGeraet) + '</div>';
         }
         html += '<button type="button" class="btn small secondary" data-fuellhistoriedetail="' + g.id + '" style="margin-top:8px;">Details</button>';
         html += '</div>';
@@ -2437,20 +2459,23 @@ function modalFuellhistorieListe(kundeId){
     var suchEl = document.getElementById('fuellSuche');
     suchEl.focus();
     suchEl.setSelectionRange(suchEl.value.length, suchEl.value.length);
-    suchEl.oninput = function(){ neuZeichnen(suchEl.value); };
+    suchEl.oninput = function(){ neuZeichnen(suchEl.value, katFilter); };
+    document.querySelectorAll('[data-katfilter]').forEach(function(b){
+      b.onclick = function(){ neuZeichnen(suchtext, b.getAttribute('data-katfilter') || null); };
+    });
     document.getElementById('fuellDruckenBtn').onclick = function(){
       var pa = document.getElementById('printArea');
-      pa.innerHTML = buildFuellstatistikHtml(gefiltert, suchtext);
+      pa.innerHTML = buildFuellstatistikHtml(gefiltert, suchtext, katFilter);
       window.print();
     };
     document.querySelectorAll('[data-fuellhistoriedetail]').forEach(function(b){
       b.onclick = function(){ modalFuellhistorie(b.getAttribute('data-fuellhistoriedetail'), kundeId, suchtext); };
     });
   }
-  neuZeichnen('');
+  neuZeichnen('', null);
 }
 
-function buildFuellstatistikHtml(eintraege, suchtext){
+function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   var gruppen = {};
   var reihenfolge = [];
   eintraege.forEach(function(e){
@@ -2459,47 +2484,56 @@ function buildFuellstatistikHtml(eintraege, suchtext){
     gruppen[standort].push(e);
   });
 
-  var gesamtFuellungen = 0;
-  var gesamtLiterAlle = 0;
-  eintraege.forEach(function(e){
-    (e.g.fuellungen || []).forEach(function(f){
-      gesamtFuellungen++;
-      if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiterAlle += f.liter;
+  function summeProEinheitDruck(liste){
+    var summen = {};
+    liste.forEach(function(e){
+      (e.g.fuellungen || []).forEach(function(f){
+        var einheit = f.einheit || 'Liter';
+        if(!summen[einheit]) summen[einheit] = 0;
+        if(typeof f.menge === 'number' && !isNaN(f.menge)) summen[einheit] += f.menge;
+      });
     });
-  });
+    return summen;
+  }
+  function formatiereSummenDruck(summen){
+    var teile = [];
+    Object.keys(summen).forEach(function(einheit){
+      teile.push(summen[einheit].toLocaleString('de-AT') + ' ' + einheit);
+    });
+    return teile.length ? teile.join(', ') : '0';
+  }
+
+  var gesamtFuellungen = 0;
+  eintraege.forEach(function(e){ gesamtFuellungen += (e.g.fuellungen || []).length; });
+  var gesamtSummen = summeProEinheitDruck(eintraege);
 
   var html = '';
   html += '<div class="bericht-brief">';
   html += '<div class="pb-kopfzeile">';
-  html += '<div class="pb-titel"><h1>Füllstatistik</h1><div class="sub">Perchtl Zisch / CO2-Flaschen</div>' + (suchtext ? ('<div class="sub">Filter: ' + escapeHtml(suchtext) + '</div>') : '') + '</div>';
-  html += '<img src="' + LOGO_DATA_PZ + '" class="pb-logo">';
+  var untertitel = katFilter || 'Perchtl Zisch / CO2-Flaschen';
+  html += '<div class="pb-titel"><h1>Füllstatistik</h1><div class="sub">' + escapeHtml(untertitel) + '</div>' + (suchtext ? ('<div class="sub">Filter: ' + escapeHtml(suchtext) + '</div>') : '') + '</div>';
+  html += '<img src="' + ((katFilter === 'CO2-Flaschen') ? LOGO_DATA : LOGO_DATA_PZ) + '" class="pb-logo">';
   html += '</div>';
   html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
 
   html += '<div class="pb-kundenbox">';
   html += '<div class="knr">Gesamt</div>';
-  html += '<div>' + eintraege.length + ' Flasche' + (eintraege.length === 1 ? '' : 'n') + ' &middot; ' + gesamtFuellungen + ' Füllung' + (gesamtFuellungen === 1 ? '' : 'en') + ' &middot; ' + gesamtLiterAlle.toLocaleString('de-AT') + ' Liter gesamt</div>';
+  html += '<div>' + eintraege.length + ' Flasche' + (eintraege.length === 1 ? '' : 'n') + ' &middot; ' + gesamtFuellungen + ' Füllung' + (gesamtFuellungen === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(gesamtSummen) + ' gesamt</div>';
   html += '</div>';
 
   reihenfolge.forEach(function(standort){
     var liste = gruppen[standort];
-    var liter = 0;
+    var summenStandort = summeProEinheitDruck(liste);
     var anzahlFuellungen = 0;
-    liste.forEach(function(e){
-      (e.g.fuellungen || []).forEach(function(f){
-        anzahlFuellungen++;
-        if(typeof f.liter === 'number' && !isNaN(f.liter)) liter += f.liter;
-      });
-    });
+    liste.forEach(function(e){ anzahlFuellungen += (e.g.fuellungen || []).length; });
     html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(standort) + '</h3>';
-    html += '<div class="meta2" style="margin-bottom:6px;">' + liste.length + ' Flasche' + (liste.length === 1 ? '' : 'n') + ' &middot; ' + anzahlFuellungen + ' Füllung' + (anzahlFuellungen === 1 ? '' : 'en') + ' &middot; ' + liter.toLocaleString('de-AT') + ' Liter</div>';
-    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Serien-Nr.</th><th>Datum/Uhrzeit</th><th>Füllungen</th><th>Liter</th></tr></thead><tbody>';
+    html += '<div class="meta2" style="margin-bottom:6px;">' + liste.length + ' Flasche' + (liste.length === 1 ? '' : 'n') + ' &middot; ' + anzahlFuellungen + ' Füllung' + (anzahlFuellungen === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(summenStandort) + '</div>';
+    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Serien-Nr.</th><th>Datum/Uhrzeit</th><th>Füllungen</th><th>Menge</th></tr></thead><tbody>';
     liste.forEach(function(e){
       var fuellungen = (e.g.fuellungen || []).slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
-      var gLiter = 0;
-      fuellungen.forEach(function(f){ if(typeof f.liter === 'number' && !isNaN(f.liter)) gLiter += f.liter; });
+      var summenGeraet = summeProEinheitDruck([e]);
       var datumZeitZellen = fuellungen.length > 0 ? fuellungen.map(function(f){ return fmtDatumZeitLokal(f.datum); }).join('<br>') : '-';
-      html += '<tr><td>' + (e.k ? escapeHtml(e.k.name) : '-') + '</td><td>' + escapeHtml(e.g.typ || '-') + '</td><td>' + escapeHtml(e.g.seriennummer || '-') + '</td><td>' + datumZeitZellen + '</td><td>' + fuellungen.length + '</td><td>' + gLiter.toLocaleString('de-AT') + '</td></tr>';
+      html += '<tr><td>' + (e.k ? escapeHtml(e.k.name) : '-') + '</td><td>' + escapeHtml(e.g.typ || '-') + '</td><td>' + escapeHtml(e.g.seriennummer || '-') + '</td><td>' + datumZeitZellen + '</td><td>' + fuellungen.length + '</td><td>' + formatiereSummenDruck(summenGeraet) + '</td></tr>';
     });
     html += '</tbody></table>';
   });
@@ -2521,10 +2555,11 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
   if(fuellungen.length === 0){
     html += '<div class="empty">Noch keine Füllungen erfasst</div>';
   } else {
-    var gesamtLiter = 0;
+    var einheitGeraet = fuellungen[0].einheit || ((g.kategorie === 'CO2-Flaschen') ? 'g' : 'Liter');
+    var gesamtMenge = 0;
     var hatUnbekannt = false;
     fuellungen.forEach(function(f){
-      if(typeof f.liter === 'number' && !isNaN(f.liter)) gesamtLiter += f.liter; else hatUnbekannt = true;
+      if(typeof f.menge === 'number' && !isNaN(f.menge)) gesamtMenge += f.menge; else hatUnbekannt = true;
     });
     var ersteDatum = fuellungen[fuellungen.length - 1].datum;
     var letzteDatum = fuellungen[0].datum;
@@ -2532,13 +2567,13 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
     html += '<div class="card">';
     html += '<div class="row"><h3>' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + '</h3></div>';
     html += '<div class="meta">Zeitraum: ' + fmtDatumZeitLokal(ersteDatum) + ' bis ' + fmtDatumZeitLokal(letzteDatum) + '</div>';
-    html += '<div class="meta">Gesamtmenge: ' + gesamtLiter.toLocaleString('de-AT') + ' Liter' + (hatUnbekannt ? ' (unvollständig, nicht alle Mengen bekannt)' : '') + '</div>';
+    html += '<div class="meta">Gesamtmenge: ' + gesamtMenge.toLocaleString('de-AT') + ' ' + einheitGeraet + (hatUnbekannt ? ' (unvollständig, nicht alle Mengen bekannt)' : '') + '</div>';
     html += '</div>';
 
     html += '<div class="section-title" style="margin-top:16px;">Einzelne Füllungen</div>';
     fuellungen.forEach(function(f, idx){
       html += '<div class="card" style="padding:10px 12px;">';
-      html += '<div class="row"><span class="meta">' + fmtDatumZeitLokal(f.datum) + '</span><span class="meta">' + (typeof f.liter === 'number' ? (f.liter.toLocaleString('de-AT') + ' Liter') : '-') + '</span></div>';
+      html += '<div class="row"><span class="meta">' + fmtDatumZeitLokal(f.datum) + '</span><span class="meta">' + (typeof f.menge === 'number' ? (f.menge.toLocaleString('de-AT') + ' ' + (f.einheit || einheitGeraet)) : '-') + '</span></div>';
       html += '<button type="button" class="btn small secondary" data-fuellungloeschen="' + idx + '" style="margin-top:6px;">Löschen</button>';
       html += '</div>';
     });
@@ -3056,7 +3091,8 @@ function modalSammelbericht(kundeId){
         var mm = jetzt.getMinutes(); if(mm<10) mm = '0'+mm;
         g.abfuelldatum = abfuellVal + 'T' + hh + ':' + mm;
         if(!g.fuellungen) g.fuellungen = [];
-        g.fuellungen.push({ datum: g.abfuelldatum, liter: literAusTyp(g.typ) });
+        var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
+        g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit });
       }
       var istBegehung = (g.kategorie || 'Feuerlöscher') === 'Brandschutzbegehung';
       var maengelEl = istBegehung ? document.getElementById('sbMaengel_' + g.id) : null;
