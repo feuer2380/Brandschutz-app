@@ -1804,15 +1804,15 @@ function modalGeraetBearbeiten(geraetId){
   html += '</select>';
   html += '<label>Typ</label><input id="fTyp" type="text" value="' + escapeHtml(g.typ || '') + '" placeholder="z.B. Pulverlöscher 6kg">';
   html += buildTypChips();
-  html += '<div id="fjBlockBaujahr">';
+  html += '<div id="fjBlockBaujahr" style="display:none;">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" value="' + (g.baujahr || '') + '">';
   html += '</div>';
-  html += '<div id="fjBlockPerchtlZisch">';
+  html += '<div id="fjBlockPerchtlZisch" style="display:none;">';
   html += '<label>Abfülldatum</label><input id="fAbfuelldatum" type="date" value="' + (g.abfuelldatum || '') + '">';
   html += '<label>Zusatzdaten</label><input id="fZusatzdaten" type="text" value="' + escapeHtml(g.zusatzdaten || '') + '">';
   html += '<button type="button" class="btn secondary small" id="btnFuellhistorie" style="margin-top:8px;">Füllhistorie anzeigen (' + ((g.fuellungen ? g.fuellungen.length : 0)) + ')</button>';
   html += '</div>';
-  html += '<div id="fjBlockMaengel">';
+  html += '<div id="fjBlockMaengel" style="display:none;">';
   html += '<label>Mängel</label><textarea id="fMaengel" rows="4" placeholder="Festgestellte Mängel eintragen...">' + escapeHtml(g.maengel || '') + '</textarea>';
   html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
@@ -1854,57 +1854,6 @@ function modalGeraetBearbeiten(geraetId){
   html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Gerät endgültig löschen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
-  bindTypChips();
-  bindKategorieToggle();
-
-  function aktualisiereNaechstePruefungAusPruefdatum(){
-    var lp = document.getElementById('fLetztePruefung').value;
-    if(!lp) return;
-    var intervall = parseInt(document.getElementById('fIntervall').value, 10) || 24;
-    document.getElementById('fDatum').value = naechsterTerminNach(lp, intervall);
-  }
-  document.getElementById('fLetztePruefung').onchange = aktualisiereNaechstePruefungAusPruefdatum;
-  document.getElementById('fIntervall').addEventListener('change', aktualisiereNaechstePruefungAusPruefdatum);
-
-  document.getElementById('btnDatumHeute').onclick = function(){
-    document.getElementById('fDatum').value = new Date().toISOString().substring(0,10);
-  };
-  document.getElementById('btnDatum1J').onclick = function(){
-    var d = new Date(); d.setFullYear(d.getFullYear()+1); d = naechsterWerktag(d);
-    document.getElementById('fDatum').value = d.toISOString().substring(0,10);
-  };
-  document.getElementById('btnDatum2J').onclick = function(){
-    var d = new Date(); d.setFullYear(d.getFullYear()+2); d = naechsterWerktag(d);
-    document.getElementById('fDatum').value = d.toISOString().substring(0,10);
-  };
-
-  var btnInnenrevErledigt = document.getElementById('btnInnenrevErledigt');
-  if(btnInnenrevErledigt){
-    btnInnenrevErledigt.onclick = function(){
-      customConfirm('Innenrevision jetzt als heute durchgeführt markieren?', function(){
-        g.letzteInnenrevision = new Date().toISOString().substring(0,10);
-        dbPut('geraete', g, function(){
-          loadAll(function(){ render(); closeModal(); toast('Innenrevision vermerkt'); });
-        });
-      });
-    };
-  }
-  var btnInnenrevSpeichern = document.getElementById('btnInnenrevSpeichern');
-  if(btnInnenrevSpeichern){
-    btnInnenrevSpeichern.onclick = function(){
-      var val = document.getElementById('fLetzteInnenrevision').value;
-      if(!val) return;
-      g.letzteInnenrevision = val;
-      dbPut('geraete', g, function(){
-        loadAll(function(){ render(); closeModal(); toast('Innenrevisions-Datum gespeichert'); });
-      });
-    };
-  }
-
-  var btnFuellhistorie = document.getElementById('btnFuellhistorie');
-  if(btnFuellhistorie){
-    btnFuellhistorie.onclick = function(){ modalFuellhistorie(g.id); };
-  }
 
   document.getElementById('fSave').onclick = function(){
     var typ = document.getElementById('fTyp').value;
@@ -1968,6 +1917,66 @@ function modalGeraetBearbeiten(geraetId){
   document.getElementById('qrGeraetBtn').onclick = function(){
     modalQrGeraet(geraetId);
   };
+
+  try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
+  try { bindKategorieToggle(); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
+
+  try {
+    function aktualisiereNaechstePruefungAusPruefdatum(){
+      var lp = document.getElementById('fLetztePruefung').value;
+      if(!lp) return;
+      var intervall = parseInt(document.getElementById('fIntervall').value, 10) || 24;
+      document.getElementById('fDatum').value = naechsterTerminNach(lp, intervall);
+    }
+    document.getElementById('fLetztePruefung').onchange = aktualisiereNaechstePruefungAusPruefdatum;
+    document.getElementById('fIntervall').addEventListener('change', aktualisiereNaechstePruefungAusPruefdatum);
+  } catch(err){ console.error('Datumsautomatik Fehler', err); }
+
+  try {
+    document.getElementById('btnDatumHeute').onclick = function(){
+      document.getElementById('fDatum').value = new Date().toISOString().substring(0,10);
+    };
+    document.getElementById('btnDatum1J').onclick = function(){
+      var d = new Date(); d.setFullYear(d.getFullYear()+1); d = naechsterWerktag(d);
+      document.getElementById('fDatum').value = d.toISOString().substring(0,10);
+    };
+    document.getElementById('btnDatum2J').onclick = function(){
+      var d = new Date(); d.setFullYear(d.getFullYear()+2); d = naechsterWerktag(d);
+      document.getElementById('fDatum').value = d.toISOString().substring(0,10);
+    };
+  } catch(err){ console.error('Datumsknöpfe Fehler', err); }
+
+  try {
+    var btnInnenrevErledigt = document.getElementById('btnInnenrevErledigt');
+    if(btnInnenrevErledigt){
+      btnInnenrevErledigt.onclick = function(){
+        customConfirm('Innenrevision jetzt als heute durchgeführt markieren?', function(){
+          g.letzteInnenrevision = new Date().toISOString().substring(0,10);
+          dbPut('geraete', g, function(){
+            loadAll(function(){ render(); closeModal(); toast('Innenrevision vermerkt'); });
+          });
+        });
+      };
+    }
+    var btnInnenrevSpeichern = document.getElementById('btnInnenrevSpeichern');
+    if(btnInnenrevSpeichern){
+      btnInnenrevSpeichern.onclick = function(){
+        var val = document.getElementById('fLetzteInnenrevision').value;
+        if(!val) return;
+        g.letzteInnenrevision = val;
+        dbPut('geraete', g, function(){
+          loadAll(function(){ render(); closeModal(); toast('Innenrevisions-Datum gespeichert'); });
+        });
+      };
+    }
+  } catch(err){ console.error('Innenrevision-Buttons Fehler', err); }
+
+  try {
+    var btnFuellhistorie = document.getElementById('btnFuellhistorie');
+    if(btnFuellhistorie){
+      btnFuellhistorie.onclick = function(){ modalFuellhistorie(g.id); };
+    }
+  } catch(err){ console.error('Füllhistorie-Button Fehler', err); }
 }
 
 function customConfirm(nachricht, aufJa){
@@ -2063,14 +2072,14 @@ function modalNeuesGeraet(kundeId){
   html += '</select>';
   html += '<label>Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg">';
   html += buildTypChips();
-  html += '<div id="fjBlockBaujahr">';
+  html += '<div id="fjBlockBaujahr" style="display:none;">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" placeholder="z.B. 2020">';
   html += '</div>';
-  html += '<div id="fjBlockPerchtlZisch">';
+  html += '<div id="fjBlockPerchtlZisch" style="display:none;">';
   html += '<label>Abfülldatum</label><input id="fAbfuelldatum" type="date">';
   html += '<label>Zusatzdaten</label><input id="fZusatzdaten" type="text">';
   html += '</div>';
-  html += '<div id="fjBlockMaengel">';
+  html += '<div id="fjBlockMaengel" style="display:none;">';
   html += '<label>Mängel</label><textarea id="fMaengel" rows="4" placeholder="Festgestellte Mängel eintragen..."></textarea>';
   html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
@@ -2083,17 +2092,6 @@ function modalNeuesGeraet(kundeId){
   html += '<button class="btn block" id="fSave">Gerät speichern</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
-  bindTypChips();
-  bindKategorieToggle();
-
-  function aktualisiereNaechstePruefungAusPruefdatum(){
-    var lp = document.getElementById('fLetztePruefung').value;
-    if(!lp) return;
-    var intervall = parseInt(document.getElementById('fIntervall').value, 10) || 24;
-    document.getElementById('fDatum').value = naechsterTerminNach(lp, intervall);
-  }
-  document.getElementById('fLetztePruefung').onchange = aktualisiereNaechstePruefungAusPruefdatum;
-  document.getElementById('fIntervall').addEventListener('change', aktualisiereNaechstePruefungAusPruefdatum);
 
   document.getElementById('fSave').onclick = function(){
     var typ = document.getElementById('fTyp').value;
@@ -2127,6 +2125,20 @@ function modalNeuesGeraet(kundeId){
       }
     });
   };
+
+  try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
+  try { bindKategorieToggle(); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
+
+  try {
+    function aktualisiereNaechstePruefungAusPruefdatum(){
+      var lp = document.getElementById('fLetztePruefung').value;
+      if(!lp) return;
+      var intervall = parseInt(document.getElementById('fIntervall').value, 10) || 24;
+      document.getElementById('fDatum').value = naechsterTerminNach(lp, intervall);
+    }
+    document.getElementById('fLetztePruefung').onchange = aktualisiereNaechstePruefungAusPruefdatum;
+    document.getElementById('fIntervall').addEventListener('change', aktualisiereNaechstePruefungAusPruefdatum);
+  } catch(err){ console.error('Datumsautomatik Fehler', err); }
 }
 
 function initSigPad(canvasId){
