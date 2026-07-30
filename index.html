@@ -869,6 +869,16 @@ function istFuellKategorie(kat){
   return kat === 'Perchtl Zisch' || kat === 'CO2-Flaschen';
 }
 
+function fuellungLesen(f, kategorie){
+  if(typeof f.menge === 'number' && !isNaN(f.menge)){
+    return { menge: f.menge, einheit: f.einheit || ((kategorie === 'CO2-Flaschen') ? 'g' : 'Liter') };
+  }
+  if(typeof f.liter === 'number' && !isNaN(f.liter)){
+    return { menge: f.liter, einheit: 'Liter' };
+  }
+  return { menge: null, einheit: f.einheit || ((kategorie === 'CO2-Flaschen') ? 'g' : 'Liter') };
+}
+
 function mengeAusTyp(typ, kategorie){
   if(!typ) return { wert: null, einheit: (kategorie === 'CO2-Flaschen') ? 'g' : 'Liter' };
   if(kategorie === 'CO2-Flaschen'){
@@ -2387,9 +2397,9 @@ function modalFuellhistorieListe(kundeId){
     var summen = {};
     liste.forEach(function(e){
       (e.g.fuellungen || []).forEach(function(f){
-        var einheit = f.einheit || 'Liter';
-        if(!summen[einheit]) summen[einheit] = 0;
-        if(typeof f.menge === 'number' && !isNaN(f.menge)) summen[einheit] += f.menge;
+        var info = fuellungLesen(f, e.g.kategorie);
+        if(!summen[info.einheit]) summen[info.einheit] = 0;
+        if(typeof info.menge === 'number' && !isNaN(info.menge)) summen[info.einheit] += info.menge;
       });
     });
     return summen;
@@ -2488,9 +2498,9 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     var summen = {};
     liste.forEach(function(e){
       (e.g.fuellungen || []).forEach(function(f){
-        var einheit = f.einheit || 'Liter';
-        if(!summen[einheit]) summen[einheit] = 0;
-        if(typeof f.menge === 'number' && !isNaN(f.menge)) summen[einheit] += f.menge;
+        var info = fuellungLesen(f, e.g.kategorie);
+        if(!summen[info.einheit]) summen[info.einheit] = 0;
+        if(typeof info.menge === 'number' && !isNaN(info.menge)) summen[info.einheit] += info.menge;
       });
     });
     return summen;
@@ -2555,11 +2565,12 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
   if(fuellungen.length === 0){
     html += '<div class="empty">Noch keine Füllungen erfasst</div>';
   } else {
-    var einheitGeraet = fuellungen[0].einheit || ((g.kategorie === 'CO2-Flaschen') ? 'g' : 'Liter');
+    var einheitGeraet = (g.kategorie === 'CO2-Flaschen') ? 'g' : 'Liter';
     var gesamtMenge = 0;
     var hatUnbekannt = false;
     fuellungen.forEach(function(f){
-      if(typeof f.menge === 'number' && !isNaN(f.menge)) gesamtMenge += f.menge; else hatUnbekannt = true;
+      var info = fuellungLesen(f, g.kategorie);
+      if(typeof info.menge === 'number' && !isNaN(info.menge)) gesamtMenge += info.menge; else hatUnbekannt = true;
     });
     var ersteDatum = fuellungen[fuellungen.length - 1].datum;
     var letzteDatum = fuellungen[0].datum;
@@ -2572,8 +2583,9 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
 
     html += '<div class="section-title" style="margin-top:16px;">Einzelne Füllungen</div>';
     fuellungen.forEach(function(f, idx){
+      var infoZeile = fuellungLesen(f, g.kategorie);
       html += '<div class="card" style="padding:10px 12px;">';
-      html += '<div class="row"><span class="meta">' + fmtDatumZeitLokal(f.datum) + '</span><span class="meta">' + (typeof f.menge === 'number' ? (f.menge.toLocaleString('de-AT') + ' ' + (f.einheit || einheitGeraet)) : '-') + '</span></div>';
+      html += '<div class="row"><span class="meta">' + fmtDatumZeitLokal(f.datum) + '</span><span class="meta">' + (typeof infoZeile.menge === 'number' ? (infoZeile.menge.toLocaleString('de-AT') + ' ' + infoZeile.einheit) : '-') + '</span></div>';
       html += '<button type="button" class="btn small secondary" data-fuellungloeschen="' + idx + '" style="margin-top:6px;">Löschen</button>';
       html += '</div>';
     });
