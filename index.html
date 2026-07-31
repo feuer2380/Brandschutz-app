@@ -2591,7 +2591,12 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
       var infoZeile = fuellungLesen(f, g.kategorie, g.standort);
       html += '<div class="card" style="padding:10px 12px;">';
       html += '<div class="row"><span class="meta">' + fmtDatumZeitLokal(f.datum) + '</span><span class="meta">' + (typeof infoZeile.menge === 'number' ? (infoZeile.menge.toLocaleString('de-AT') + ' ' + infoZeile.einheit) : '-') + '</span></div>';
-      html += '<button type="button" class="btn small secondary" data-fuellungloeschen="' + idx + '" style="margin-top:6px;">Löschen</button>';
+      html += '<label style="margin-top:6px; font-size:12px;">Ort dieser Füllung</label>';
+      html += '<input type="text" id="fuellOrt_' + idx + '" value="' + escapeHtml(infoZeile.standort || '') + '" placeholder="z.B. Weinfest Mödling">';
+      html += '<div style="display:flex; gap:8px; margin-top:6px;">';
+      html += '<button type="button" class="btn small secondary" data-fuellortspeichern="' + idx + '">Ort speichern</button>';
+      html += '<button type="button" class="btn small secondary" data-fuellungloeschen="' + idx + '">Löschen</button>';
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -2609,6 +2614,20 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
       g.fuellungen = (g.fuellungen || []).filter(function(f){ return f !== zuLoeschen; });
       dbPut('geraete', g, function(){
         state.geraete = state.geraete.map(function(x){ return x.id === g.id ? g : x; });
+        modalFuellhistorie(geraetId, zurueckKundeId);
+      });
+    };
+  });
+  document.querySelectorAll('[data-fuellortspeichern]').forEach(function(b){
+    b.onclick = function(){
+      var idx = parseInt(b.getAttribute('data-fuellortspeichern'), 10);
+      var neuerOrt = document.getElementById('fuellOrt_' + idx).value.trim();
+      var sortiert = (g.fuellungen || []).slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+      var zuAendern = sortiert[idx];
+      zuAendern.standort = neuerOrt;
+      dbPut('geraete', g, function(){
+        state.geraete = state.geraete.map(function(x){ return x.id === g.id ? g : x; });
+        toast('Ort gespeichert');
         modalFuellhistorie(geraetId, zurueckKundeId);
       });
     };
