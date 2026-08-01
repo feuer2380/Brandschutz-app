@@ -729,7 +729,7 @@ function startScanner(){
     if(statusEl) statusEl.textContent = 'Kamera in dieser Umgebung nicht verfügbar - bitte Code manuell eingeben.';
     return;
   }
-  scannerInstance = new Html5Qrcode('reader');
+  scannerInstance = new Html5Qrcode('reader', { experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
   scannerInstance.start(
     { facingMode: 'environment' },
     {
@@ -739,10 +739,9 @@ function startScanner(){
         var boxSize = Math.floor(minEdge * 0.75);
         return { width: boxSize, height: boxSize };
       },
-      aspectRatio: 1.0,
       videoConstraints: {
         width: { ideal: 1280 },
-        height: { ideal: 1280 },
+        height: { ideal: 720 },
         facingMode: 'environment'
       }
     },
