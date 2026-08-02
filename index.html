@@ -2091,17 +2091,19 @@ function bindTypChips(){
 
 function modalNeuesGeraet(kundeId){
   var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
+  var letzte = (state.letzteGeraeteWerte && state.letzteGeraeteWerte.kundeId === kundeId) ? state.letzteGeraeteWerte : null;
+  var vorKategorie = letzte ? letzte.kategorie : 'Feuerlöscher';
   var html = '';
   html += '<div class="modal-head"><h3>Neues Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Kategorie</label><select id="fKategorie">';
   kategorien.forEach(function(kat){
-    html += '<option' + (kat === 'Feuerlöscher' ? ' selected' : '') + '>' + kat + '</option>';
+    html += '<option' + (kat === vorKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
   html += '<label>Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg">';
   html += buildTypChips();
   html += '<div id="fjBlockBaujahr" style="display:none;">';
-  html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" placeholder="z.B. 2020">';
+  html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" placeholder="z.B. 2020" value="' + (letzte && letzte.baujahr ? escapeHtml(String(letzte.baujahr)) : '') + '">';
   html += '</div>';
   html += '<div id="fjBlockPerchtlZisch" style="display:none;">';
   html += '<label>Abfülldatum</label><input id="fAbfuelldatum" type="date">';
@@ -2112,11 +2114,16 @@ function modalNeuesGeraet(kundeId){
   html += '</div>';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" placeholder="z.B. 2269">';
-  html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links">';
-  html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date">';
-  html += '<label>Nächste Prüfung</label><input id="fDatum" type="date">';
+  html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + (letzte && letzte.standort ? escapeHtml(letzte.standort) : '') + '">';
+  html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (letzte && letzte.letztePruefung ? letzte.letztePruefung : '') + '">';
+  html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (letzte && letzte.naechstePruefung ? letzte.naechstePruefung : '') + '">';
   html += '<label>Prüfintervall</label>';
-  html += '<select id="fIntervall"><option value="1">1 Monat</option><option value="3">3 Monate</option><option value="12">12 Monate</option><option value="24" selected>24 Monate</option><option value="36">36 Monate</option></select>';
+  var vorIntervall = letzte && letzte.intervallMonate ? letzte.intervallMonate : 24;
+  html += '<select id="fIntervall">';
+  [1,3,12,24,36].forEach(function(m){
+    html += '<option value="' + m + '"' + (m === vorIntervall ? ' selected' : '') + '>' + m + ' Monat' + (m===1?'':'e') + '</option>';
+  });
+  html += '</select>';
   html += '<button class="btn block" id="fSave">Gerät speichern</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -2142,14 +2149,23 @@ function modalNeuesGeraet(kundeId){
       zusatzdaten: document.getElementById('fZusatzdaten').value.trim(),
       maengel: document.getElementById('fMaengel').value.trim()
     };
+    state.letzteGeraeteWerte = {
+      kundeId: kundeId,
+      kategorie: g.kategorie,
+      baujahr: g.baujahr,
+      standort: g.standort,
+      letztePruefung: g.letztePruefung,
+      naechstePruefung: g.naechstePruefung,
+      intervallMonate: g.intervallMonate
+    };
     dbPut('geraete', g, function(){
       if(datum){
         var p = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: typ, datum: datum, erledigt: false };
         dbPut('pruefungen', p, function(){
-          loadAll(function(){ render(); closeModal(); toast('Gerät und Prüfung angelegt'); });
+          loadAll(function(){ render(); modalNeuesGeraet(kundeId); toast('Gerät und Prüfung angelegt'); });
         });
       } else {
-        loadAll(function(){ render(); closeModal(); toast('Gerät gespeichert'); });
+        loadAll(function(){ render(); modalNeuesGeraet(kundeId); toast('Gerät gespeichert'); });
       }
     });
   };
