@@ -2029,14 +2029,23 @@ function baujahrStatus(baujahr, letzteInnenrevision){
   return { cls:'ok', label:'Innenrevision: ' + naechstes, ausscheideJahr: ausscheideJahr, faelligJahr: naechstes };
 }
 
+var TYP_CHIPS_MAX_ZUSAETZLICH = 12;
+
 function typListeAlle(){
   var standard = ['Pulverlöscher 6kg','Pulverlöscher 12kg','CO2-Löscher','Schaumlöscher','Wandhydrant','Rauchmelder',"Wolfi's Blubber-Gas",'Sonstiges'];
-  var vorhanden = [];
+  var haeufigkeit = {};
   state.geraete.forEach(function(g){
-    if(g.typ && standard.indexOf(g.typ) === -1 && vorhanden.indexOf(g.typ) === -1){
-      vorhanden.push(g.typ);
+    if(g.typ && standard.indexOf(g.typ) === -1){
+      haeufigkeit[g.typ] = (haeufigkeit[g.typ] || 0) + 1;
     }
   });
+  var vorhanden = Object.keys(haeufigkeit);
+  vorhanden.sort(function(a, b){
+    var diff = haeufigkeit[b] - haeufigkeit[a];
+    if(diff !== 0) return diff;
+    return a.localeCompare(b);
+  });
+  vorhanden = vorhanden.slice(0, TYP_CHIPS_MAX_ZUSAETZLICH);
   return standard.concat(vorhanden);
 }
 
