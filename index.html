@@ -704,9 +704,6 @@ function renderScan(){
   html += '<div id="reader" style="width:100%; border-radius:8px; overflow:hidden;"></div>';
   html += '<div class="meta" id="scanStatus" style="margin-top:10px;">Kamera wird gestartet...</div>';
   html += '</div>';
-  html += '<div class="section-title">Oder Code manuell eingeben</div>';
-  html += '<input id="scanManuellInput" type="text" placeholder="z.B. BSV-GERAET:id_... oder nur die ID">';
-  html += '<button class="btn block" id="scanManuellBtn">Öffnen</button>';
   return html;
 }
 
@@ -726,7 +723,7 @@ function startScanner(){
   var statusEl = document.getElementById('scanStatus');
   var readerDiv = document.getElementById('reader');
   if(!readerDiv || typeof Html5Qrcode === 'undefined'){
-    if(statusEl) statusEl.textContent = 'Kamera in dieser Umgebung nicht verfügbar - bitte Code manuell eingeben.';
+    if(statusEl) statusEl.textContent = 'Kamera in dieser Umgebung nicht verfügbar.';
     return;
   }
   scannerInstance = new Html5Qrcode('reader', { experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
@@ -754,7 +751,7 @@ function startScanner(){
     scannerLaeuft = true;
     if(statusEl) statusEl.textContent = 'Halte den QR-Code ruhig, gut beleuchtet und mittig vor die Kamera';
   }).catch(function(){
-    if(statusEl) statusEl.textContent = 'Kein Kamerazugriff möglich. Bitte Code unten manuell eingeben.';
+    if(statusEl) statusEl.textContent = 'Kein Kamerazugriff möglich. Bitte Kamerazugriff in den Einstellungen erlauben.';
   });
 }
 
@@ -795,7 +792,7 @@ function verarbeiteScan(text){
       }
     }
   }
-  var g = state.geraete.filter(function(x){ return x.id === id; })[0];
+  var g = state.geraete.filter(function(x){ return x.id === id || x.externeId === id; })[0];
   if(!g){
     toast('Kein Gerät mit diesem Code gefunden');
     setTimeout(startScanner, 400);
@@ -1801,10 +1798,10 @@ function modalQrGeraet(geraetId){
   document.getElementById('mClose').onclick = closeModal;
   try{
     new QRCode(document.getElementById('qrTarget'), {
-      text: 'BSV-GERAET:' + g.id,
+      text: 'BSV-GERAET:' + (g.externeId ? g.externeId : g.id),
       width: 500,
       height: 500,
-      correctLevel: QRCode.CorrectLevel.H
+      correctLevel: QRCode.CorrectLevel.M
     });
     qrMitRand('qrTarget');
   } catch(e){
@@ -3383,7 +3380,7 @@ function modalQrKunde(kundeId){
       text: 'BSV-KUNDE:' + k.id,
       width: 500,
       height: 500,
-      correctLevel: QRCode.CorrectLevel.H
+      correctLevel: QRCode.CorrectLevel.M
     });
     qrMitRand('qrTarget');
   } catch(e){
@@ -3451,13 +3448,6 @@ function bindDynamic(){
   if(backScan) backScan.onclick = function(){ state.vorgewaehltesErgebnis = null; state.tab = 'scan'; render(); };
 
   var scanManuellBtn = document.getElementById('scanManuellBtn');
-  if(scanManuellBtn){
-    scanManuellBtn.onclick = function(){
-      var val = document.getElementById('scanManuellInput').value;
-      if(val.trim()) verarbeiteScan(val);
-    };
-  }
-
   var checkSigKundeCanvas = initSigPad('checkSigKunde');
   var checkSigTechnikerCanvas = initSigPad('checkSigTechniker');
   if(checkSigKundeCanvas){
