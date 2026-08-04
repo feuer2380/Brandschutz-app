@@ -1793,16 +1793,18 @@ function qrMitRand(targetId){
 function modalQrGeraet(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
+  var qrText = 'BSV-GERAET:' + (g.externeId ? g.externeId : g.id);
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
   html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Weißen Rand beim Zuschneiden nicht wegschneiden.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
+  html += '<div class="meta" style="margin-top:8px; font-family:monospace; word-break:break-all; user-select:text;">Code: ' + escapeHtml(qrText) + '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   try{
     new QRCode(document.getElementById('qrTarget'), {
-      text: 'BSV-GERAET:' + (g.externeId ? g.externeId : g.id),
+      text: qrText,
       width: 500,
       height: 500,
       correctLevel: QRCode.CorrectLevel.M
