@@ -756,6 +756,27 @@ function startScanner(){
   });
 }
 
+function zeigeGeraetAuswahl(matches){
+  var html = '';
+  html += '<div class="modal-head"><h3>Mehrere Treffer</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Diese Nummer ist bei mehreren Kunden vergeben (altes Aufkleber-System). Bitte auswählen, um wen es sich handelt:</div>';
+  matches.forEach(function(g){
+    var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+    html += '<button class="btn block secondary auswahlGeraetBtn" data-gid="' + g.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k ? k.name : 'Unbekannter Kunde') + ' &middot; ' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</button>';
+  });
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ closeModal(); setTimeout(startScanner, 400); };
+  document.querySelectorAll('.auswahlGeraetBtn').forEach(function(b){
+    b.onclick = function(){
+      closeModal();
+      state.activeGeraetId = b.getAttribute('data-gid');
+      state.checkRueckkehrZuKunde = null;
+      state.tab = 'geraetCheck';
+      render();
+    };
+  });
+}
+
 function verarbeiteScan(text){
   stopScanner();
   var id = text.trim();
@@ -779,12 +800,15 @@ function verarbeiteScan(text){
         params[decodeURIComponent(teile[0])] = decodeURIComponent(teile[1] || '');
       });
       if(params.id){
-        var gExtern = state.geraete.filter(function(x){ return x.externeId === params.id; })[0];
-        if(gExtern){
-          state.activeGeraetId = gExtern.id;
+        var externTreffer = state.geraete.filter(function(x){ return x.externeId === params.id; });
+        if(externTreffer.length === 1){
+          state.activeGeraetId = externTreffer[0].id;
           state.checkRueckkehrZuKunde = null;
           state.tab = 'geraetCheck';
           render();
+          return;
+        } else if(externTreffer.length > 1){
+          zeigeGeraetAuswahl(externTreffer);
           return;
         }
         toast('Kein Gerät mit externer ID ' + params.id + ' verknüpft. Bitte im Gerät eintragen (Feld "Externe ID").');
@@ -793,12 +817,17 @@ function verarbeiteScan(text){
       }
     }
   }
-  var g = state.geraete.filter(function(x){ return x.id === id || x.externeId === id; })[0];
-  if(!g){
+  var treffer = state.geraete.filter(function(x){ return x.id === id || x.externeId === id; });
+  if(treffer.length === 0){
     toast('Kein Gerät mit diesem Code gefunden');
     setTimeout(startScanner, 400);
     return;
   }
+  if(treffer.length > 1){
+    zeigeGeraetAuswahl(treffer);
+    return;
+  }
+  var g = treffer[0];
   state.activeGeraetId = g.id;
   state.checkRueckkehrZuKunde = null;
   state.tab = 'geraetCheck';
@@ -1793,7 +1822,7 @@ function qrMitRand(targetId){
 function modalQrGeraet(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
-  var qrText = 'BSV-GERAET:' + (g.externeId ? g.externeId : g.id);
+  var qrText = 'BSV-GERAET:' + g.id;
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
