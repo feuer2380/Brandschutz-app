@@ -1915,12 +1915,15 @@ function modalGeraetBearbeiten(geraetId){
     var datum = document.getElementById('fDatum').value;
     var baujahrVal = document.getElementById('fBaujahr').value;
     var alteDatum = g.naechstePruefung;
+    var neueExterneId = document.getElementById('fExterneId').value.trim();
+    var duplikat = findeDuplikatExterneId(neueExterneId, g.id);
+    var speichernFortsetzen = function(){
     g.typ = typ;
     g.kategorie = document.getElementById('fKategorie').value;
     g.baujahr = baujahrVal ? parseInt(baujahrVal, 10) : null;
     g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
-    g.externeId = document.getElementById('fExterneId').value.trim();
+    g.externeId = neueExterneId;
     g.standort = document.getElementById('fStandort').value.trim();
     var letztePruefungVal = document.getElementById('fLetztePruefung').value;
     g.letztePruefung = letztePruefungVal || null;
@@ -1950,6 +1953,12 @@ function modalGeraetBearbeiten(geraetId){
         loadAll(function(){ render(); closeModal(); toast('Änderungen gespeichert'); });
       }
     });
+    };
+    if(duplikat){
+      customConfirm('Achtung: Die Externe ID "' + escapeHtml(neueExterneId) + '" ist bereits bei "' + escapeHtml(duplikat.kunde ? duplikat.kunde.name : 'einem anderen Kunden') + '" (' + escapeHtml(duplikat.geraet.typ) + ') vergeben. Trotzdem speichern?', speichernFortsetzen);
+    } else {
+      speichernFortsetzen();
+    }
   };
   if(!g.ausgeschieden){
     document.getElementById('fAusscheiden').onclick = function(){
@@ -2032,6 +2041,14 @@ function modalGeraetBearbeiten(geraetId){
       btnFuellhistorie.onclick = function(){ modalFuellhistorie(g.id); };
     }
   } catch(err){ console.error('Füllhistorie-Button Fehler', err); }
+}
+
+function findeDuplikatExterneId(externeId, eigeneGeraetId){
+  if(!externeId) return null;
+  var treffer = state.geraete.filter(function(x){ return x.externeId === externeId && x.id !== eigeneGeraetId; })[0];
+  if(!treffer) return null;
+  var k = state.kunden.filter(function(x){ return x.id === treffer.kundeId; })[0];
+  return { geraet: treffer, kunde: k };
 }
 
 function customConfirm(nachricht, aufJa){
@@ -2176,6 +2193,7 @@ function modalNeuesGeraet(kundeId){
     var typ = document.getElementById('fTyp').value;
     var datum = document.getElementById('fDatum').value;
     var baujahrVal = document.getElementById('fBaujahr').value;
+    var neueExterneId = document.getElementById('fExterneId').value.trim();
     var g = {
       id: uid(),
       kundeId: kundeId,
@@ -2185,7 +2203,7 @@ function modalNeuesGeraet(kundeId){
       intervallMonate: parseInt(document.getElementById('fIntervall').value, 10),
       erstelltAm: new Date().toISOString(),
       seriennummer: document.getElementById('fSeriennr').value.trim(),
-      externeId: document.getElementById('fExterneId').value.trim(),
+      externeId: neueExterneId,
       standort: document.getElementById('fStandort').value.trim(),
       letztePruefung: document.getElementById('fLetztePruefung').value || null,
       naechstePruefung: datum || null,
@@ -2193,6 +2211,7 @@ function modalNeuesGeraet(kundeId){
       zusatzdaten: document.getElementById('fZusatzdaten').value.trim(),
       maengel: document.getElementById('fMaengel').value.trim()
     };
+    var speichernFortsetzen = function(){
     state.letzteGeraeteWerte = {
       kundeId: kundeId,
       kategorie: g.kategorie,
@@ -2212,6 +2231,13 @@ function modalNeuesGeraet(kundeId){
         loadAll(function(){ render(); modalNeuesGeraet(kundeId); toast('Gerät gespeichert'); });
       }
     });
+    };
+    var duplikat = findeDuplikatExterneId(neueExterneId, null);
+    if(duplikat){
+      customConfirm('Achtung: Die Externe ID "' + escapeHtml(neueExterneId) + '" ist bereits bei "' + escapeHtml(duplikat.kunde ? duplikat.kunde.name : 'einem anderen Kunden') + '" (' + escapeHtml(duplikat.geraet.typ) + ') vergeben. Trotzdem speichern?', speichernFortsetzen);
+    } else {
+      speichernFortsetzen();
+    }
   };
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
