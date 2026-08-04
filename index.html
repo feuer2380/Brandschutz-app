@@ -1821,7 +1821,8 @@ function modalGeraetBearbeiten(geraetId){
     html += '<option' + (kat === aktKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
-  html += '<label>Typ</label><input id="fTyp" type="text" value="' + escapeHtml(g.typ || '') + '" placeholder="z.B. Pulverlöscher 6kg">';
+  html += '<label>Typ</label><input id="fTyp" type="text" value="' + escapeHtml(g.typ || '') + '" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
+  html += buildTypDatalist();
   html += buildTypChips();
   html += '<div id="fjBlockBaujahr" style="display:none;">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" value="' + (g.baujahr || '') + '">';
@@ -2029,24 +2030,31 @@ function baujahrStatus(baujahr, letzteInnenrevision){
   return { cls:'ok', label:'Innenrevision: ' + naechstes, ausscheideJahr: ausscheideJahr, faelligJahr: naechstes };
 }
 
-var TYP_CHIPS_MAX_ZUSAETZLICH = 30;
+var TYP_STANDARD = ['Pulverlöscher 6kg','Pulverlöscher 12kg','CO2-Löscher','Schaumlöscher','Wandhydrant','Rauchmelder',"Wolfi's Blubber-Gas",'Sonstiges'];
 
 function typListeAlle(){
-  var standard = ['Pulverlöscher 6kg','Pulverlöscher 12kg','CO2-Löscher','Schaumlöscher','Wandhydrant','Rauchmelder',"Wolfi's Blubber-Gas",'Sonstiges'];
-  var haeufigkeit = {};
+  return TYP_STANDARD;
+}
+
+function typListeAutocomplete(){
+  var alle = {};
+  TYP_STANDARD.forEach(function(t){ alle[t] = true; });
   state.geraete.forEach(function(g){
-    if(g.typ && standard.indexOf(g.typ) === -1){
-      haeufigkeit[g.typ] = (haeufigkeit[g.typ] || 0) + 1;
-    }
+    if(g.typ) alle[g.typ] = true;
   });
-  var vorhanden = Object.keys(haeufigkeit);
-  vorhanden.sort(function(a, b){
-    var diff = haeufigkeit[b] - haeufigkeit[a];
-    if(diff !== 0) return diff;
-    return a.localeCompare(b);
+  var liste = Object.keys(alle);
+  liste.sort(function(a, b){ return a.localeCompare(b); });
+  return liste;
+}
+
+function buildTypDatalist(){
+  var liste = typListeAutocomplete();
+  var html = '<datalist id="typDatalist">';
+  liste.forEach(function(t){
+    html += '<option value="' + escapeHtml(t) + '">';
   });
-  vorhanden = vorhanden.slice(0, TYP_CHIPS_MAX_ZUSAETZLICH);
-  return standard.concat(vorhanden);
+  html += '</datalist>';
+  return html;
 }
 
 function buildTypChips(){
@@ -2100,7 +2108,8 @@ function modalNeuesGeraet(kundeId){
     html += '<option' + (kat === vorKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
-  html += '<label>Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg">';
+  html += '<label>Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
+  html += buildTypDatalist();
   html += buildTypChips();
   html += '<div id="fjBlockBaujahr" style="display:none;">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" placeholder="z.B. 2020" value="' + (letzte && letzte.baujahr ? escapeHtml(String(letzte.baujahr)) : '') + '">';
