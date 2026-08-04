@@ -1377,7 +1377,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
       html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th>' + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>')) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].forEach(function(g, i){
-        var bjStatus = (!istPZ && !istBegehung && g.baujahr) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
+        var bjStatus = (!istPZ && !istBegehung && g.baujahr && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
         var statusSpalte = (!istPZ && !istBegehung) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
         var mittelspalten = istPZ ? ('<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>') : (istBegehung ? ('<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>') : ('<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>' + statusSpalte));
         var zeilenStil = '';
