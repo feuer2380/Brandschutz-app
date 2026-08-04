@@ -195,10 +195,11 @@
   @media print{
     body > *:not(#printArea){ display:none !important; }
     #printArea{ display:block !important; position:static; width:100%; padding:0; background:#fff; }
-    .pb-tabelle{ page-break-inside:auto; }
-    .pb-tabelle tr{ page-break-inside:avoid; page-break-after:auto; }
+    .pb-tabelle{ page-break-inside:auto; break-inside:auto; border-collapse:collapse; }
+    .pb-tabelle tr{ page-break-inside:avoid; break-inside:avoid; page-break-after:auto; }
     .pb-tabelle thead{ display:table-header-group; }
-    .pb-kopfzeile, .pb-kundenbox{ page-break-inside:avoid; }
+    .pb-tabelle thead tr{ page-break-inside:avoid; break-inside:avoid; page-break-after:avoid; break-after:avoid; }
+    .pb-kopfzeile, .pb-kundenbox{ page-break-inside:avoid; break-inside:avoid; }
   }
 </style>
 </head>
