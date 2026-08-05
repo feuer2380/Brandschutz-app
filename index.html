@@ -375,6 +375,7 @@ var state = {
   dokumente: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
+  pruefungOffenAufgeklappt: {},
   geraeteFilter: 'alle',
   statFilter: 'tag'
 };
@@ -1373,17 +1374,20 @@ function renderPruefungen(){
           if(c === 'warn') schlimmsteCls = 'warn';
           else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
         });
+        var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt[kid]);
         html += '<div class="card">';
-        html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' offen</span></div>';
-        eintraege.forEach(function(p, idx){
-          var st = statusForDate(p.datum);
-          html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : '') + '">';
-          html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-          html += '<div class="row" style="margin-top:6px;">';
-          html += '<button class="btn small erledigtBtn" data-pid="' + p.id + '">Als erledigt markieren</button>';
-          html += '<button class="btn small secondary pruefungLoeschenBtn" data-pid="' + p.id + '" style="margin-left:8px;">Löschen</button>';
-          html += '</div></div>';
-        });
+        html += '<div class="row offenKundeToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' offen ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        if(aufgeklappt){
+          eintraege.forEach(function(p, idx){
+            var st = statusForDate(p.datum);
+            html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
+            html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+            html += '<div class="row" style="margin-top:6px;">';
+            html += '<button class="btn small erledigtBtn" data-pid="' + p.id + '">Als erledigt markieren</button>';
+            html += '<button class="btn small secondary pruefungLoeschenBtn" data-pid="' + p.id + '" style="margin-left:8px;">Löschen</button>';
+            html += '</div></div>';
+          });
+        }
         html += '</div>';
       });
     }
@@ -3695,6 +3699,15 @@ function bindDynamic(){
       if(neu){ neu.focus(); try{ neu.setSelectionRange(pos, pos); } catch(e){} }
     };
   }
+
+  document.querySelectorAll('.offenKundeToggle').forEach(function(el){
+    el.onclick = function(){
+      var kid = el.getAttribute('data-kid');
+      if(!state.pruefungOffenAufgeklappt) state.pruefungOffenAufgeklappt = {};
+      state.pruefungOffenAufgeklappt[kid] = !state.pruefungOffenAufgeklappt[kid];
+      render();
+    };
+  });
 
   var back = document.getElementById('backToKunden');
   if(back) back.onclick = function(){ state.tab = 'kunden'; render(); };
