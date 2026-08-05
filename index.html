@@ -1389,7 +1389,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istPZ = (istFuellKategorie(kat));
       var istBegehung = (kat === 'Brandschutzbegehung');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th>' + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>')) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>')) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
         var statusSpalte = (!istPZ && !istBegehung) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
@@ -1397,7 +1397,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
         var zeilenStil = '';
         if(bjStatus && bjStatus.cls === 'warn') zeilenStil = ' style="background:#fbdcd2; color:#8a2a10;"';
         else if(bjStatus && bjStatus.cls === 'soon') zeilenStil = ' style="background:#fde8c8; color:#8a5a10;"';
-        html += '<tr' + zeilenStil + '><td class="pb-pos">' + (i+1) + '</td><td>' + escapeHtml(g.typ) + '</td><td>' + escapeHtml(g.standort||'-') + '</td><td>' + escapeHtml(g.seriennummer||'-') + '</td>' + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
+        html += '<tr' + zeilenStil + '><td class="pb-pos">' + (i+1) + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.standort||'-') + '</td>' + (istBegehung ? '' : ('<td>' + escapeHtml(g.seriennummer||'-') + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
       });
       html += '</tbody></table>';
     });
@@ -1840,7 +1840,7 @@ function modalGeraetBearbeiten(geraetId){
     html += '<option' + (kat === aktKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
-  html += '<label>Typ</label><input id="fTyp" type="text" value="' + escapeHtml(g.typ || '') + '" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
+  html += '<label id="fTypLabel">Typ</label><input id="fTyp" type="text" value="' + escapeHtml(g.typ || '') + '" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
   html += buildTypDatalist();
   html += buildTypChips();
   html += '<div id="fjBlockBaujahr" style="display:none;">';
@@ -1854,7 +1854,9 @@ function modalGeraetBearbeiten(geraetId){
   html += '<div id="fjBlockMaengel" style="display:none;">';
   html += '<label>Mängel</label><textarea id="fMaengel" rows="4" placeholder="Festgestellte Mängel eintragen...">' + escapeHtml(g.maengel || '') + '</textarea>';
   html += '</div>';
+  html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
+  html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269">';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '">';
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (g.letztePruefung || '') + '">';
@@ -2108,14 +2110,21 @@ function bindKategorieToggle(){
   var block = document.getElementById('fjBlockBaujahr');
   var blockPZ = document.getElementById('fjBlockPerchtlZisch');
   var blockMaengel = document.getElementById('fjBlockMaengel');
+  var blockSeriennr = document.getElementById('fjBlockSeriennr');
+  var typLabel = document.getElementById('fTypLabel');
+  var typInput = document.getElementById('fTyp');
   var intervallSel = document.getElementById('fIntervall');
   if(!sel) return;
   function aktualisieren(){
+    var istBegehung = (sel.value === 'Brandschutzbegehung');
     if(block) block.style.display = (sel.value === 'Feuerlöscher') ? '' : 'none';
     if(blockPZ) blockPZ.style.display = istFuellKategorie(sel.value) ? '' : 'none';
-    if(blockMaengel) blockMaengel.style.display = (sel.value === 'Brandschutzbegehung') ? '' : 'none';
+    if(blockMaengel) blockMaengel.style.display = istBegehung ? '' : 'none';
+    if(blockSeriennr) blockSeriennr.style.display = istBegehung ? 'none' : '';
+    if(typLabel) typLabel.textContent = istBegehung ? 'Begehung (Datum/Beschreibung)' : 'Typ';
+    if(typInput) typInput.placeholder = istBegehung ? 'z.B. Begehung Herbst 2026' : 'z.B. Pulverlöscher 6kg';
     if(intervallSel && !intervallSel.getAttribute('data-manuell')){
-      intervallSel.value = (sel.value === 'Feuerlöscher') ? '24' : (sel.value === 'Brandschutzbegehung' ? '3' : '12');
+      intervallSel.value = (sel.value === 'Feuerlöscher') ? '24' : (istBegehung ? '3' : '12');
     }
   }
   aktualisieren();
@@ -2144,7 +2153,7 @@ function modalNeuesGeraet(kundeId){
     html += '<option' + (kat === vorKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
-  html += '<label>Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
+  html += '<label id="fTypLabel">Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
   html += buildTypDatalist();
   html += buildTypChips();
   html += '<div id="fjBlockBaujahr" style="display:none;">';
@@ -2157,7 +2166,9 @@ function modalNeuesGeraet(kundeId){
   html += '<div id="fjBlockMaengel" style="display:none;">';
   html += '<label>Mängel</label><textarea id="fMaengel" rows="4" placeholder="Festgestellte Mängel eintragen..."></textarea>';
   html += '</div>';
+  html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
+  html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" placeholder="z.B. 2269">';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + (letzte && letzte.standort ? escapeHtml(letzte.standort) : '') + '">';
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (letzte && letzte.letztePruefung ? letzte.letztePruefung : '') + '">';
