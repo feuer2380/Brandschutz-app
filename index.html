@@ -1541,7 +1541,7 @@ function buildStatistikDruckHtml(statFilter){
     statListe.forEach(function(p){
       var k = kundeFuerPruefung(p);
       var ei = ergebnisInfo(p.ergebnis);
-      html += '<tr><td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td><td>' + escapeHtml(ei.label) + '</td><td>' + escapeHtml(pruefungAnzeigeText(p)) + '</td><td>' + fmtDate(p.erledigtAm) + ' ' + fmtZeit(p.erledigtAm) + '</td></tr>';
+      html += '<tr><td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td><td>' + escapeHtml(ei.label) + '</td><td>' + pruefungAnzeigeText(p) + '</td><td>' + fmtDate(p.erledigtAm) + ' ' + fmtZeit(p.erledigtAm) + '</td></tr>';
     });
     html += '</tbody></table>';
   }
