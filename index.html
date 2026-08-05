@@ -703,7 +703,6 @@ function renderScan(){
   var html = '';
   html += '<div class="card" style="text-align:center; padding:10px;">';
   html += '<div id="reader" style="width:100%; border-radius:8px; overflow:hidden;"></div>';
-  html += '<div class="meta" id="scanStatus" style="margin-top:10px;">Kamera wird gestartet...</div>';
   html += '</div>';
   return html;
 }
@@ -711,49 +710,34 @@ function renderScan(){
 function stopScanner(){
   if(scannerInstance && scannerLaeuft){
     scannerLaeuft = false;
-    scannerInstance.stop().then(function(){
+    try {
       scannerInstance.clear();
-      scannerInstance = null;
-    }).catch(function(){
-      scannerInstance = null;
-    });
+    } catch(e){}
+    scannerInstance = null;
   }
 }
 
 function startScanner(){
-  var statusEl = document.getElementById('scanStatus');
   var readerDiv = document.getElementById('reader');
-  if(!readerDiv || typeof Html5Qrcode === 'undefined'){
-    if(statusEl) statusEl.textContent = 'Kamera in dieser Umgebung nicht verfügbar.';
+  if(!readerDiv || typeof Html5QrcodeScanner === 'undefined'){
+    if(readerDiv) readerDiv.innerHTML = '<div class="meta">Kamera in dieser Umgebung nicht verfügbar.</div>';
     return;
   }
-  scannerInstance = new Html5Qrcode('reader', { experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
-  scannerInstance.start(
-    { facingMode: 'environment' },
+  scannerInstance = new Html5QrcodeScanner(
+    'reader',
     {
       fps: 10,
-      qrbox: function(viewfinderWidth, viewfinderHeight){
-        var minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        var boxSize = Math.floor(minEdge * 0.75);
-        return { width: boxSize, height: boxSize };
-      },
-      videoConstraints: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: 'environment'
-      }
+      qrbox: { width: 250, height: 250 },
+      rememberLastUsedCamera: true,
+      supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
     },
-    function(decodedText){
-      if(!scannerLaeuft) return;
-      verarbeiteScan(decodedText);
-    },
-    function(){ /* noch nicht erkannt, ignorieren */ }
-  ).then(function(){
-    scannerLaeuft = true;
-    if(statusEl) statusEl.textContent = 'Halte den QR-Code ruhig, gut beleuchtet und mittig vor die Kamera';
-  }).catch(function(){
-    if(statusEl) statusEl.textContent = 'Kein Kamerazugriff möglich. Bitte Kamerazugriff in den Einstellungen erlauben.';
-  });
+    false
+  );
+  scannerLaeuft = true;
+  scannerInstance.render(function(decodedText){
+    if(!scannerLaeuft) return;
+    verarbeiteScan(decodedText);
+  }, function(){ /* noch nicht erkannt, ignorieren */ });
 }
 
 function zeigeGeraetAuswahl(matches){
