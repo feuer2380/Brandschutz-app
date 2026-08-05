@@ -1497,6 +1497,59 @@ function modalTerminliste(){
 }
 
 // ---------- Berichte ----------
+function buildStatistikDruckHtml(statFilter){
+  var statLabels = {tag:'Heute', woche:'Diese Woche', monat:'Diesen Monat', jahr:'Dieses Jahr'};
+  var jetztDate = new Date();
+  var alleErledigt = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm; });
+  var startBereich;
+  if(statFilter === 'tag'){
+    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate());
+  } else if(statFilter === 'woche'){
+    var wochentag = (jetztDate.getDay() + 6) % 7;
+    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate() - wochentag);
+  } else if(statFilter === 'monat'){
+    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), 1);
+  } else {
+    startBereich = new Date(jetztDate.getFullYear(), 0, 1);
+  }
+  var statListe = alleErledigt.filter(function(p){ return new Date(p.erledigtAm) >= startBereich; });
+  statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
+  var anzInOrdnung = statListe.filter(function(p){ return p.ergebnis === 'In Ordnung'; }).length;
+  var anzReparatur = statListe.filter(function(p){ return p.ergebnis === 'Reparatur nötig'; }).length;
+  var anzAusgeschieden = statListe.filter(function(p){ return p.ergebnis === 'Ausgeschieden'; }).length;
+  var kundenSet = {};
+  statListe.forEach(function(p){
+    var k = kundeFuerPruefung(p);
+    if(k) kundenSet[k.id] = true;
+  });
+  var anzKunden = Object.keys(kundenSet).length;
+
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Statistik</h1><div class="sub">' + (statLabels[statFilter] || '') + '</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+  html += '<table class="pb-tabelle"><thead><tr><th>Überprüft</th><th>Kunden geprüft</th><th>In Ordnung</th><th>Reparatur</th><th>Ausgeschieden</th></tr></thead><tbody>';
+  html += '<tr><td>' + statListe.length + '</td><td>' + anzKunden + '</td><td>' + anzInOrdnung + '</td><td>' + anzReparatur + '</td><td>' + anzAusgeschieden + '</td></tr>';
+  html += '</tbody></table>';
+  if(statListe.length === 0){
+    html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
+  } else {
+    html += '<table class="pb-tabelle" style="margin-top:16px;"><thead><tr><th>Kunde</th><th>Ergebnis</th><th>Gerät/Prüfung</th><th>Datum</th></tr></thead><tbody>';
+    statListe.forEach(function(p){
+      var k = kundeFuerPruefung(p);
+      var ei = ergebnisInfo(p.ergebnis);
+      html += '<tr><td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td><td>' + escapeHtml(ei.label) + '</td><td>' + escapeHtml(pruefungAnzeigeText(p)) + '</td><td>' + fmtDate(p.erledigtAm) + ' ' + fmtZeit(p.erledigtAm) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; www.loeschtechnik.at</div>';
+  html += '</div>';
+  return html;
+}
+
 function renderStatistik(){
   var html = '';
   html += '<div class="section-title">Statistik</div>';
@@ -1512,6 +1565,7 @@ function renderStatistik(){
     html += '<button class="filter-btn' + (statFilter === f.key ? ' active' : '') + '" data-statfilter="' + f.key + '">' + f.label + '</button>';
   });
   html += '</div>';
+  html += '<button class="btn block secondary no-print" id="druckBtnStat" style="margin-bottom:14px;">Drucken / Als PDF teilen</button>';
 
   var jetztDate = new Date();
   var alleErledigt = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm; });
@@ -3583,6 +3637,13 @@ function bindDynamic(){
 
   var addGeraet = document.getElementById('addGeraetBtn');
   if(addGeraet) addGeraet.onclick = function(){ modalNeuesGeraet(state.activeKundeId); };
+
+  var druckBtnStat = document.getElementById('druckBtnStat');
+  if(druckBtnStat) druckBtnStat.onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildStatistikDruckHtml(state.statFilter || 'tag');
+    window.print();
+  };
 
   document.querySelectorAll('.filter-btn').forEach(function(b){
     b.onclick = function(){
