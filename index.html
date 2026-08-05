@@ -366,6 +366,7 @@ function uid(){
 // ---------- State ----------
 var state = {
   tab: 'dashboard',
+  rolle: null,
   kunden: [],
   geraete: [],
   pruefungen: [],
@@ -505,8 +506,43 @@ function render(){
   }
 }
 
+function renderLogin(){
+  var html = '';
+  html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
+  html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
+  html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
+  html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
+  html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
+  html += '</div>';
+  return html;
+}
+
 function renderInner(){
   var m = document.getElementById('main');
+  var tabsEl = document.querySelector('.tabs');
+  var fabEl = document.getElementById('fabBtn');
+  if(!state.rolle){
+    if(tabsEl) tabsEl.style.display = 'none';
+    if(fabEl) fabEl.style.display = 'none';
+    m.innerHTML = renderLogin();
+    var pinInput = document.getElementById('loginPin');
+    var pruefen = function(){
+      var wert = pinInput.value.trim();
+      if(wert === CHEF_PIN){ state.rolle = 'chef'; render(); }
+      else if(wert === MITARBEITER_PIN){ state.rolle = 'mitarbeiter'; render(); }
+      else {
+        document.getElementById('loginFehler').textContent = 'Falscher PIN';
+        pinInput.value = '';
+        pinInput.focus();
+      }
+    };
+    document.getElementById('loginBtn').onclick = pruefen;
+    pinInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') pruefen(); });
+    pinInput.focus();
+    return;
+  }
+  if(tabsEl) tabsEl.style.display = '';
+  if(fabEl) fabEl.style.display = '';
   document.querySelectorAll('.tabbtn').forEach(function(b){
     b.className = 'tabbtn' + (b.getAttribute('data-tab') === state.tab ? ' active' : '');
   });
@@ -575,11 +611,27 @@ function renderDashboard(){
     return d.getMonth() === jetzt.getMonth() && d.getFullYear() === jetzt.getFullYear();
   });
   diesenMonat.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
+  if(state.rolle === 'mitarbeiter'){
+    diesenMonat = diesenMonat.filter(function(p){
+      var k = kundeFuerPruefung(p);
+      return k && kundeSichtbarFuerRolle(k);
+    });
+  }
+
+  var kundenSichtbar = state.kunden.filter(function(x){ return !x.geloescht; });
+  var geraeteSichtbar = geraeteAktiv;
+  if(state.rolle === 'mitarbeiter'){
+    kundenSichtbar = kundenSichtbar.filter(kundeSichtbarFuerRolle);
+    var sichtbareKundenIds = {};
+    kundenSichtbar.forEach(function(k){ sichtbareKundenIds[k.id] = true; });
+    geraeteSichtbar = geraeteSichtbar.filter(function(g){ return sichtbareKundenIds[g.kundeId]; });
+  }
 
   var html = '';
+  html += '<div class="row" style="margin-bottom:8px;"><span class="meta">Angemeldet als: ' + (state.rolle === 'chef' ? 'Chef' : 'Mitarbeiter') + '</span><button class="btn small secondary" id="logoutBtn">Abmelden</button></div>';
   html += '<div class="statrow">';
-  html += '<div class="stat"><div class="n">' + state.kunden.filter(function(x){ return !x.geloescht; }).length + '</div><div class="l">Kunden</div></div>';
-  html += '<div class="stat"><div class="n">' + state.geraete.filter(function(g){ return !g.ausgeschieden; }).length + '</div><div class="l">Geräte</div></div>';
+  html += '<div class="stat"><div class="n">' + kundenSichtbar.length + '</div><div class="l">Kunden</div></div>';
+  html += '<div class="stat"><div class="n">' + geraeteSichtbar.length + '</div><div class="l">Geräte</div></div>';
   html += '<div class="stat"><div class="n" style="color:' + (ueberfaelligGeraete.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaelligGeraete.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
 
@@ -1090,9 +1142,23 @@ function checkAbschliessen(geraetId, ergebnis){
 }
 
 // ---------- Kunden ----------
+var CHEF_PIN = '0239';
+var MITARBEITER_PIN = '8276';
+
+function kundeSichtbarFuerRolle(k){
+  if(state.rolle !== 'mitarbeiter') return true;
+  var heute = new Date();
+  var monatsEnde = new Date(heute.getFullYear(), heute.getMonth() + 1, 0, 23, 59, 59);
+  return state.pruefungen.some(function(p){
+    if(p.kundeId !== k.id || p.erledigt) return false;
+    return new Date(p.datum) <= monatsEnde;
+  });
+}
+
 function renderKundenListe(query){
   var q = (query || '').trim().toLowerCase();
   var liste = state.kunden.filter(function(k){ return !k.geloescht; });
+  liste = liste.filter(kundeSichtbarFuerRolle);
   if(q){
     liste = liste.filter(function(k){
       var num = (k.kundennummer || '').toLowerCase();
@@ -1239,6 +1305,13 @@ function renderKundeDetail(kundeId){
 function renderPruefungen(){
   var html = '';
   var sorted = state.pruefungen.slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
+
+  if(state.rolle === 'mitarbeiter'){
+    sorted = sorted.filter(function(p){
+      var k = kundeFuerPruefung(p);
+      return k && kundeSichtbarFuerRolle(k);
+    });
+  }
 
   var pSuche = (state.pruefungSuche || '').trim().toLowerCase();
   if(pSuche){
@@ -3673,6 +3746,9 @@ function bindDynamic(){
     };
   }
 
+  var logoutBtn = document.getElementById('logoutBtn');
+  if(logoutBtn) logoutBtn.onclick = function(){ state.rolle = null; state.tab = 'dashboard'; render(); };
+
   var addGeraet = document.getElementById('addGeraetBtn');
   if(addGeraet) addGeraet.onclick = function(){ modalNeuesGeraet(state.activeKundeId); };
 
@@ -3830,6 +3906,7 @@ document.querySelectorAll('.tabbtn').forEach(function(b){
 });
 
 document.getElementById('fabBtn').addEventListener('click', function(){
+  if(!state.rolle) return;
   if(state.tab === 'kunden' || state.tab === 'dashboard'){
     modalNeuerKunde();
   } else if(state.tab === 'kundeDetail'){
