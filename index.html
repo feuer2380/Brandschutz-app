@@ -1239,8 +1239,21 @@ function renderKundeDetail(kundeId){
 function renderPruefungen(){
   var html = '';
   var sorted = state.pruefungen.slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
+
+  var pSuche = (state.pruefungSuche || '').trim().toLowerCase();
+  if(pSuche){
+    sorted = sorted.filter(function(p){
+      var k = kundeFuerPruefung(p);
+      var g = geraetFuerPruefung(p);
+      var text = ((k ? k.name : '') + ' ' + (g ? (g.typ||'') : '') + ' ' + (g ? (g.standort||'') : '')).toLowerCase();
+      return text.indexOf(pSuche) !== -1;
+    });
+  }
+
   var offenAlle = sorted.filter(function(p){ return !p.erledigt; });
   var erledigtAlle = sorted.filter(function(p){ return p.erledigt; });
+
+  html += '<input id="pruefungSuchInput" type="text" placeholder="Suche nach Kunde, Gerät oder Standort..." value="' + escapeHtml(state.pruefungSuche || '') + '" style="margin-bottom:12px;">';
 
   var filter = state.pruefungFilter || 'alle';
   var filterOptionen = [
@@ -3596,6 +3609,17 @@ function bindDynamic(){
       var container = document.getElementById('kundenListContainer');
       container.innerHTML = renderKundenListe(state.kundenSuche);
       bindKundenCards(container);
+    };
+  }
+
+  var pruefungSuchInput = document.getElementById('pruefungSuchInput');
+  if(pruefungSuchInput){
+    pruefungSuchInput.oninput = function(){
+      state.pruefungSuche = pruefungSuchInput.value;
+      var pos = pruefungSuchInput.selectionStart;
+      render();
+      var neu = document.getElementById('pruefungSuchInput');
+      if(neu){ neu.focus(); try{ neu.setSelectionRange(pos, pos); } catch(e){} }
     };
   }
 
