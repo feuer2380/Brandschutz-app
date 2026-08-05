@@ -843,6 +843,20 @@ function renderGeraetCheck(geraetId){
   }
   html += '</div>';
 
+  var historie = state.pruefungen.filter(function(p){ return p.geraetId === geraetId && p.erledigt && p.erledigtAm; });
+  historie.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
+  historie = historie.slice(0, 5);
+  if(historie.length){
+    html += '<div class="card" style="margin-top:12px;">';
+    html += '<div class="section-title">Letzte Prüfungen</div>';
+    historie.forEach(function(p){
+      var ei = ergebnisInfo(p.ergebnis);
+      html += '<div class="row" style="margin-top:8px;"><span class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</span><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+      if(p.bemerkung) html += '<div class="meta" style="margin-top:2px;">' + escapeHtml(p.bemerkung) + '</div>';
+    });
+    html += '</div>';
+  }
+
   if(!g.ausgeschieden){
     html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
     html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
