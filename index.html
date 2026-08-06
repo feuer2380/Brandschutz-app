@@ -2060,6 +2060,7 @@ function modalGeraetBearbeiten(geraetId){
     var datum = document.getElementById('fDatum').value;
     var baujahrVal = document.getElementById('fBaujahr').value;
     var alteDatum = g.naechstePruefung;
+    var alteLetztePruefung = g.letztePruefung;
     var neueExterneId = document.getElementById('fExterneId').value.trim();
     var duplikat = findeDuplikatExterneId(neueExterneId, g.id);
     var speichernFortsetzen = function(){
@@ -2081,7 +2082,38 @@ function modalGeraetBearbeiten(geraetId){
     g.maengel = fMaengelEl ? fMaengelEl.value.trim() : g.maengel;
     dbPut('geraete', g, function(){
       var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
-      if(datum){
+      var pruefungGeradeErledigt = letztePruefungVal && letztePruefungVal !== alteLetztePruefung;
+      if(pruefungGeradeErledigt){
+        var jetztIsoBearb = new Date().toISOString();
+        if(offenePruefung){
+          offenePruefung.erledigt = true;
+          offenePruefung.erledigtAm = letztePruefungVal + 'T12:00:00';
+          offenePruefung.bericht = false;
+          offenePruefung.ergebnis = 'In Ordnung';
+          dbPut('pruefungen', offenePruefung, function(){
+            if(datum){
+              var pNeu = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: typ, datum: datum, erledigt: false };
+              dbPut('pruefungen', pNeu, function(){
+                loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen und nächster Termin angelegt'); });
+              });
+            } else {
+              loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen'); });
+            }
+          });
+        } else {
+          var abgeschlossen = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: typ, datum: letztePruefungVal, erledigt: true, erledigtAm: letztePruefungVal + 'T12:00:00', bericht: false, ergebnis: 'In Ordnung' };
+          dbPut('pruefungen', abgeschlossen, function(){
+            if(datum){
+              var pNeu2 = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: typ, datum: datum, erledigt: false };
+              dbPut('pruefungen', pNeu2, function(){
+                loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen und nächster Termin angelegt'); });
+              });
+            } else {
+              loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen'); });
+            }
+          });
+        }
+      } else if(datum){
         if(offenePruefung){
           offenePruefung.datum = datum;
           offenePruefung.typ = typ;
