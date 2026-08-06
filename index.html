@@ -1868,7 +1868,7 @@ function modalNeuerKunde(){
   html += '<div style="flex:0 0 90px;"><label>PLZ</label><input id="fPlz" type="text" inputmode="numeric" placeholder="2380"></div>';
   html += '<div style="flex:1;"><label>Ort</label><input id="fOrt" type="text" placeholder="Perchtoldsdorf"></div>';
   html += '</div>';
-  html += '<label>Telefon</label><input id="fTelefon" type="text" placeholder="z.B. 0676 305 83 98">';
+  html += '<label>Telefon</label><input id="fTelefon" type="text" autocomplete="off" autocorrect="off" name="tel-freitext" placeholder="z.B. 0676 305 83 98">';
   html += '<label>E-Mail</label><input id="fEmail" type="email" placeholder="z.B. info@beispiel.at">';
   html += '<button class="btn block" id="fSave">Kunde speichern</button>';
   openModal(html);
@@ -1914,7 +1914,7 @@ function modalKundeBearbeiten(kundeId){
   html += '<div style="flex:0 0 90px;"><label>PLZ</label><input id="fPlz" type="text" inputmode="numeric" value="' + escapeHtml(k.plz || '') + '"></div>';
   html += '<div style="flex:1;"><label>Ort</label><input id="fOrt" type="text" value="' + escapeHtml(k.ort || '') + '"></div>';
   html += '</div>';
-  html += '<label>Telefon</label><input id="fTelefon" type="text" value="' + escapeHtml(k.telefon || '') + '">';
+  html += '<label>Telefon</label><input id="fTelefon" type="text" autocomplete="off" autocorrect="off" name="tel-freitext" value="' + escapeHtml(k.telefon || '') + '">';
   html += '<label>E-Mail</label><input id="fEmail" type="email" value="' + escapeHtml(k.email || '') + '">';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
   html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde in Papierkorb verschieben</button>';
