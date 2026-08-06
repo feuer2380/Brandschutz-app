@@ -200,6 +200,7 @@
     .pb-tabelle thead{ display:table-header-group; }
     .pb-tabelle thead tr{ page-break-inside:avoid; break-inside:avoid; page-break-after:avoid; break-after:avoid; }
     .pb-kopfzeile, .pb-kundenbox{ page-break-inside:avoid; break-inside:avoid; }
+    .pb-fuellgruppe{ page-break-inside:avoid; break-inside:avoid; }
   }
 </style>
 </head>
@@ -2844,6 +2845,7 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   reihenfolge.forEach(function(standort){
     var zeilen = gruppen[standort];
     var summenStandort = summeProEinheitDruck(zeilen);
+    html += '<div class="pb-fuellgruppe">';
     html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(standort) + '</h3>';
     html += '<div class="meta2" style="margin-bottom:6px;">' + anzahlFlaschen(zeilen) + ' Flasche' + (anzahlFlaschen(zeilen) === 1 ? '' : 'n') + ' &middot; ' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(summenStandort) + '</div>';
     html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Serien-Nr.</th><th>Datum/Uhrzeit</th><th>Menge</th></tr></thead><tbody>';
@@ -2851,6 +2853,7 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
       html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td></tr>';
     });
     html += '</tbody></table>';
+    html += '</div>';
   });
 
   html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
