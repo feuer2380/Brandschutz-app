@@ -376,6 +376,7 @@ var state = {
   kundenSuche: '',
   pruefungFilter: 'alle',
   pruefungOffenAufgeklappt: {},
+  pruefungTage: '',
   geraeteFilter: 'alle',
   statFilter: 'tag'
 };
@@ -1329,6 +1330,14 @@ function renderPruefungen(){
 
   html += '<input id="pruefungSuchInput" type="text" placeholder="Suche nach Kunde, Gerät oder Standort..." value="' + escapeHtml(state.pruefungSuche || '') + '" style="margin-bottom:12px;">';
 
+  html += '<div class="row" style="align-items:center; gap:8px; margin-bottom:12px;">';
+  html += '<label style="white-space:nowrap; margin:0;">Zeitraum (Tage)</label>';
+  html += '<input id="pruefungTageInput" type="number" inputmode="numeric" min="1" placeholder="z.B. 365" value="' + (state.pruefungTage ? escapeHtml(String(state.pruefungTage)) : '') + '" style="max-width:120px;">';
+  if(state.pruefungTage){
+    html += '<button class="btn small secondary" id="pruefungTageZuruecksetzen">Zurücksetzen</button>';
+  }
+  html += '</div>';
+
   var filter = state.pruefungFilter || 'alle';
   var filterOptionen = [
     {key:'alle', label:'Alle'},
@@ -1347,8 +1356,12 @@ function renderPruefungen(){
   html += '<button class="btn block secondary" id="terminlisteBtn" style="margin-bottom:16px;">Terminliste drucken / per Mail senden</button>';
 
   var ergebnisFilter = (filter === 'reparatur' || filter === 'ausgeschieden');
+  var tageLimit = state.pruefungTage ? parseInt(state.pruefungTage, 10) : null;
 
   var offen = ergebnisFilter ? [] : offenAlle.filter(function(p){
+    if(tageLimit){
+      return daysUntil(p.datum) <= tageLimit;
+    }
     var cls = statusForDate(p.datum).cls;
     if(filter === 'alle') return cls === 'warn' || cls === 'soon';
     return cls === filter;
@@ -3735,6 +3748,24 @@ function bindDynamic(){
       render();
       var neu = document.getElementById('pruefungSuchInput');
       if(neu){ neu.focus(); try{ neu.setSelectionRange(pos, pos); } catch(e){} }
+    };
+  }
+
+  var pruefungTageInput = document.getElementById('pruefungTageInput');
+  if(pruefungTageInput){
+    pruefungTageInput.oninput = function(){
+      state.pruefungTage = pruefungTageInput.value ? pruefungTageInput.value : '';
+      var pos = pruefungTageInput.selectionStart;
+      render();
+      var neu = document.getElementById('pruefungTageInput');
+      if(neu){ neu.focus(); try{ neu.setSelectionRange(pos, pos); } catch(e){} }
+    };
+  }
+  var pruefungTageZuruecksetzen = document.getElementById('pruefungTageZuruecksetzen');
+  if(pruefungTageZuruecksetzen){
+    pruefungTageZuruecksetzen.onclick = function(){
+      state.pruefungTage = '';
+      render();
     };
   }
 
