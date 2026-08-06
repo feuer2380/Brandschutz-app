@@ -1349,8 +1349,9 @@ function renderPruefungen(){
   var ergebnisFilter = (filter === 'reparatur' || filter === 'ausgeschieden');
 
   var offen = ergebnisFilter ? [] : offenAlle.filter(function(p){
-    if(filter === 'alle') return true;
-    return statusForDate(p.datum).cls === filter;
+    var cls = statusForDate(p.datum).cls;
+    if(filter === 'alle') return cls === 'warn' || cls === 'soon';
+    return cls === filter;
   });
 
   if(!ergebnisFilter){
