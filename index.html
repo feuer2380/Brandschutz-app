@@ -2179,11 +2179,15 @@ function modalGeraetBearbeiten(geraetId){
       document.getElementById('fDatum').value = new Date().toISOString().substring(0,10);
     };
     document.getElementById('btnDatum1J').onclick = function(){
-      var d = new Date(); d.setFullYear(d.getFullYear()+1); d = naechsterWerktag(d);
+      var basisWert = document.getElementById('fLetztePruefung') ? document.getElementById('fLetztePruefung').value : '';
+      var d = basisWert ? new Date(basisWert + 'T12:00:00') : new Date();
+      d.setFullYear(d.getFullYear()+1); d = naechsterWerktag(d);
       document.getElementById('fDatum').value = d.toISOString().substring(0,10);
     };
     document.getElementById('btnDatum2J').onclick = function(){
-      var d = new Date(); d.setFullYear(d.getFullYear()+2); d = naechsterWerktag(d);
+      var basisWert = document.getElementById('fLetztePruefung') ? document.getElementById('fLetztePruefung').value : '';
+      var d = basisWert ? new Date(basisWert + 'T12:00:00') : new Date();
+      d.setFullYear(d.getFullYear()+2); d = naechsterWerktag(d);
       document.getElementById('fDatum').value = d.toISOString().substring(0,10);
     };
   } catch(err){ console.error('Datumsknöpfe Fehler', err); }
