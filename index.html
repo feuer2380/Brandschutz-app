@@ -887,7 +887,12 @@ function renderGeraetCheck(geraetId){
   if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
   html += '<div class="section-title" style="margin-top:12px;">Gerät</div>';
   html += '<div class="w" style="font-size:15px; font-weight:600;">' + escapeHtml(g.typ) + '</div>';
-  if(g.standort) html += '<div class="meta">Standort: ' + escapeHtml(g.standort) + '</div>';
+  var istPerchtlZisch = (g.kategorie === 'Perchtl Zisch');
+  if(istPerchtlZisch && !g.ausgeschieden){
+    html += '<label style="margin-top:8px;">Standort</label><input id="checkStandort" type="text" value="' + escapeHtml(g.standort || '') + '" placeholder="z.B. Weinfest Mödling">';
+  } else if(g.standort){
+    html += '<div class="meta">Standort: ' + escapeHtml(g.standort) + '</div>';
+  }
   if(g.baujahr) html += '<div class="meta">Baujahr: ' + g.baujahr + '</div>';
   if(g.seriennummer) html += '<div class="meta">Seriennummer: ' + escapeHtml(g.seriennummer) + '</div>';
   if(bj) html += '<div style="margin-top:6px;"><span class="badge ' + bj.cls + '">' + bj.label + '</span></div>';
@@ -1061,6 +1066,8 @@ function schnellErgebnisSetzen(geraetId, ergebnis){
 function checkAbschliessen(geraetId, ergebnis){
   state.vorgewaehltesErgebnis = null;
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var standortEl = document.getElementById('checkStandort');
+  if(standortEl) g.standort = standortEl.value.trim();
   var bemerkungEl = document.getElementById('checkBemerkung');
   var bemerkung = bemerkungEl ? bemerkungEl.value.trim() : '';
   if(!bemerkung){
