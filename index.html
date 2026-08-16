@@ -1251,13 +1251,17 @@ function renderKundeDetail(kundeId){
     var geraeteSortiert = geraete.slice().sort(function(a,b){
       return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
     });
+    var katZaehler1 = {};
     html += '<div class="card">';
     geraeteSortiert.forEach(function(g, idx){
+      var katKey = g.kategorie || 'Feuerlöscher';
+      katZaehler1[katKey] = (katZaehler1[katKey] || 0) + 1;
+      var katNr = katZaehler1[katKey];
       var st = statusForDate(g.naechstePruefung);
       var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
-      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      html += '<div><strong>Nr. ' + katNr + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
       html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
       if(bj) html += '<span class="badge ' + bj.cls + '">' + bj.label + '</span>';
@@ -3288,7 +3292,11 @@ function modalSammelbericht(kundeId){
   if(geraeteSortiert.length === 0){
     html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
   } else {
+    var katZaehler2 = {};
     geraeteSortiert.forEach(function(g, idx){
+      var katKey2 = g.kategorie || 'Feuerlöscher';
+      katZaehler2[katKey2] = (katZaehler2[katKey2] || 0) + 1;
+      var katNr2 = katZaehler2[katKey2];
       var istRWA = (g.kategorie || 'Feuerlöscher') === 'RWA-Anlage';
       var aktErg = auswahl[g.id];
       var letzte = letztePruefungFuerGeraet(g.id);
@@ -3296,7 +3304,7 @@ function modalSammelbericht(kundeId){
       var klasse = function(key){ return aktErg === key ? 'btn small sbErgBtn active' : 'btn small secondary sbErgBtn'; };
       var stil = function(key){ return 'flex:1;' + (aktErg === key ? ' background:' + farbe(key) + ';' : ''); };
       html += '<div class="card" data-geraetkarte="' + g.id + '">';
-      html += '<div><strong>Nr. ' + (idx+1) + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      html += '<div><strong>Nr. ' + katNr2 + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       if(istRWA){
         html += '<div style="margin-top:10px;">';
         einzelErgebnisse[g.id].forEach(function(d, dIdx){
@@ -3479,7 +3487,7 @@ function modalSammelbericht(kundeId){
         var weiter = function(naechstePruefungWert){
           var bjSnap = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
           snapshot.push({
-            nr: idx+1,
+            nr: katNr2,
             typ: g.typ,
             kategorie: g.kategorie || 'Feuerlöscher',
             standort: g.standort || '',
