@@ -1256,7 +1256,7 @@ function renderKundeDetail(kundeId){
     geraeteSortiert.forEach(function(g, idx){
       var katKey = g.kategorie || 'Feuerlöscher';
       katZaehler1[katKey] = (katZaehler1[katKey] || 0) + 1;
-      var katNr = katZaehler1[katKey];
+      var katNr = g.nr || katZaehler1[katKey];
       var st = statusForDate(g.naechstePruefung);
       var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
@@ -2072,6 +2072,9 @@ function modalGeraetBearbeiten(geraetId){
     html += '<input type="date" id="fLetzteInnenrevision" value="' + (g.letzteInnenrevision || '') + '">';
     html += '<button type="button" class="btn secondary small" id="btnInnenrevSpeichern" style="margin-top:8px;">Innenrevisions-Datum speichern</button>';
     html += '<button type="button" class="btn secondary small" id="btnInnenrevErledigt" style="margin-top:8px; margin-left:8px;">Heute als durchgeführt markieren</button>';
+    if(g.letzteInnenrevision){
+      html += '<button type="button" class="btn secondary small" id="btnInnenrevLoeschen" style="margin-top:8px; margin-left:8px; color:#c23f12; border-color:#e6b19d;">Datum löschen</button>';
+    }
     html += '</div>';
   }
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
@@ -2170,10 +2173,24 @@ function modalGeraetBearbeiten(geraetId){
   if(!g.ausgeschieden){
     document.getElementById('fAusscheiden').onclick = function(){
       customConfirm('Gerät als ausgeschieden markieren? Es erscheint dann in der Liste der ausgeschiedenen Feuerlöscher (Reiter Berichte) und nicht mehr in der aktiven Geräteliste.', function(){
+        var altNr = berechneAktuelleGeraeteNr(g);
+        var kat = g.kategorie || 'Feuerlöscher';
         g.ausgeschieden = true;
         g.ausgeschiedenAm = new Date().toISOString();
         dbPut('geraete', g, function(){
-          loadAll(function(){ render(); closeModal(); toast('Gerät ausgeschieden'); });
+          loadAll(function(){
+            render(); closeModal(); toast('Gerät ausgeschieden');
+            if(altNr){
+              customConfirm('Nr. ' + altNr + ' (' + escapeHtml(kat) + ') für ein Ersatzgerät reservieren? Der nächste neu angelegte ' + escapeHtml(kat) + ' bei diesem Kunden bekommt dann automatisch wieder Nr. ' + altNr + '.', function(){
+                var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+                if(!k) return;
+                if(!k.reserveNummern) k.reserveNummern = {};
+                if(!k.reserveNummern[kat]) k.reserveNummern[kat] = [];
+                if(k.reserveNummern[kat].indexOf(altNr) === -1) k.reserveNummern[kat].push(altNr);
+                dbPut('kunden', k, function(){ loadAll(function(){ render(); toast('Nummer ' + altNr + ' reserviert'); }); });
+              });
+            }
+          });
         });
       });
     };
@@ -2237,10 +2254,20 @@ function modalGeraetBearbeiten(geraetId){
     if(btnInnenrevSpeichern){
       btnInnenrevSpeichern.onclick = function(){
         var val = document.getElementById('fLetzteInnenrevision').value;
-        if(!val) return;
-        g.letzteInnenrevision = val;
+        g.letzteInnenrevision = val || null;
         dbPut('geraete', g, function(){
-          loadAll(function(){ render(); closeModal(); toast('Innenrevisions-Datum gespeichert'); });
+          loadAll(function(){ render(); closeModal(); toast(val ? 'Innenrevisions-Datum gespeichert' : 'Innenrevisions-Datum gelöscht'); });
+        });
+      };
+    }
+    var btnInnenrevLoeschen = document.getElementById('btnInnenrevLoeschen');
+    if(btnInnenrevLoeschen){
+      btnInnenrevLoeschen.onclick = function(){
+        customConfirm('Innenrevisions-Datum wirklich löschen?', function(){
+          g.letzteInnenrevision = null;
+          dbPut('geraete', g, function(){
+            loadAll(function(){ render(); closeModal(); toast('Innenrevisions-Datum gelöscht'); });
+          });
         });
       };
     }
@@ -2260,6 +2287,18 @@ function findeDuplikatExterneId(externeId, eigeneGeraetId){
   if(!treffer) return null;
   var k = state.kunden.filter(function(x){ return x.id === treffer.kundeId; })[0];
   return { geraet: treffer, kunde: k };
+}
+
+
+function berechneAktuelleGeraeteNr(g){
+  if(g.nr) return g.nr;
+  var kat = g.kategorie || 'Feuerlöscher';
+  var geschwister = state.geraete.filter(function(x){ return x.kundeId === g.kundeId && !x.ausgeschieden && (x.kategorie || 'Feuerlöscher') === kat; });
+  geschwister.sort(function(a,b){ return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1; });
+  for(var i=0; i<geschwister.length; i++){
+    if(geschwister[i].id === g.id) return i+1;
+  }
+  return null;
 }
 
 function customConfirm(nachricht, aufJa){
@@ -2330,7 +2369,7 @@ function buildTypChips(){
   return html;
 }
 
-function bindKategorieToggle(){
+function bindKategorieToggle(kundeIdFuerReserve){
   var sel = document.getElementById('fKategorie');
   var block = document.getElementById('fjBlockBaujahr');
   var blockPZ = document.getElementById('fjBlockPerchtlZisch');
@@ -2339,6 +2378,8 @@ function bindKategorieToggle(){
   var typLabel = document.getElementById('fTypLabel');
   var typInput = document.getElementById('fTyp');
   var intervallSel = document.getElementById('fIntervall');
+  var nrFeld = document.getElementById('fNr');
+  var hinweisReserve = document.getElementById('fjHinweisReserve');
   if(!sel) return;
   function aktualisieren(){
     var istBegehung = (sel.value === 'Brandschutzbegehung');
@@ -2350,6 +2391,18 @@ function bindKategorieToggle(){
     if(typInput) typInput.placeholder = istBegehung ? 'z.B. Begehung Herbst 2026' : 'z.B. Pulverlöscher 6kg';
     if(intervallSel && !intervallSel.getAttribute('data-manuell')){
       intervallSel.value = (sel.value === 'Feuerlöscher') ? '24' : (istBegehung ? '3' : '12');
+    }
+    if(kundeIdFuerReserve && nrFeld && hinweisReserve){
+      var k = state.kunden.filter(function(x){ return x.id === kundeIdFuerReserve; })[0];
+      var reserve = ((k && k.reserveNummern) || {})[sel.value] || [];
+      reserve = reserve.slice().sort(function(a,b){return a-b;});
+      if(reserve.length){
+        nrFeld.value = reserve[0];
+        hinweisReserve.textContent = 'Reservierte Nummer ' + reserve[0] + ' von ausgeschiedenem Gerät wird vorgeschlagen.';
+      } else {
+        nrFeld.value = '';
+        hinweisReserve.textContent = '';
+      }
     }
   }
   aktualisieren();
@@ -2378,6 +2431,10 @@ function modalNeuesGeraet(kundeId){
     html += '<option' + (kat === vorKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
+  var kReserve = (state.kunden.filter(function(x){ return x.id === kundeId; })[0] || {}).reserveNummern || {};
+  var reservierteFuerKat = (kReserve[vorKategorie] || []).slice().sort(function(a,b){return a-b;});
+  html += '<div id="fjHinweisReserve" class="meta" style="margin-bottom:6px;"></div>';
+  html += '<label>Nr. (leer lassen für automatisch)</label><input id="fNr" type="number" inputmode="numeric" placeholder="automatisch" value="' + (reservierteFuerKat.length ? reservierteFuerKat[0] : '') + '">';
   html += '<label id="fTypLabel">Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
   html += buildTypDatalist();
   html += buildTypChips();
@@ -2414,11 +2471,14 @@ function modalNeuesGeraet(kundeId){
     var datum = document.getElementById('fDatum').value;
     var baujahrVal = document.getElementById('fBaujahr').value;
     var neueExterneId = document.getElementById('fExterneId').value.trim();
+    var nrVal = document.getElementById('fNr').value;
+    var neueKategorie = document.getElementById('fKategorie').value;
     var g = {
       id: uid(),
       kundeId: kundeId,
       typ: typ,
-      kategorie: document.getElementById('fKategorie').value,
+      kategorie: neueKategorie,
+      nr: nrVal ? parseInt(nrVal, 10) : null,
       baujahr: baujahrVal ? parseInt(baujahrVal, 10) : null,
       intervallMonate: parseInt(document.getElementById('fIntervall').value, 10),
       erstelltAm: new Date().toISOString(),
@@ -2441,6 +2501,14 @@ function modalNeuesGeraet(kundeId){
       naechstePruefung: g.naechstePruefung,
       intervallMonate: g.intervallMonate
     };
+    var kFuerReserve = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+    if(g.nr && kFuerReserve && kFuerReserve.reserveNummern && kFuerReserve.reserveNummern[neueKategorie]){
+      var idxReserve = kFuerReserve.reserveNummern[neueKategorie].indexOf(g.nr);
+      if(idxReserve !== -1){
+        kFuerReserve.reserveNummern[neueKategorie].splice(idxReserve, 1);
+        dbPut('kunden', kFuerReserve, function(){});
+      }
+    }
     dbPut('geraete', g, function(){
       if(datum){
         var p = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: typ, datum: datum, erledigt: false };
@@ -2461,7 +2529,7 @@ function modalNeuesGeraet(kundeId){
   };
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
-  try { bindKategorieToggle(); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
+  try { bindKategorieToggle(kundeId); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
 
   try {
     function aktualisiereNaechstePruefungAusPruefdatum(){
@@ -3296,7 +3364,7 @@ function modalSammelbericht(kundeId){
     geraeteSortiert.forEach(function(g, idx){
       var katKey2 = g.kategorie || 'Feuerlöscher';
       katZaehler2[katKey2] = (katZaehler2[katKey2] || 0) + 1;
-      var katNr2 = katZaehler2[katKey2];
+      var katNr2 = g.nr || katZaehler2[katKey2];
       var istRWA = (g.kategorie || 'Feuerlöscher') === 'RWA-Anlage';
       var aktErg = auswahl[g.id];
       var letzte = letztePruefungFuerGeraet(g.id);
@@ -3406,7 +3474,7 @@ function modalSammelbericht(kundeId){
           var geraeteNeuNummeriert = gruppenNachKategorie[kat].map(function(g, i){
             var kopie = {};
             for(var key in g){ kopie[key] = g[key]; }
-            kopie.nr = i + 1;
+            kopie.nr = g.nr || (i + 1);
             return kopie;
           });
           return {
