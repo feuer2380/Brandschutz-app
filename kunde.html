@@ -74,6 +74,38 @@
     color: #6b6258;
     line-height: 1.5;
   }
+  .geraeteliste-zeile {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px solid #eee;
+    font-size: 13px;
+  }
+  .geraeteliste-zeile:first-of-type { border-top: none; }
+  .geraeteliste-zeile .gl-name { font-weight: 600; }
+  .geraeteliste-zeile .gl-meta { font-size: 11px; color: #6b6258; }
+  .btn-druck {
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #2a2622;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  #druckBereich { display: none; }
+  @media print {
+    body > *:not(#druckBereich) { display: none !important; }
+    #druckBereich { display: block !important; }
+    body { background: #fff; padding: 0; }
+  }
+  #druckBereich table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 14px; }
+  #druckBereich th, #druckBereich td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  #druckBereich th { background: #f0f0f0; }
 </style>
 </head>
 <body>
@@ -86,6 +118,7 @@
   Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf<br>
   Tel 0676/305 83 98 &middot; info@loeschtechnik.at
 </div>
+<div id="druckBereich"></div>
 
 <script>
 var FIREBASE_CONFIG = {
@@ -148,8 +181,59 @@ function render(g){
   html += '</div>';
   html += '<div class="meta">Diese Ansicht wird automatisch aktualisiert, sobald bei Ihnen eine Prüfung durchgeführt wurde.</div>';
   html += '</div>';
+  html += '<div id="alleGeraeteBereich"></div>';
   document.getElementById('inhalt').innerHTML = html;
   protokolliereZugriff(g);
+  ladeAlleGeraete(g);
+}
+
+function ladeAlleGeraete(g){
+  if(!g.kundennummer) return;
+  firebase.firestore().collection('oeffentlich_geraete').where('kundennummer', '==', g.kundennummer).get().then(function(snap){
+    var alle = [];
+    snap.forEach(function(doc){ alle.push(doc.data()); });
+    if(alle.length <= 1) return;
+    alle.sort(function(a,b){ return (a.standort || '').localeCompare(b.standort || ''); });
+    zeigeGeraeteliste(alle, g.kundenname);
+    baueDruckbereich(alle, g.kundenname);
+  }).catch(function(err){ console.error('Geräteliste-Fehler', err); });
+}
+
+function zeigeGeraeteliste(alle, kundenname){
+  var html = '<div class="card">';
+  html += '<h2 style="margin-bottom:6px;">Alle Ihre Geräte (' + alle.length + ')</h2>';
+  alle.forEach(function(x){
+    var st = statusBadge(x.naechstePruefung);
+    html += '<div class="geraeteliste-zeile">';
+    html += '<div><div class="gl-name">' + escapeHtml(x.typ || x.kategorie || 'Gerät') + '</div><div class="gl-meta">' + escapeHtml(x.standort || '') + '</div></div>';
+    html += '<span class="badge ' + st.cls + '" style="margin-top:0;">' + escapeHtml(st.label) + '</span>';
+    html += '</div>';
+  });
+  html += '<button class="btn-druck" id="druckBtn">Prüfbericht als PDF speichern</button>';
+  html += '<div class="meta">Öffnet die Druckansicht Ihres Geräts/Browsers &ndash; dort "Als PDF sichern" bzw. "In Dateien sichern" wählen.</div>';
+  html += '</div>';
+  document.getElementById('alleGeraeteBereich').innerHTML = html;
+  document.getElementById('druckBtn').onclick = function(){ window.print(); };
+}
+
+function baueDruckbereich(alle, kundenname){
+  var heute = new Date();
+  var heuteStr = fmtDate(heute.toISOString());
+  var html = '';
+  html += '<div style="padding:24px; font-family:-apple-system,Arial,sans-serif;">';
+  html += '<h1 style="font-size:18px; color:#c23f12; margin-bottom:2px;">Feuerlöschtechnik Janiba</h1>';
+  html += '<div style="font-size:12px; color:#555; margin-bottom:16px;">Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at</div>';
+  html += '<h2 style="font-size:15px; margin-bottom:2px;">Prüfbericht &ndash; Geräteübersicht</h2>';
+  html += '<div style="font-size:12px; color:#555; margin-bottom:10px;">Kunde: ' + escapeHtml(kundenname || '') + ' &middot; Stand: ' + heuteStr + '</div>';
+  html += '<table><thead><tr><th>Typ</th><th>Standort</th><th>Letzte Prüfung</th><th>Nächste Prüfung</th><th>Status</th></tr></thead><tbody>';
+  alle.forEach(function(x){
+    var st = statusBadge(x.naechstePruefung);
+    html += '<tr><td>' + escapeHtml(x.typ || x.kategorie || '') + '</td><td>' + escapeHtml(x.standort || '') + '</td><td>' + fmtDate(x.letztePruefung) + '</td><td>' + fmtDate(x.naechstePruefung) + '</td><td>' + escapeHtml(st.label) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  html += '<div style="font-size:11px; color:#888; margin-top:16px;">Automatisch erstellter Prüfbericht aus dem Kundenportal von Feuerlöschtechnik Janiba, ersetzt keine offiziellen Prüfprotokolle.</div>';
+  html += '</div>';
+  document.getElementById('druckBereich').innerHTML = html;
 }
 
 function protokolliereZugriff(g){
