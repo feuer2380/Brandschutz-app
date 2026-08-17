@@ -261,7 +261,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
 var OEFFENTLICH_STORE = 'oeffentlich_geraete';
@@ -341,6 +341,7 @@ function baueOeffentlichesGeraet(g, k){
   return {
     id: g.id,
     kundenname: k ? (k.name || '') : '',
+    kundennummer: k ? (k.kundennummer || null) : null,
     typ: g.typ || '',
     kategorie: g.kategorie || 'Feuerlöscher',
     standort: g.standort || '',
@@ -420,6 +421,7 @@ var state = {
   sammelberichte: [],
   begehungsberichte: [],
   dokumente: [],
+  portal_zugriffe: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
   pruefungOffenAufgeklappt: {},
@@ -441,7 +443,10 @@ function loadAll(cb){
             state.begehungsberichte = bg;
             dbGetAll('dokumente', function(dk){
               state.dokumente = dk;
-              cb();
+              dbGetAll('portal_zugriffe', function(pz){
+                state.portal_zugriffe = pz;
+                cb();
+              });
             });
           });
         });
@@ -1796,6 +1801,25 @@ function renderStatistik(){
       html += '</div>';
     });
   }
+
+  html += '<div class="section-title" style="margin-top:20px;">Portal-Zugriffe</div>';
+  var zugriffe = (state.portal_zugriffe || []).slice().sort(function(a,b){
+    return new Date(b.zeitpunkt) - new Date(a.zeitpunkt);
+  });
+  if(zugriffe.length === 0){
+    html += '<div class="empty">Noch kein Kunde hat das Portal aufgerufen</div>';
+  } else {
+    zugriffe.slice(0, 50).forEach(function(z){
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + escapeHtml(z.kundenname || 'Unbekannt') + '</h3>' + (z.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(z.kundennummer) + '</span>' : '') + '</div>';
+      html += '<div class="meta">' + escapeHtml(z.typ || '') + (z.standort ? ' &middot; ' + escapeHtml(z.standort) : '') + '</div>';
+      html += '<div class="meta">' + fmtDate(z.zeitpunkt) + ' um ' + fmtZeit(z.zeitpunkt) + ' Uhr</div>';
+      html += '</div>';
+    });
+    if(zugriffe.length > 50){
+      html += '<div class="meta" style="text-align:center;">... und ' + (zugriffe.length - 50) + ' weitere</div>';
+    }
+  }
   return html;
 }
 
@@ -1986,7 +2010,7 @@ function modalKundeBearbeiten(kundeId){
   html += '<div class="row" style="gap:8px;"><input id="fTelefon" type="text" autocomplete="off" autocorrect="off" name="tel-freitext" value="' + escapeHtml(k.telefon || '') + '" style="flex:1;"><button type="button" class="btn secondary" id="fTelefonLeerBtn" style="flex:0 0 auto; padding:0 16px;">␣</button></div>';
   html += '<label>E-Mail</label><input id="fEmail" type="email" value="' + escapeHtml(k.email || '') + '">';
   html += '<label style="display:flex; align-items:center; gap:8px; margin-top:14px;"><input type="checkbox" id="fFreigabe" style="width:auto;"' + (k.freigabe ? ' checked' : '') + '> Kundenportal freigegeben (Kunde darf QR-Code scannen und Prüfstatus einsehen)</label>';
-  html += '<div class="meta" style="margin-top:2px;">Nur nach unterschriebenem Wartungsvertrag aktivieren.</div>';
+  html += '<div class="meta" style="margin-top:2px;">Nur nach unterschriebenem Wartungsvertrag aktivieren. Die Kundennummer oben dient dem Kunden als Zugangscode.</div>';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
   html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde in Papierkorb verschieben</button>';
   openModal(html);
@@ -2066,6 +2090,10 @@ function modalQrGeraet(geraetId){
   html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
   if(!k || !k.freigabe){
     html += '<div class="meta" style="color:#c23f12; margin-bottom:6px;">Hinweis: Kundenportal für diesen Kunden ist noch nicht freigegeben. Der Code funktioniert erst, wenn im Kundendatensatz "Kundenportal freigegeben" aktiviert ist. Innerhalb der App könnt ihr diesen Code trotzdem wie gewohnt scannen.</div>';
+  } else if(!k.kundennummer){
+    html += '<div class="meta" style="color:#c23f12; margin-bottom:6px;">Hinweis: Für diesen Kunden ist keine Kundennummer hinterlegt. Ohne Zugangscode kann jeder mit dem Code die Daten sehen. Kundennummer im Kundendatensatz vergeben.</div>';
+  } else {
+    html += '<div class="meta" style="margin-bottom:6px;">Zugangscode für den Kunden: <b>' + escapeHtml(k.kundennummer) + '</b> (Kundennummer, dem Kunden mitteilen)</div>';
   }
   html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Weißen Rand beim Zuschneiden nicht wegschneiden.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
