@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prüfstatus - Feuerlöschtechnik Janiba</title>
+<link rel="icon" href="data:,">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f4f2ef;
+    color: #2a2622;
+    padding: 16px;
+  }
+  .kopf {
+    text-align: center;
+    padding: 10px 0 18px 0;
+  }
+  .kopf h1 {
+    font-size: 17px;
+    margin: 4px 0 0 0;
+    color: #c23f12;
+  }
+  .kopf .sub {
+    font-size: 12px;
+    color: #6b6258;
+    margin-top: 2px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    max-width: 480px;
+    margin: 0 auto 14px auto;
+  }
+  .card h2 {
+    font-size: 18px;
+    margin: 0 0 4px 0;
+  }
+  .zeile {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid #eee;
+    font-size: 14px;
+  }
+  .zeile:first-of-type { border-top: none; }
+  .zeile .label { color: #6b6258; }
+  .zeile .wert { font-weight: 600; text-align: right; }
+  .badge {
+    display: inline-block;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 6px;
+  }
+  .badge.ok { background: #e3f3e6; color: #226b32; }
+  .badge.soon { background: #fdf1d8; color: #8a5a00; }
+  .badge.warn { background: #fbe2db; color: #a3300d; }
+  .meta { font-size: 12px; color: #6b6258; margin-top: 10px; line-height: 1.4; }
+  .zustand { text-align: center; padding: 40px 16px; color: #6b6258; font-size: 14px; }
+  .kontakt {
+    max-width: 480px;
+    margin: 20px auto 0 auto;
+    text-align: center;
+    font-size: 12px;
+    color: #6b6258;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="kopf">
+  <h1>Feuerlöschtechnik Janiba</h1>
+  <div class="sub">Prüfstatus Ihrer Anlage</div>
+</div>
+<div id="inhalt"><div class="zustand">Lädt&hellip;</div></div>
+<div class="kontakt">
+  Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf<br>
+  Tel 0676/305 83 98 &middot; info@loeschtechnik.at
+</div>
+
+<script>
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBLcQlXeHcwN-4XXL6Wx7dcpN_bZQhK3_o",
+  authDomain: "brandschutz-janiba.firebaseapp.com",
+  projectId: "brandschutz-janiba",
+  storageBucket: "brandschutz-janiba.firebasestorage.app",
+  messagingSenderId: "466445019724",
+  appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
+};
+
+function escapeHtml(s){
+  var d = document.createElement('div');
+  d.textContent = (s === undefined || s === null) ? '' : String(s);
+  return d.innerHTML;
+}
+
+function fmtDate(iso){
+  if(!iso) return '-';
+  var teile = iso.substring(0,10).split('-');
+  if(teile.length !== 3) return iso;
+  return teile[2] + '.' + teile[1] + '.' + teile[0];
+}
+
+function daysUntil(iso){
+  var heute = new Date();
+  heute.setHours(0,0,0,0);
+  var d = new Date(iso);
+  return Math.round((d - heute) / 86400000);
+}
+
+function statusBadge(iso){
+  if(!iso) return { cls: 'ok', label: 'Kein Termin hinterlegt' };
+  var du = daysUntil(iso);
+  if(du < 0) return { cls: 'warn', label: 'Prüfung überfällig' };
+  if(du <= 30) return { cls: 'soon', label: 'Prüfung bald fällig (' + du + ' Tage)' };
+  return { cls: 'ok', label: 'In Ordnung' };
+}
+
+function zeigeFehler(text){
+  document.getElementById('inhalt').innerHTML = '<div class="zustand">' + escapeHtml(text) + '</div>';
+}
+
+function render(g){
+  var st = statusBadge(g.naechstePruefung);
+  var html = '<div class="card">';
+  html += '<h2>' + escapeHtml(g.typ || g.kategorie || 'Gerät') + '</h2>';
+  if(g.kundenname) html += '<div class="meta" style="margin-top:0;">' + escapeHtml(g.kundenname) + '</div>';
+  html += '<span class="badge ' + st.cls + '">' + escapeHtml(st.label) + '</span>';
+  html += '<div style="margin-top:14px;">';
+  if(g.standort) html += '<div class="zeile"><span class="label">Standort</span><span class="wert">' + escapeHtml(g.standort) + '</span></div>';
+  html += '<div class="zeile"><span class="label">Letzte Prüfung</span><span class="wert">' + fmtDate(g.letztePruefung) + '</span></div>';
+  html += '<div class="zeile"><span class="label">Nächste Prüfung</span><span class="wert">' + fmtDate(g.naechstePruefung) + '</span></div>';
+  if(g.innenrevisionNoetig){
+    html += '<div class="zeile"><span class="label">Innenrevision</span><span class="wert">' + escapeHtml(g.innenrevisionLabel || '-') + '</span></div>';
+    if(g.letzteInnenrevision){
+      html += '<div class="zeile"><span class="label">Innenrevision zuletzt</span><span class="wert">' + fmtDate(g.letzteInnenrevision) + '</span></div>';
+    }
+  }
+  html += '</div>';
+  html += '<div class="meta">Diese Ansicht wird automatisch aktualisiert, sobald bei Ihnen eine Prüfung durchgeführt wurde.</div>';
+  html += '</div>';
+  document.getElementById('inhalt').innerHTML = html;
+}
+
+function start(){
+  var params = new URLSearchParams(window.location.search);
+  var id = params.get('id');
+  if(!id){
+    zeigeFehler('Kein Gerät angegeben. Bitte den QR-Code am Feuerlöscher erneut scannen.');
+    return;
+  }
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    var db = firebase.firestore();
+    db.collection('oeffentlich_geraete').doc(id).get().then(function(doc){
+      if(!doc.exists){
+        zeigeFehler('Für dieses Gerät sind aktuell keine Daten freigegeben. Bitte kontaktieren Sie Feuerlöschtechnik Janiba.');
+        return;
+      }
+      render(doc.data());
+    }).catch(function(err){
+      console.error(err);
+      zeigeFehler('Die Daten konnten nicht geladen werden. Bitte Internetverbindung prüfen und Seite neu laden.');
+    });
+  } catch(err){
+    console.error(err);
+    zeigeFehler('Verbindung fehlgeschlagen. Bitte Seite neu laden.');
+  }
+}
+
+start();
+</script>
+</body>
+</html>
