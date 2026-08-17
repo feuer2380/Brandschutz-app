@@ -149,6 +149,25 @@ function render(g){
   html += '<div class="meta">Diese Ansicht wird automatisch aktualisiert, sobald bei Ihnen eine Prüfung durchgeführt wurde.</div>';
   html += '</div>';
   document.getElementById('inhalt').innerHTML = html;
+  protokolliereZugriff(g);
+}
+
+function protokolliereZugriff(g){
+  try {
+    var schonProtokolliert = sessionStorage.getItem('protokolliert_' + g.id);
+    if(schonProtokolliert) return;
+    sessionStorage.setItem('protokolliert_' + g.id, '1');
+  } catch(e){}
+  try {
+    firebase.firestore().collection('portal_zugriffe').add({
+      geraetId: g.id,
+      kundenname: g.kundenname || '',
+      kundennummer: g.kundennummer || '',
+      typ: g.typ || '',
+      standort: g.standort || '',
+      zeitpunkt: new Date().toISOString()
+    }).catch(function(err){ console.error('Protokoll-Fehler', err); });
+  } catch(e){}
 }
 
 function start(){
@@ -166,7 +185,18 @@ function start(){
         zeigeFehler('Für dieses Gerät sind aktuell keine Daten freigegeben. Bitte kontaktieren Sie Feuerlöschtechnik Janiba.');
         return;
       }
-      render(doc.data());
+      var g = doc.data();
+      if(g.kundennummer){
+        var freigeschaltet = false;
+        try { freigeschaltet = sessionStorage.getItem('zugang_' + id) === normalisiereCode(g.kundennummer); } catch(e){}
+        if(freigeschaltet){
+          render(g);
+        } else {
+          zeigeZugangsAbfrage(g, id);
+        }
+      } else {
+        render(g);
+      }
     }).catch(function(err){
       console.error(err);
       zeigeFehler('Die Daten konnten nicht geladen werden. Bitte Internetverbindung prüfen und Seite neu laden.');
@@ -175,6 +205,35 @@ function start(){
     console.error(err);
     zeigeFehler('Verbindung fehlgeschlagen. Bitte Seite neu laden.');
   }
+}
+
+function normalisiereCode(s){
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function zeigeZugangsAbfrage(g, id){
+  var html = '<div class="card">';
+  html += '<h2>Zugangscode</h2>';
+  html += '<div class="meta" style="margin-top:0;">Bitte Ihre Kundennummer eingeben, die Sie von Feuerlöschtechnik Janiba erhalten haben.</div>';
+  html += '<input id="pinInput" type="text" autocapitalize="characters" placeholder="z.B. K-1024" style="width:100%; margin-top:14px; padding:12px; font-size:18px; text-align:center; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">';
+  html += '<button id="pinBtn" style="width:100%; margin-top:12px; padding:12px; border:none; border-radius:8px; background:#c23f12; color:#fff; font-weight:700; font-size:15px;">Bestätigen</button>';
+  html += '<div id="pinFehler" class="meta" style="color:#a3300d; margin-top:8px; display:none;">Kundennummer nicht erkannt, bitte erneut versuchen.</div>';
+  html += '</div>';
+  document.getElementById('inhalt').innerHTML = html;
+  var input = document.getElementById('pinInput');
+  input.focus();
+  var pruefen = function(){
+    if(normalisiereCode(input.value) === normalisiereCode(g.kundennummer)){
+      try { sessionStorage.setItem('zugang_' + id, normalisiereCode(g.kundennummer)); } catch(e){}
+      render(g);
+    } else {
+      document.getElementById('pinFehler').style.display = 'block';
+      input.value = '';
+      input.focus();
+    }
+  };
+  document.getElementById('pinBtn').onclick = pruefen;
+  input.addEventListener('keydown', function(e){ if(e.key === 'Enter') pruefen(); });
 }
 
 start();
