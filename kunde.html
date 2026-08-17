@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prüfstatus - Feuerlöschtechnik Janiba</title>
+<title>Prüfstatus - Wolfgang Janiba Brandschutztechnik GmbH</title>
 <link rel="icon" href="data:,">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -110,12 +110,12 @@
 </head>
 <body>
 <div class="kopf">
-  <h1>Feuerlöschtechnik Janiba</h1>
+  <h1>Wolfgang Janiba Brandschutztechnik GmbH</h1>
   <div class="sub">Prüfstatus Ihrer Anlage</div>
 </div>
 <div id="inhalt"><div class="zustand">Lädt&hellip;</div></div>
 <div class="kontakt">
-  Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf<br>
+  Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf<br>
   Tel 0676/305 83 98 &middot; info@loeschtechnik.at
 </div>
 <div id="druckBereich"></div>
@@ -221,7 +221,7 @@ function baueDruckbereich(alle, kundenname){
   var heuteStr = fmtDate(heute.toISOString());
   var html = '';
   html += '<div style="padding:24px; font-family:-apple-system,Arial,sans-serif;">';
-  html += '<h1 style="font-size:18px; color:#c23f12; margin-bottom:2px;">Feuerlöschtechnik Janiba</h1>';
+  html += '<h1 style="font-size:18px; color:#c23f12; margin-bottom:2px;">Wolfgang Janiba Brandschutztechnik GmbH</h1>';
   html += '<div style="font-size:12px; color:#555; margin-bottom:16px;">Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at</div>';
   html += '<h2 style="font-size:15px; margin-bottom:2px;">Prüfbericht &ndash; Geräteübersicht</h2>';
   html += '<div style="font-size:12px; color:#555; margin-bottom:10px;">Kunde: ' + escapeHtml(kundenname || '') + ' &middot; Stand: ' + heuteStr + '</div>';
@@ -231,7 +231,7 @@ function baueDruckbereich(alle, kundenname){
     html += '<tr><td>' + escapeHtml(x.typ || x.kategorie || '') + '</td><td>' + escapeHtml(x.standort || '') + '</td><td>' + fmtDate(x.letztePruefung) + '</td><td>' + fmtDate(x.naechstePruefung) + '</td><td>' + escapeHtml(st.label) + '</td></tr>';
   });
   html += '</tbody></table>';
-  html += '<div style="font-size:11px; color:#888; margin-top:16px;">Automatisch erstellter Prüfbericht aus dem Kundenportal von Feuerlöschtechnik Janiba, ersetzt keine offiziellen Prüfprotokolle.</div>';
+  html += '<div style="font-size:11px; color:#888; margin-top:16px;">Automatisch erstellter Prüfbericht aus dem Kundenportal von Wolfgang Janiba Brandschutztechnik GmbH, ersetzt keine offiziellen Prüfprotokolle.</div>';
   html += '</div>';
   document.getElementById('druckBereich').innerHTML = html;
 }
@@ -265,7 +265,7 @@ function start(){
     var db = firebase.firestore();
     db.collection('oeffentlich_geraete').doc(id).get().then(function(doc){
       if(!doc.exists){
-        zeigeFehler('Für dieses Gerät sind aktuell keine Daten freigegeben. Bitte kontaktieren Sie Feuerlöschtechnik Janiba.');
+        zeigeFehler('Für dieses Gerät sind aktuell keine Daten freigegeben. Bitte kontaktieren Sie Wolfgang Janiba Brandschutztechnik GmbH.');
         return;
       }
       var g = doc.data();
@@ -297,7 +297,7 @@ function normalisiereCode(s){
 function zeigeZugangsAbfrage(g, id){
   var html = '<div class="card">';
   html += '<h2>Zugangscode</h2>';
-  html += '<div class="meta" style="margin-top:0;">Bitte den Zugangscode eingeben, den Sie von Feuerlöschtechnik Janiba erhalten haben.</div>';
+  html += '<div class="meta" style="margin-top:0;">Bitte den Zugangscode eingeben, den Sie von Wolfgang Janiba Brandschutztechnik GmbH erhalten haben.</div>';
   html += '<input id="pinInput" type="text" autocapitalize="characters" placeholder="z.B. X7K2P9" style="width:100%; margin-top:14px; padding:12px; font-size:18px; text-align:center; letter-spacing:2px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">';
   html += '<button id="pinBtn" style="width:100%; margin-top:12px; padding:12px; border:none; border-radius:8px; background:#c23f12; color:#fff; font-weight:700; font-size:15px;">Bestätigen</button>';
   html += '<div id="pinFehler" class="meta" style="color:#a3300d; margin-top:8px; display:none;">Zugangscode nicht erkannt, bitte erneut versuchen.</div>';
