@@ -1252,7 +1252,7 @@ function renderKundenListe(query){
   liste.forEach(function(k){
     var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id && !g.ausgeschieden; }).length;
     html += '<div class="card kunde-card" data-id="' + k.id + '">';
-    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>';
+    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Portal</span>' : '') + '</div>';
     if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
     html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
     html += '<div class="meta">' + geraeteAnz + ' Gerät(e)</div>';
@@ -1808,6 +1808,19 @@ function renderStatistik(){
       html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
       html += '<div class="meta">' + pruefungAnzeigeText(p) + '</div>';
       html += '<div class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</div>';
+      html += '</div>';
+    });
+  }
+
+  html += '<div class="section-title" style="margin-top:20px;">Kunden mit Portalzugang</div>';
+  var portalKunden = state.kunden.filter(function(k){ return k.freigabe; });
+  if(portalKunden.length === 0){
+    html += '<div class="empty">Noch kein Kunde freigegeben</div>';
+  } else {
+    portalKunden.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); }).forEach(function(k){
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3></div>';
+      html += '<div class="meta">Zugangscode: <b>' + escapeHtml(k.zugangscode || '(keiner erzeugt)') + '</b></div>';
       html += '</div>';
     });
   }
