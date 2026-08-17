@@ -264,6 +264,8 @@ var db = null;
 var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
+var OEFFENTLICH_STORE = 'oeffentlich_geraete';
+var KUNDEN_PORTAL_URL = 'https://feuer2380.github.io/Brandschutz-app/kunde.html';
 
 function openDb(cb){
   try {
@@ -306,6 +308,8 @@ function dbGetAll(store, cb){
 
 function dbPut(store, obj, cb){
   db.collection(store).doc(obj.id).set(obj).then(function(){
+    if(store === 'geraete') syncOeffentlichesGeraet(obj);
+    if(store === 'kunden') syncOeffentlichFuerKunde(obj);
     if(cb) cb();
   }).catch(function(err){
     console.error('dbPut Fehler', err);
@@ -321,11 +325,66 @@ function zeigeSpeicherFehler(err){
 
 function dbDelete(store, id, cb){
   db.collection(store).doc(id).delete().then(function(){
+    if(store === 'geraete'){
+      db.collection(OEFFENTLICH_STORE).doc(id).delete().catch(function(){});
+    }
     if(cb) cb();
   }).catch(function(err){
     console.error('dbDelete Fehler', err);
     zeigeSpeicherFehler(err);
   });
+}
+
+// ---------- Kundenportal-Sync (nur unkritische Felder, nur bei Freigabe) ----------
+function baueOeffentlichesGeraet(g, k){
+  var bj = istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
+  return {
+    id: g.id,
+    kundenname: k ? (k.name || '') : '',
+    typ: g.typ || '',
+    kategorie: g.kategorie || 'Feuerlöscher',
+    standort: g.standort || '',
+    letztePruefung: g.letztePruefung || null,
+    naechstePruefung: g.naechstePruefung || null,
+    innenrevisionNoetig: !!bj,
+    innenrevisionLabel: bj ? bj.label : null,
+    letzteInnenrevision: g.letzteInnenrevision || null,
+    aktualisiertAm: new Date().toISOString()
+  };
+}
+
+function syncOeffentlichesGeraet(g){
+  if(!g || !g.id) return;
+  if(g.ausgeschieden){
+    db.collection(OEFFENTLICH_STORE).doc(g.id).delete().catch(function(){});
+    return;
+  }
+  db.collection('kunden').doc(g.kundeId).get().then(function(kDoc){
+    var k = kDoc.exists ? kDoc.data() : null;
+    if(k && k.freigabe){
+      db.collection(OEFFENTLICH_STORE).doc(g.id).set(baueOeffentlichesGeraet(g, k)).catch(function(err){
+        console.error('Kundenportal-Sync Fehler', err);
+      });
+    } else {
+      db.collection(OEFFENTLICH_STORE).doc(g.id).delete().catch(function(){});
+    }
+  }).catch(function(err){ console.error('Kundenportal-Sync Kunde-Lookup Fehler', err); });
+}
+
+function syncOeffentlichFuerKunde(k){
+  if(!k || !k.id) return;
+  db.collection('geraete').where('kundeId', '==', k.id).get().then(function(snap){
+    snap.forEach(function(doc){
+      var g = doc.data();
+      if(!k.freigabe || g.ausgeschieden){
+        db.collection(OEFFENTLICH_STORE).doc(g.id).delete().catch(function(){});
+      } else {
+        db.collection(OEFFENTLICH_STORE).doc(g.id).set(baueOeffentlichesGeraet(g, k)).catch(function(err){
+          console.error('Kundenportal-Sync Fehler', err);
+        });
+      }
+    });
+  }).catch(function(err){ console.error('Kundenportal-Sync Geräte-Lookup Fehler', err); });
 }
 
 function uid(){
@@ -806,6 +865,8 @@ function zeigeGeraetAuswahl(matches){
 function verarbeiteScan(text){
   stopScanner();
   var id = text.trim();
+  var portalMatch = id.match(/kunde\.html\?id=([^&\s]+)/i);
+  if(portalMatch) id = decodeURIComponent(portalMatch[1]);
   if(id.indexOf('BSV-GERAET:') === 0) id = id.substring('BSV-GERAET:'.length);
   else if(id.indexOf('BSV-KUNDE:') === 0){
     var kid = id.substring('BSV-KUNDE:'.length);
@@ -1234,7 +1295,7 @@ function renderKundeDetail(kundeId){
   var html = '';
   html += '<button class="btn secondary small" id="backToKunden">&larr; Zurück</button>';
   html += '<div class="card" style="margin-top:12px;">';
-  html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>';
+  html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Kundenportal aktiv</span>' : '') + '</div>';
   if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
   html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
   if(k.telefon) html += '<div class="meta">Tel: ' + escapeHtml(k.telefon) + '</div>';
@@ -1924,6 +1985,8 @@ function modalKundeBearbeiten(kundeId){
   html += '<label>Telefon</label>';
   html += '<div class="row" style="gap:8px;"><input id="fTelefon" type="text" autocomplete="off" autocorrect="off" name="tel-freitext" value="' + escapeHtml(k.telefon || '') + '" style="flex:1;"><button type="button" class="btn secondary" id="fTelefonLeerBtn" style="flex:0 0 auto; padding:0 16px;">␣</button></div>';
   html += '<label>E-Mail</label><input id="fEmail" type="email" value="' + escapeHtml(k.email || '') + '">';
+  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:14px;"><input type="checkbox" id="fFreigabe" style="width:auto;"' + (k.freigabe ? ' checked' : '') + '> Kundenportal freigegeben (Kunde darf QR-Code scannen und Prüfstatus einsehen)</label>';
+  html += '<div class="meta" style="margin-top:2px;">Nur nach unterschriebenem Wartungsvertrag aktivieren.</div>';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
   html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde in Papierkorb verschieben</button>';
   openModal(html);
@@ -1953,6 +2016,7 @@ function modalKundeBearbeiten(kundeId){
     k.adresse = adresse;
     k.telefon = document.getElementById('fTelefon').value.trim();
     k.email = document.getElementById('fEmail').value.trim();
+    k.freigabe = document.getElementById('fFreigabe').checked;
     dbPut('kunden', k, function(){
       loadAll(function(){ render(); closeModal(); toast('Änderungen gespeichert'); });
     });
@@ -1995,10 +2059,14 @@ function qrMitRand(targetId){
 function modalQrGeraet(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
-  var qrText = 'BSV-GERAET:' + g.id;
+  var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+  var qrText = KUNDEN_PORTAL_URL + '?id=' + encodeURIComponent(g.id);
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+  if(!k || !k.freigabe){
+    html += '<div class="meta" style="color:#c23f12; margin-bottom:6px;">Hinweis: Kundenportal für diesen Kunden ist noch nicht freigegeben. Der Code funktioniert erst, wenn im Kundendatensatz "Kundenportal freigegeben" aktiviert ist. Innerhalb der App könnt ihr diesen Code trotzdem wie gewohnt scannen.</div>';
+  }
   html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Weißen Rand beim Zuschneiden nicht wegschneiden.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
   html += '<div class="meta" style="margin-top:8px; font-family:monospace; word-break:break-all; user-select:text;">Code: ' + escapeHtml(qrText) + '</div>';
