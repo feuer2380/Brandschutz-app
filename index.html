@@ -212,7 +212,7 @@
   <header class="top">
     <div>
       <h1>Brandschutzverwaltung</h1>
-      <div class="sub" id="headerSub">Feuerlöschtechnik Janiba</div>
+      <div class="sub" id="headerSub">Wolfgang Janiba Brandschutztechnik GmbH</div>
     </div>
   </header>
 
@@ -1543,7 +1543,7 @@ function buildTerminlisteHtml(){
     html += '</tbody></table>';
   }
 
-  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
   html += '</div>';
   return html;
 }
@@ -1598,7 +1598,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
     });
   }
 
-  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
   html += '</div>';
   return html;
 }
@@ -1649,7 +1649,7 @@ function modalGeraeteuebersicht(kundeId){
         zeilen.push((g.kategorie || 'Feuerlöscher') + ': ' + g.typ + ' - ' + (g.standort || 'Standort unbekannt') + zusatz);
       });
       zeilen.push('');
-      zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+      zeilen.push('Wolfgang Janiba Brandschutztechnik GmbH, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
       var text = zeilen.join('\n');
       var mailto = 'mailto:?subject=' + encodeURIComponent('Ausstattungsliste ' + (k ? k.name : '') + (aktKat ? ' - ' + aktKat : '')) + '&body=' + encodeURIComponent(text);
       window.location.href = mailto;
@@ -1684,7 +1684,7 @@ function modalTerminliste(){
       zeilen.push((k ? k.name : 'Unbekannt') + ' - ' + (p.typ||'Prüfung') + ' - fällig ' + fmtDate(p.datum));
     });
     zeilen.push('');
-    zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+    zeilen.push('Wolfgang Janiba Brandschutztechnik GmbH, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
     var text = zeilen.join('\n');
     var mailto = 'mailto:?subject=' + encodeURIComponent('Terminliste ' + fmtDate(new Date().toISOString())) + '&body=' + encodeURIComponent(text);
     window.location.href = mailto;
@@ -1740,7 +1740,7 @@ function buildStatistikDruckHtml(statFilter){
     });
     html += '</tbody></table>';
   }
-  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; www.loeschtechnik.at</div>';
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; www.brandschutztechnik-janiba.at</div>';
   html += '</div>';
   return html;
 }
@@ -2832,7 +2832,7 @@ function buildBerichtHtml(p, k){
   html += '</div>';
   html += '</div>';
 
-  html += '<div class="bericht-fuss">' + escapeHtml(berichtNr) + ' &middot; Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at</div>';
+  html += '<div class="bericht-fuss">' + escapeHtml(berichtNr) + ' &middot; Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
   html += '</div>';
   return html;
 }
@@ -2869,7 +2869,7 @@ function modalBerichtAnsicht(pruefungId){
     zeilen.push('Datum: ' + fmtDate(p.erledigtAm || p.datum));
     if(p.bemerkung) zeilen.push('Bemerkung: ' + p.bemerkung);
     zeilen.push('');
-    zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+    zeilen.push('Wolfgang Janiba Brandschutztechnik GmbH, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
     var text = zeilen.join('\n');
     var mailto = 'mailto:?subject=' + encodeURIComponent(betreff) + '&body=' + encodeURIComponent(text);
     window.location.href = mailto;
@@ -3052,7 +3052,7 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     html += '</div>';
   });
 
-  html += '<div class="bericht-fuss">Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
   html += '</div>';
   return html;
 }
@@ -3436,7 +3436,7 @@ function buildBegehungsberichtHtml(bericht, k){
     html += '</div>';
   });
 
-  html += '<div class="bericht-fuss">' + escapeHtml(k ? k.name : '') + ' &middot; Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
+  html += '<div class="bericht-fuss">' + escapeHtml(k ? k.name : '') + ' &middot; Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
   html += '</div>';
   return html;
 }
@@ -3800,7 +3800,7 @@ function buildSammelberichtHtml(sb, k){
       html += '</div>';
     });
 
-    html += '<div class="bericht-fuss">' + escapeHtml(unterNr) + ' &middot; Feuerlöschtechnik Janiba &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.loeschtechnik.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
+    html += '<div class="bericht-fuss">' + escapeHtml(unterNr) + ' &middot; Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
   });
 
   if(sb.bemerkung){
@@ -3861,7 +3861,7 @@ function modalSammelberichtAnsicht(sbId){
       zeilen.push('Nr. ' + g.nr + ' - ' + g.typ + ' (' + g.ergebnis + ')' + (g.notiz ? ' - ' + g.notiz : ''));
     });
     zeilen.push('');
-    zeilen.push('Feuerlöschtechnik Janiba, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+    zeilen.push('Wolfgang Janiba Brandschutztechnik GmbH, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
     var text = zeilen.join('\n');
     var mailto = 'mailto:?subject=' + encodeURIComponent(betreff) + '&body=' + encodeURIComponent(text);
     window.location.href = mailto;
