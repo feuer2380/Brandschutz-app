@@ -712,14 +712,46 @@ function renderDashboard(){
   if(diesenMonat.length === 0){
     html += '<div class="empty"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
   } else {
+    var dmGruppen = {};
+    var dmReihenfolge = [];
     diesenMonat.forEach(function(p){
-      var k = kundeFuerPruefung(p);
-      var st = statusForDate(p.datum);
-      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-      html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
-      if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
-      html += '</div>';
+      var kid = p.kundeId || 'unbekannt';
+      if(!dmGruppen[kid]){ dmGruppen[kid] = []; dmReihenfolge.push(kid); }
+      dmGruppen[kid].push(p);
+    });
+    dmReihenfolge.forEach(function(kid){
+      var eintraege = dmGruppen[kid];
+      var k = kundeFuerPruefung(eintraege[0]);
+      var schlimmsteCls = 'ok';
+      eintraege.forEach(function(p){
+        var c = statusForDate(p.datum).cls;
+        if(c === 'warn') schlimmsteCls = 'warn';
+        else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
+      });
+      if(eintraege.length === 1){
+        var p = eintraege[0];
+        var st = statusForDate(p.datum);
+        html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
+        html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+        html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
+        if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
+        html += '</div>';
+      } else {
+        var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['dm_' + kid]);
+        html += '<div class="card">';
+        html += '<div class="row offenKundeToggle" data-kid="dm_' + kid + '" style="cursor:pointer;"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        if(!aufgeklappt && k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
+        if(aufgeklappt){
+          eintraege.forEach(function(p, idx){
+            var st = statusForDate(p.datum);
+            html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
+            html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+            html += '</div>';
+          });
+          if(k && k.adresse) html += '<div class="meta" style="margin-top:8px;">' + escapeHtml(k.adresse) + '</div>';
+        }
+        html += '</div>';
+      }
     });
   }
 
