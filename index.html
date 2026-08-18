@@ -778,7 +778,7 @@ function renderDashboard(){
       html += '<h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3>';
       gr.eintraege.forEach(function(p){
         var st = statusForDate(p.datum);
-        html += '<div class="row" style="margin-top:6px;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+        html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
       });
       html += '</div>';
     });
@@ -3950,6 +3950,18 @@ function bindKundenCards(container){
     c.onclick = function(){
       state.activeKundeId = c.getAttribute('data-id');
       state.tab = 'kundeDetail';
+      render();
+    };
+  });
+  container.querySelectorAll('.baldFaelligZeile').forEach(function(z){
+    z.onclick = function(event){
+      event.stopPropagation();
+      var gid = z.getAttribute('data-gid');
+      if(!gid) return;
+      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      if(!g) return;
+      state.activeGeraetId = g.id;
+      state.tab = 'geraetCheck';
       render();
     };
   });
