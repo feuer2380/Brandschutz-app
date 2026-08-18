@@ -667,7 +667,7 @@ function pruefungAnzeigeText(p){
 
 function kundeIstAktiv(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
-  return !!(k && !k.geloescht);
+  return !!(k && !k.geloescht && !k.stillgelegt);
 }
 
 function renderDashboard(){
@@ -1293,7 +1293,7 @@ function renderKundenListe(query){
   liste.forEach(function(k){
     var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id && !g.ausgeschieden; }).length;
     html += '<div class="card kunde-card" data-id="' + k.id + '">';
-    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Portal</span>' : '') + '</div>';
+    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Portal</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
     if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
     html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
     html += '<div class="meta">' + geraeteAnz + ' Gerät(e)</div>';
@@ -1351,12 +1351,19 @@ function renderKundeDetail(kundeId){
   var html = '';
   html += '<button class="btn secondary small" id="backToKunden">&larr; Zurück</button>';
   html += '<div class="card" style="margin-top:12px;">';
-  html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Kundenportal aktiv</span>' : '') + '</div>';
+  html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Kundenportal aktiv</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
   if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
   html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
   if(k.telefon) html += '<div class="meta">Tel: ' + escapeHtml(k.telefon) + '</div>';
   if(k.email) html += '<div class="meta">' + escapeHtml(k.email) + '</div>';
   html += '<button class="btn small secondary" id="editKundeBtn" style="margin-top:10px;">Daten bearbeiten</button>';
+  if(k.stillgelegt){
+    html += '<div class="meta" style="margin-top:10px; color:#a3300d;">Stillgelegt' + (k.stillgelegtAm ? ' seit ' + fmtDate(k.stillgelegtAm) : '') + ' &ndash; keine Erinnerungen, bis wieder aktiviert.</div>';
+    html += '<button class="btn small" id="kundeAktivierenBtn" style="margin-top:8px;">Wieder aktivieren</button>';
+  } else {
+    html += '<button class="btn small secondary" id="kundeStilllegenBtn" style="margin-top:10px;">Stilllegen (keine Erinnerungen, bis reaktiviert)</button>';
+    html += '<button class="btn small secondary" id="pruefungenVerschiebenBtn" style="margin-top:8px; margin-left:8px;">Prüfungen verschieben</button>';
+  }
   html += '</div>';
 
   html += '<div class="row" style="margin-top:14px;"><div class="section-title" style="margin:0;">Geräte</div>';
@@ -2002,6 +2009,58 @@ function openModal(html){
 }
 function closeModal(){
   document.getElementById('modalRoot').innerHTML = '';
+}
+
+function modalPruefungenVerschieben(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var offenePruefungen = state.pruefungen.filter(function(p){ return p.kundeId === kundeId && !p.erledigt; });
+  var html = '';
+  html += '<div class="modal-head"><h3>Prüfungen verschieben</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Setzt den Termin aller ' + offenePruefungen.length + ' offenen Prüfungen von ' + escapeHtml(k.name) + ' auf ein neues Datum. Bereits erledigte Prüfungen bleiben unverändert.</div>';
+  html += '<div class="row" style="gap:8px; flex-wrap:wrap;">';
+  html += '<button type="button" class="btn small secondary" data-monate="3">+3 Monate</button>';
+  html += '<button type="button" class="btn small secondary" data-monate="6">+6 Monate</button>';
+  html += '<button type="button" class="btn small secondary" data-monate="12">+1 Jahr</button>';
+  html += '</div>';
+  html += '<label style="margin-top:14px;">Oder konkretes Datum</label>';
+  html += '<input id="verschiebenDatum" type="date">';
+  html += '<button class="btn block" id="verschiebenSpeichern" style="margin-top:14px;">Verschieben</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('[data-monate]').forEach(function(b){
+    b.onclick = function(){
+      var monate = parseInt(b.getAttribute('data-monate'), 10);
+      var d = new Date();
+      d.setMonth(d.getMonth() + monate);
+      var iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      document.getElementById('verschiebenDatum').value = iso;
+    };
+  });
+  document.getElementById('verschiebenSpeichern').onclick = function(){
+    var neuesDatum = document.getElementById('verschiebenDatum').value;
+    if(!neuesDatum){ toast('Bitte ein Datum wählen'); return; }
+    if(offenePruefungen.length === 0){ toast('Keine offenen Prüfungen zum Verschieben'); closeModal(); return; }
+    var verbleibend = offenePruefungen.length;
+    offenePruefungen.forEach(function(p){
+      p.datum = neuesDatum;
+      dbPut('pruefungen', p, function(){
+        var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+        var weiter = function(){
+          verbleibend--;
+          if(verbleibend === 0){
+            loadAll(function(){ render(); closeModal(); toast('Prüfungen verschoben'); });
+          }
+        };
+        if(g){
+          g.naechstePruefung = neuesDatum;
+          dbPut('geraete', g, weiter);
+        } else {
+          weiter();
+        }
+      });
+    });
+  };
 }
 
 function modalNeuerKunde(){
@@ -4141,6 +4200,33 @@ function bindDynamic(){
 
   var editKunde = document.getElementById('editKundeBtn');
   if(editKunde) editKunde.onclick = function(){ modalKundeBearbeiten(state.activeKundeId); };
+
+  var kundeStilllegen = document.getElementById('kundeStilllegenBtn');
+  if(kundeStilllegen) kundeStilllegen.onclick = function(){
+    customConfirm('Kunde stilllegen? Er bleibt erhalten und sichtbar, taucht aber in keiner Erinnerung/Fälligkeitsliste mehr auf, bis du ihn wieder aktivierst.', function(){
+      var k = state.kunden.filter(function(x){ return x.id === state.activeKundeId; })[0];
+      if(!k) return;
+      k.stillgelegt = true;
+      k.stillgelegtAm = new Date().toISOString();
+      dbPut('kunden', k, function(){
+        loadAll(function(){ render(); toast('Kunde stillgelegt'); });
+      });
+    });
+  };
+
+  var kundeAktivieren = document.getElementById('kundeAktivierenBtn');
+  if(kundeAktivieren) kundeAktivieren.onclick = function(){
+    var k = state.kunden.filter(function(x){ return x.id === state.activeKundeId; })[0];
+    if(!k) return;
+    k.stillgelegt = false;
+    k.stillgelegtAm = null;
+    dbPut('kunden', k, function(){
+      loadAll(function(){ render(); toast('Kunde wieder aktiviert'); });
+    });
+  };
+
+  var pruefungenVerschieben = document.getElementById('pruefungenVerschiebenBtn');
+  if(pruefungenVerschieben) pruefungenVerschieben.onclick = function(){ modalPruefungenVerschieben(state.activeKundeId); };
 
   document.querySelectorAll('.device-item').forEach(function(d){
     d.onclick = function(){ modalGeraetBearbeiten(d.getAttribute('data-gid')); };
