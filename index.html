@@ -1397,6 +1397,7 @@ function renderKundeDetail(kundeId){
     html += '<button class="btn small secondary" id="kundeStilllegenBtn" style="margin-top:10px;">Stilllegen (keine Erinnerungen, bis reaktiviert)</button>';
     html += '<button class="btn small secondary" id="pruefungenVerschiebenBtn" style="margin-top:8px; margin-left:8px;">Prüfungen verschieben</button>';
     html += '<button class="btn small secondary" id="pruefungenKorrigierenBtn" style="margin-top:8px; margin-left:8px;">Fälschlich "heute geprüft" korrigieren</button>';
+    html += '<button class="btn small secondary" id="fehlendeTermineBtn" style="margin-top:8px; margin-left:8px;">Fehlende Termine nachtragen</button>';
   }
   html += '</div>';
 
@@ -2322,6 +2323,42 @@ function modalPruefungenKorrigieren(kundeId){
     };
   };
   document.getElementById('korrSuchenBtn').onclick = sucheBetroffene;
+}
+
+function fehlendeTermineNachtragen(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var geraeteDesKunden = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+  var betroffene = geraeteDesKunden.filter(function(g){
+    var hatOffene = state.pruefungen.some(function(p){ return p.geraetId === g.id && !p.erledigt; });
+    return !hatOffene && g.naechstePruefung;
+  });
+  if(betroffene.length === 0){
+    openModal('<div class="modal-head"><h3>Fehlende Termine</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Alle Geräte haben bereits einen offenen Prüftermin.</div>');
+    document.getElementById('mClose').onclick = closeModal;
+    return;
+  }
+  var html = '<div class="modal-head"><h3>Fehlende Termine nachtragen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">' + betroffene.length + ' Geräte haben ein "nächste Prüfung"-Datum, aber keinen zugehörigen offenen Termin-Datensatz (deshalb fehlen sie in "Diesen Monat"/"Bald fällig"). Das trägt den fehlenden Termin nach, ohne sonst etwas zu ändern.</div>';
+  betroffene.slice(0, 15).forEach(function(g){
+    html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + ' &middot; fällig ' + fmtDate(g.naechstePruefung) + '</div>';
+  });
+  if(betroffene.length > 15) html += '<div class="meta">... und ' + (betroffene.length - 15) + ' weitere</div>';
+  html += '<button class="btn block" id="fehlendeTermineBestaetigenBtn" style="margin-top:14px;">' + betroffene.length + ' Termine nachtragen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('fehlendeTermineBestaetigenBtn').onclick = function(){
+    var verbleibend = betroffene.length;
+    betroffene.forEach(function(g){
+      var pNeu = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: g.naechstePruefung, erledigt: false };
+      dbPut('pruefungen', pNeu, function(){
+        verbleibend--;
+        if(verbleibend === 0){
+          loadAll(function(){ render(); closeModal(); toast('Fehlende Termine nachgetragen'); });
+        }
+      });
+    });
+  };
 }
 
 function modalNeuerKunde(){
@@ -4493,6 +4530,9 @@ function bindDynamic(){
 
   var pruefungenKorrigieren = document.getElementById('pruefungenKorrigierenBtn');
   if(pruefungenKorrigieren) pruefungenKorrigieren.onclick = function(){ modalPruefungenKorrigieren(state.activeKundeId); };
+
+  var fehlendeTermine = document.getElementById('fehlendeTermineBtn');
+  if(fehlendeTermine) fehlendeTermine.onclick = function(){ fehlendeTermineNachtragen(state.activeKundeId); };
 
   document.querySelectorAll('.device-item').forEach(function(d){
     d.onclick = function(){ modalGeraetBearbeiten(d.getAttribute('data-gid')); };
