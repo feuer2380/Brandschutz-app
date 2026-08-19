@@ -744,7 +744,7 @@ function renderDashboard(){
         if(aufgeklappt){
           eintraege.forEach(function(p, idx){
             var st = statusForDate(p.datum);
-            html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
+            html += '<div class="baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="cursor:pointer; ' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
             html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
             html += '</div>';
           });
