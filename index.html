@@ -1432,7 +1432,7 @@ function renderKundeDetail(kundeId){
         var heuteIsoKurz = new Date().toISOString().substring(0,10);
         html += '<div style="display:flex; align-items:center; gap:6px; margin-top:8px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum</label>';
-        html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + heuteIsoKurz + '" style="flex:0 0 auto; padding:4px 6px; font-size:12px;">';
+        html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + heuteIsoKurz + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
         html += '</div>';
         if(istBegehung){
           html += '<div style="display:flex; gap:6px; margin-top:8px;">';
