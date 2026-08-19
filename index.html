@@ -1702,7 +1702,7 @@ function modalGeraeteuebersicht(kundeId){
     document.getElementById('druckBtnAL').onclick = function(){
       var pa = document.getElementById('printArea');
       pa.innerHTML = buildGeraeteuebersichtHtml(kundeId, aktKat);
-      window.print();
+      setTimeout(function(){ window.print(); }, 120);
     };
     document.getElementById('mailBtnAL').onclick = function(){
       var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
@@ -1737,7 +1737,7 @@ function modalTerminliste(){
   document.getElementById('druckBtnTL').onclick = function(){
     var pa = document.getElementById('printArea');
     pa.innerHTML = buildTerminlisteHtml();
-    window.print();
+    setTimeout(function(){ window.print(); }, 120);
   };
   document.getElementById('mailBtnTL').onclick = function(){
     var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
@@ -3028,7 +3028,7 @@ function modalBerichtAnsicht(pruefungId){
   document.getElementById('druckBtn').onclick = function(){
     var pa = document.getElementById('printArea');
     pa.innerHTML = buildBerichtHtml(p, k);
-    window.print();
+    setTimeout(function(){ window.print(); }, 120);
   };
 
   document.getElementById('mailBtn').onclick = function(){
@@ -3146,7 +3146,7 @@ function modalFuellhistorieListe(kundeId){
     document.getElementById('fuellDruckenBtn').onclick = function(){
       var pa = document.getElementById('printArea');
       pa.innerHTML = buildFuellstatistikHtml(gefiltert, suchtext, katFilter);
-      window.print();
+      setTimeout(function(){ window.print(); }, 120);
     };
     document.querySelectorAll('[data-fuellhistoriedetail]').forEach(function(b){
       b.onclick = function(){ modalFuellhistorie(b.getAttribute('data-fuellhistoriedetail'), kundeId, suchtext); };
@@ -3518,7 +3518,7 @@ function modalBegehungsberichtBearbeiten(kundeId, berichtId){
         dbPut('begehungsberichte', bericht, function(){
           var pa = document.getElementById('printArea');
           pa.innerHTML = buildBegehungsberichtHtml(bericht, k);
-          window.print();
+          setTimeout(function(){ window.print(); }, 120);
         });
       };
     }
@@ -4019,7 +4019,7 @@ function modalSammelberichtAnsicht(sbId){
   document.getElementById('druckBtnSb').onclick = function(){
     var pa = document.getElementById('printArea');
     pa.innerHTML = buildSammelberichtHtml(sb, k);
-    window.print();
+    setTimeout(function(){ window.print(); }, 120);
   };
   document.getElementById('mailBtnSb').onclick = function(){
     var betreff = 'Sammelbericht ' + (k ? k.name : '') + ' - ' + fmtDate(sb.datum);
@@ -4225,7 +4225,7 @@ function bindDynamic(){
   if(druckBtnStat) druckBtnStat.onclick = function(){
     var pa = document.getElementById('printArea');
     pa.innerHTML = buildStatistikDruckHtml(state.statFilter || 'tag');
-    window.print();
+    setTimeout(function(){ window.print(); }, 120);
   };
 
   document.querySelectorAll('.filter-btn').forEach(function(b){
