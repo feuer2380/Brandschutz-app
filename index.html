@@ -1693,6 +1693,7 @@ function modalGeraeteuebersicht(kundeId){
     html += '<div class="no-print" style="margin-top:16px;">';
     html += '<button class="btn block" id="druckBtnAL">Drucken / Als PDF teilen</button>';
     html += '<button class="btn block secondary" id="mailBtnAL" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
     html += '</div>';
     openModal(html);
     document.getElementById('mClose').onclick = closeModal;
@@ -1731,6 +1732,7 @@ function modalTerminliste(){
   html += '<div class="no-print" style="margin-top:16px;">';
   html += '<button class="btn block" id="druckBtnTL">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtnTL" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -3020,6 +3022,7 @@ function modalBerichtAnsicht(pruefungId){
   html += '<div class="no-print" style="margin-top:16px;">';
   html += '<button class="btn block" id="druckBtn">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtn" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
   html += '</div>';
 
   openModal(html);
@@ -4007,6 +4010,7 @@ function modalSammelberichtAnsicht(sbId){
   html += '<div class="no-print" style="margin-top:16px;">';
   html += '<button class="btn block" id="druckBtnSb">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtnSb" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
