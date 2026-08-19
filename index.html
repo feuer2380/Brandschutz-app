@@ -147,6 +147,19 @@ if('serviceWorker' in navigator){
   .stat .n{font-size:26px; font-family:Georgia,serif; color:var(--ember-dark);}
   .stat .l{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
   .statrow{display:flex; gap:10px; margin-bottom:16px;}
+  .ergebnis-chart{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px;}
+  .ergebnis-zeile{display:flex; align-items:center; gap:10px; margin-top:8px;}
+  .ergebnis-zeile:first-child{margin-top:0;}
+  .ergebnis-label{width:90px; font-size:12px; color:var(--muted); flex-shrink:0;}
+  .ergebnis-bar-bg{flex:1; background:#eee2d3; border-radius:6px; height:16px; overflow:hidden;}
+  .ergebnis-bar{height:100%; border-radius:6px; min-width:2px;}
+  .ergebnis-zahl{width:28px; text-align:right; font-size:12px; font-weight:700; flex-shrink:0;}
+  .zeit-chart{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 10px; margin-bottom:16px;}
+  .zeit-balken-bereich{display:flex; align-items:flex-end; gap:4px; height:110px;}
+  .zeit-balken-spalte{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;}
+  .zeit-balken-zahl{font-size:10px; color:var(--muted); margin-bottom:2px;}
+  .zeit-balken{width:100%; background:var(--ember); border-radius:3px 3px 0 0; min-height:2px;}
+  .zeit-balken-label{font-size:9px; color:var(--muted); margin-top:6px; text-align:center;}
 
   .status-badge{display:inline-block; padding:4px 10px; border-radius:12px; font-weight:bold; font-size:.85rem; color:#fff;}
   .status-gruen{background-color:#2e7d32;}
@@ -1381,6 +1394,7 @@ function renderKundeDetail(kundeId){
   } else {
     html += '<button class="btn small secondary" id="kundeStilllegenBtn" style="margin-top:10px;">Stilllegen (keine Erinnerungen, bis reaktiviert)</button>';
     html += '<button class="btn small secondary" id="pruefungenVerschiebenBtn" style="margin-top:8px; margin-left:8px;">Prüfungen verschieben</button>';
+    html += '<button class="btn small secondary" id="pruefungenKorrigierenBtn" style="margin-top:8px; margin-left:8px;">Fälschlich "heute geprüft" korrigieren</button>';
   }
   html += '</div>';
 
@@ -1813,9 +1827,89 @@ function buildStatistikDruckHtml(statFilter){
   return html;
 }
 
+function buildErgebnisChart(anzOk, anzRep, anzAus){
+  var gesamt = anzOk + anzRep + anzAus;
+  var html = '<div class="ergebnis-chart">';
+  var zeilen = [
+    {label:'In Ordnung', wert:anzOk, farbe:'var(--ok)'},
+    {label:'Reparatur', wert:anzRep, farbe:'#1d5fa8'},
+    {label:'Ausgeschieden', wert:anzAus, farbe:'var(--warn)'}
+  ];
+  zeilen.forEach(function(z){
+    var proz = gesamt > 0 ? Math.round((z.wert / gesamt) * 100) : 0;
+    html += '<div class="ergebnis-zeile">';
+    html += '<div class="ergebnis-label">' + z.label + '</div>';
+    html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar" style="width:' + proz + '%; background:' + z.farbe + ';"></div></div>';
+    html += '<div class="ergebnis-zahl">' + z.wert + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function buildZeitChart(datumsListe, statFilter, jetztDate, monatNamen){
+  var bins = [];
+  var i;
+  if(statFilter === 'woche'){
+    var tagNamen = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+    var wochentagHeute = (jetztDate.getDay() + 6) % 7;
+    var montag = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate() - wochentagHeute);
+    for(i = 0; i < 7; i++){
+      var tag = new Date(montag.getFullYear(), montag.getMonth(), montag.getDate() + i);
+      bins.push({ label: tagNamen[i], von: tag, bis: new Date(tag.getFullYear(), tag.getMonth(), tag.getDate() + 1) });
+    }
+  } else if(statFilter === 'monat'){
+    var ersterDesMonats = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), 1);
+    var wochentagErster = (ersterDesMonats.getDay() + 6) % 7;
+    var wochenStart = new Date(ersterDesMonats.getFullYear(), ersterDesMonats.getMonth(), 1 - wochentagErster);
+    var letzterDesMonats = new Date(jetztDate.getFullYear(), jetztDate.getMonth() + 1, 0);
+    var cur = wochenStart;
+    while(cur <= letzterDesMonats){
+      var bis = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7);
+      bins.push({ label: 'KW ' + fmtKW2(cur), von: cur, bis: bis });
+      cur = bis;
+    }
+  } else {
+    var kurzNamen = ['Jän','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+    for(i = 0; i < 12; i++){
+      bins.push({ label: kurzNamen[i], von: new Date(jetztDate.getFullYear(), i, 1), bis: new Date(jetztDate.getFullYear(), i + 1, 1) });
+    }
+  }
+  bins.forEach(function(b){
+    b.anzahl = datumsListe.filter(function(iso){
+      var d = new Date(iso);
+      return d >= b.von && d < b.bis;
+    }).length;
+  });
+  var maxWert = 0;
+  bins.forEach(function(b){ if(b.anzahl > maxWert) maxWert = b.anzahl; });
+  var html = '<div class="zeit-chart">';
+  html += '<div class="zeit-balken-bereich">';
+  bins.forEach(function(b){
+    var hoehe = maxWert > 0 ? Math.max(Math.round((b.anzahl / maxWert) * 100), (b.anzahl > 0 ? 6 : 2)) : 2;
+    html += '<div class="zeit-balken-spalte">';
+    if(b.anzahl > 0) html += '<div class="zeit-balken-zahl">' + b.anzahl + '</div>';
+    html += '<div class="zeit-balken" style="height:' + hoehe + '%;"></div>';
+    html += '<div class="zeit-balken-label">' + b.label + '</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function fmtKW2(datum){
+  var d = new Date(Date.UTC(datum.getFullYear(), datum.getMonth(), datum.getDate()));
+  var dayNr = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dayNr + 3);
+  var firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  var kw = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return kw;
+}
+
 function renderStatistik(){
   var html = '';
   html += '<div class="section-title">Statistik</div>';
+  var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var statFilter = state.statFilter || 'tag';
   var statOptionen = [
     {key:'tag', label:'Heute'},
@@ -1866,6 +1960,11 @@ function renderStatistik(){
   html += '<div class="stat"><div class="n" style="color:var(--warn);">' + anzAusgeschieden + '</div><div class="l">Ausgeschieden</div></div>';
   html += '</div>';
 
+  html += buildErgebnisChart(anzInOrdnung, anzReparatur, anzAusgeschieden);
+  if(statFilter !== 'tag'){
+    html += buildZeitChart(statListe.map(function(p){ return p.erledigtAm; }), statFilter, jetztDate, monatNamen);
+  }
+
   if(statListe.length === 0){
     html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
   } else {
@@ -1896,6 +1995,9 @@ function renderStatistik(){
   html += '<div class="stat"><div class="n">' + co2Zeilen.length + '</div><div class="l">Füllungen</div></div>';
   html += '<div class="stat"><div class="n">' + Math.round(co2GesamtMenge) + ' g</div><div class="l">Gesamtmenge</div></div>';
   html += '</div>';
+  if(statFilter !== 'tag' && co2Zeilen.length > 0){
+    html += buildZeitChart(co2Zeilen.map(function(z){ return z.fuellung.datum; }), statFilter, jetztDate, monatNamen);
+  }
   if(co2Zeilen.length === 0){
     html += '<div class="empty">In diesem Zeitraum keine CO2-Flaschen gefüllt</div>';
   } else {
@@ -2122,6 +2224,84 @@ function modalPruefungenVerschieben(kundeId){
       });
     });
   };
+}
+
+function modalPruefungenKorrigieren(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var heuteIso = new Date().toISOString().substring(0,10);
+  var html = '';
+  html += '<div class="modal-head"><h3>"Heute geprüft" korrigieren</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Für Geräte, die über den Gerät-Check-Bildschirm (mit "In Ordnung") eigentlich nur nachträglich erfasst wurden, statt wirklich heute geprüft worden zu sein. Setzt Prüfdatum + nächsten Termin auf das richtige, historische Datum zurück.</div>';
+  html += '<label>Fälschlich eingetragen am (Datum wie aktuell in der Statistik)</label>';
+  html += '<input id="korrFalschDatum" type="date" value="' + heuteIso + '">';
+  html += '<button type="button" class="btn small secondary" id="korrSuchenBtn" style="margin-top:8px;">Betroffene anzeigen</button>';
+  html += '<div id="korrErgebnisBereich" style="margin-top:14px;"></div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+
+  var sucheBetroffene = function(){
+    var falschDatum = document.getElementById('korrFalschDatum').value;
+    if(!falschDatum) return;
+    var treffer = state.pruefungen.filter(function(p){
+      return p.kundeId === kundeId && p.erledigt && p.erledigtAm && p.erledigtAm.substring(0,10) === falschDatum;
+    });
+    var bereich = document.getElementById('korrErgebnisBereich');
+    if(treffer.length === 0){
+      bereich.innerHTML = '<div class="empty">Keine an diesem Datum erledigten Prüfungen gefunden</div>';
+      return;
+    }
+    var html2 = '<div class="meta" style="margin-bottom:8px;">' + treffer.length + ' gefunden. Alle sind vorausgewählt, bei Bedarf einzelne abwählen.</div>';
+    treffer.forEach(function(p, i){
+      var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+      html2 += '<label style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid #eee2d3;"><input type="checkbox" class="korrCheck" data-idx="' + i + '" checked style="width:auto;"> ' + (g ? escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') : 'Unbekanntes Gerät') + '</label>';
+    });
+    html2 += '<label style="margin-top:14px;">Richtiges Prüfdatum</label>';
+    html2 += '<input id="korrRichtigDatum" type="date">';
+    html2 += '<button class="btn block" id="korrAnwendenBtn" style="margin-top:14px;">Korrigieren</button>';
+    bereich.innerHTML = html2;
+    document.getElementById('korrAnwendenBtn').onclick = function(){
+      var richtigesDatum = document.getElementById('korrRichtigDatum').value;
+      if(!richtigesDatum){ toast('Bitte das richtige Datum wählen'); return; }
+      var ausgewaehlt = [];
+      document.querySelectorAll('.korrCheck').forEach(function(cb){
+        if(cb.checked) ausgewaehlt.push(treffer[parseInt(cb.getAttribute('data-idx'), 10)]);
+      });
+      if(ausgewaehlt.length === 0){ toast('Nichts ausgewählt'); return; }
+      var verbleibend = ausgewaehlt.length;
+      ausgewaehlt.forEach(function(p){
+        p.datum = richtigesDatum;
+        p.erledigtAm = richtigesDatum + 'T12:00:00';
+        dbPut('pruefungen', p, function(){
+          var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+          var weiter = function(){
+            verbleibend--;
+            if(verbleibend === 0){
+              loadAll(function(){ render(); closeModal(); toast('Prüfdaten korrigiert'); });
+            }
+          };
+          if(g){
+            g.letztePruefung = richtigesDatum;
+            var neuerTermin = naechsterTerminNach(richtigesDatum + 'T12:00:00', g.intervallMonate);
+            g.naechstePruefung = neuerTermin;
+            dbPut('geraete', g, function(){
+              var offenePruefung = state.pruefungen.filter(function(x){ return x.geraetId === g.id && !x.erledigt && x.id !== p.id; })[0];
+              if(offenePruefung){
+                offenePruefung.datum = neuerTermin;
+                dbPut('pruefungen', offenePruefung, weiter);
+              } else {
+                var pNeu = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: neuerTermin, erledigt: false };
+                dbPut('pruefungen', pNeu, weiter);
+              }
+            });
+          } else {
+            weiter();
+          }
+        });
+      });
+    };
+  };
+  document.getElementById('korrSuchenBtn').onclick = sucheBetroffene;
 }
 
 function modalNeuerKunde(){
@@ -4290,6 +4470,9 @@ function bindDynamic(){
 
   var pruefungenVerschieben = document.getElementById('pruefungenVerschiebenBtn');
   if(pruefungenVerschieben) pruefungenVerschieben.onclick = function(){ modalPruefungenVerschieben(state.activeKundeId); };
+
+  var pruefungenKorrigieren = document.getElementById('pruefungenKorrigierenBtn');
+  if(pruefungenKorrigieren) pruefungenKorrigieren.onclick = function(){ modalPruefungenKorrigieren(state.activeKundeId); };
 
   document.querySelectorAll('.device-item').forEach(function(d){
     d.onclick = function(){ modalGeraetBearbeiten(d.getAttribute('data-gid')); };
