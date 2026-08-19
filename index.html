@@ -1860,6 +1860,47 @@ function renderStatistik(){
     });
   }
 
+  html += '<div class="section-title" style="margin-top:20px;">CO2-Flaschen Füllungen</div>';
+  var co2Zeilen = [];
+  state.geraete.filter(function(g){ return g.kategorie === 'CO2-Flaschen'; }).forEach(function(g){
+    (g.fuellungen || []).forEach(function(f){
+      if(new Date(f.datum) >= startBereich){
+        co2Zeilen.push({ geraet: g, fuellung: f });
+      }
+    });
+  });
+  co2Zeilen.sort(function(a,b){ return new Date(b.fuellung.datum) - new Date(a.fuellung.datum); });
+  var co2GesamtMenge = 0;
+  co2Zeilen.forEach(function(z){ co2GesamtMenge += (z.fuellung.menge || 0); });
+  html += '<div class="statrow">';
+  html += '<div class="stat"><div class="n">' + co2Zeilen.length + '</div><div class="l">Füllungen</div></div>';
+  html += '<div class="stat"><div class="n">' + Math.round(co2GesamtMenge) + ' g</div><div class="l">Gesamtmenge</div></div>';
+  html += '</div>';
+  if(co2Zeilen.length === 0){
+    html += '<div class="empty">In diesem Zeitraum keine CO2-Flaschen gefüllt</div>';
+  } else {
+    var co2NachKunde = {};
+    var co2Reihenfolge = [];
+    co2Zeilen.forEach(function(z){
+      var kid = z.geraet.kundeId || 'unbekannt';
+      if(!co2NachKunde[kid]){ co2NachKunde[kid] = []; co2Reihenfolge.push(kid); }
+      co2NachKunde[kid].push(z);
+    });
+    co2Reihenfolge.forEach(function(kid){
+      var zeilen = co2NachKunde[kid];
+      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+      var summe = 0;
+      zeilen.forEach(function(z){ summe += (z.fuellung.menge || 0); });
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge blau">' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + '</span></div>';
+      html += '<div class="meta">Gesamtmenge: ' + Math.round(summe) + ' g</div>';
+      zeilen.forEach(function(z){
+        html += '<div class="meta">' + fmtDate(z.fuellung.datum) + ' &middot; ' + escapeHtml(z.geraet.typ || 'Flasche') + (z.fuellung.standort ? ' &middot; ' + escapeHtml(z.fuellung.standort) : '') + (z.fuellung.menge ? ' &middot; ' + z.fuellung.menge + ' g' : '') + '</div>';
+      });
+      html += '</div>';
+    });
+  }
+
   html += '<div class="section-title" style="margin-top:20px;">Kunden mit Portalzugang</div>';
   var portalKunden = state.kunden.filter(function(k){ return k.freigabe; });
   if(portalKunden.length === 0){
