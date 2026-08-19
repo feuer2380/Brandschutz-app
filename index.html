@@ -2238,36 +2238,48 @@ function modalPruefungenKorrigieren(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
   var heuteIso = new Date().toISOString().substring(0,10);
+  var vorEineWoche = new Date();
+  vorEineWoche.setDate(vorEineWoche.getDate() - 7);
+  var vorEineWocheIso = vorEineWoche.toISOString().substring(0,10);
   var html = '';
   html += '<div class="modal-head"><h3>"Heute geprüft" korrigieren</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:10px;">Für Geräte, die über den Gerät-Check-Bildschirm (mit "In Ordnung") eigentlich nur nachträglich erfasst wurden, statt wirklich heute geprüft worden zu sein. Setzt Prüfdatum + nächsten Termin auf das richtige, historische Datum zurück.</div>';
-  html += '<label>Fälschlich eingetragen am (Datum wie aktuell in der Statistik)</label>';
-  html += '<input id="korrFalschDatum" type="date" value="' + heuteIso + '">';
+  html += '<div class="meta" style="margin-bottom:10px;">Für Geräte, die über den Gerät-Check-Bildschirm (mit "In Ordnung") eigentlich nur nachträglich erfasst wurden, statt wirklich geprüft worden zu sein. Setzt Prüfdatum + nächsten Termin auf das richtige, historische Datum zurück.</div>';
+  html += '<label>Fälschlich eingetragen von</label>';
+  html += '<input id="korrFalschVon" type="date" value="' + vorEineWocheIso + '">';
+  html += '<label style="margin-top:8px;">bis</label>';
+  html += '<input id="korrFalschBis" type="date" value="' + heuteIso + '">';
   html += '<button type="button" class="btn small secondary" id="korrSuchenBtn" style="margin-top:8px;">Betroffene anzeigen</button>';
   html += '<div id="korrErgebnisBereich" style="margin-top:14px;"></div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
 
   var sucheBetroffene = function(){
-    var falschDatum = document.getElementById('korrFalschDatum').value;
-    if(!falschDatum) return;
+    var falschVon = document.getElementById('korrFalschVon').value;
+    var falschBis = document.getElementById('korrFalschBis').value;
+    if(!falschVon || !falschBis) return;
     var treffer = state.pruefungen.filter(function(p){
-      return p.kundeId === kundeId && p.erledigt && p.erledigtAm && p.erledigtAm.substring(0,10) === falschDatum;
+      if(p.kundeId !== kundeId || !p.erledigt || !p.erledigtAm) return false;
+      var tag = p.erledigtAm.substring(0,10);
+      return tag >= falschVon && tag <= falschBis;
     });
     var bereich = document.getElementById('korrErgebnisBereich');
     if(treffer.length === 0){
-      bereich.innerHTML = '<div class="empty">Keine an diesem Datum erledigten Prüfungen gefunden</div>';
+      bereich.innerHTML = '<div class="empty">Keine in diesem Zeitraum erledigten Prüfungen gefunden</div>';
       return;
     }
     var html2 = '<div class="meta" style="margin-bottom:8px;">' + treffer.length + ' gefunden. Alle sind vorausgewählt, bei Bedarf einzelne abwählen.</div>';
+    html2 += '<button type="button" class="btn small secondary" id="korrAlleAbBtn" style="margin-bottom:8px;">Alle abwählen</button>';
     treffer.forEach(function(p, i){
       var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
-      html2 += '<label style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid #eee2d3;"><input type="checkbox" class="korrCheck" data-idx="' + i + '" checked style="width:auto;"> ' + (g ? escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') : 'Unbekanntes Gerät') + '</label>';
+      html2 += '<label style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid #eee2d3;"><input type="checkbox" class="korrCheck" data-idx="' + i + '" checked style="width:auto;"> ' + (g ? escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') : 'Unbekanntes Gerät') + ' <span class="meta">(' + fmtDate(p.erledigtAm) + ')</span></label>';
     });
-    html2 += '<label style="margin-top:14px;">Richtiges Prüfdatum</label>';
+    html2 += '<label style="margin-top:14px;">Richtiges Prüfdatum (für alle ausgewählten gleich)</label>';
     html2 += '<input id="korrRichtigDatum" type="date">';
     html2 += '<button class="btn block" id="korrAnwendenBtn" style="margin-top:14px;">Korrigieren</button>';
     bereich.innerHTML = html2;
+    document.getElementById('korrAlleAbBtn').onclick = function(){
+      document.querySelectorAll('.korrCheck').forEach(function(cb){ cb.checked = false; });
+    };
     document.getElementById('korrAnwendenBtn').onclick = function(){
       var richtigesDatum = document.getElementById('korrRichtigDatum').value;
       if(!richtigesDatum){ toast('Bitte das richtige Datum wählen'); return; }
