@@ -1147,10 +1147,12 @@ function naechsterTerminNach(datumIso, intervallMonate){
   return basis.toISOString().substring(0,10);
 }
 
-function schnellErgebnisSetzen(geraetId, ergebnis){
+function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
-  var jetztIso = new Date().toISOString();
+  var pruefDatumKurz = datumOverride || new Date().toISOString().substring(0,10);
+  var istRueckwirkend = pruefDatumKurz !== new Date().toISOString().substring(0,10);
+  var jetztIso = pruefDatumKurz + 'T' + (istRueckwirkend ? '12:00:00' : new Date().toISOString().substring(11));
   var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
   var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
   if(!offenePruefung){
@@ -1427,6 +1429,11 @@ function renderKundeDetail(kundeId){
       if(!g.ausgeschieden){
         var aktLetzte = letztePruefungFuerGeraet(g.id);
         var istBegehung = g.kategorie === 'Brandschutzbegehung';
+        var heuteIsoKurz = new Date().toISOString().substring(0,10);
+        html += '<div style="display:flex; align-items:center; gap:6px; margin-top:8px;">';
+        html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum</label>';
+        html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + heuteIsoKurz + '" style="flex:0 0 auto; padding:4px 6px; font-size:12px;">';
+        html += '</div>';
         if(istBegehung){
           html += '<div style="display:flex; gap:6px; margin-top:8px;">';
           html += '<button type="button" class="btn small" style="flex:1; background:var(--ok); color:#fff;" data-schnellcheck="' + g.id + '" data-erg="begehung">Begehung durchgeführt</button>';
@@ -4491,7 +4498,9 @@ function bindDynamic(){
       e.stopPropagation();
       var gid = b.getAttribute('data-schnellcheck');
       var erg = b.getAttribute('data-erg');
-      schnellErgebnisSetzen(gid, erg);
+      var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
+      var datumOverride = datumInput ? datumInput.value : null;
+      schnellErgebnisSetzen(gid, erg, datumOverride);
     };
   });
 
