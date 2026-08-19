@@ -774,13 +774,31 @@ function renderDashboard(){
     });
     reihenfolge.forEach(function(key){
       var gr = gruppen[key];
-      html += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
-      html += '<h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3>';
+      var schlimmsteCls = 'ok';
       gr.eintraege.forEach(function(p){
-        var st = statusForDate(p.datum);
-        html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+        var c = statusForDate(p.datum).cls;
+        if(c === 'warn') schlimmsteCls = 'warn';
+        else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
       });
-      html += '</div>';
+      if(gr.eintraege.length === 1){
+        var p = gr.eintraege[0];
+        var st = statusForDate(p.datum);
+        html += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
+        html += '<div class="row"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+        html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div></div>';
+        html += '</div>';
+      } else {
+        var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['bf_' + key]);
+        html += '<div class="card">';
+        html += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer;"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        if(aufgeklappt){
+          gr.eintraege.forEach(function(p){
+            var st = statusForDate(p.datum);
+            html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+          });
+        }
+        html += '</div>';
+      }
     });
   }
 
