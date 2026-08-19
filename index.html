@@ -3840,7 +3840,7 @@ function modalSammelbericht(kundeId){
         var weiter = function(naechstePruefungWert){
           var bjSnap = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
           snapshot.push({
-            nr: katNr2,
+            nr: g.nr || (idx + 1),
             typ: g.typ,
             kategorie: g.kategorie || 'Feuerlöscher',
             standort: g.standort || '',
