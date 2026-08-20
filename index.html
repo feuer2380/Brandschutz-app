@@ -1059,10 +1059,19 @@ function renderGeraetCheck(geraetId){
 
   var historie = state.pruefungen.filter(function(p){ return p.geraetId === geraetId && p.erledigt && p.erledigtAm; });
   historie.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
-  historie = historie.slice(0, 5);
+  var proJahr = {};
+  var historieDedupliziert = [];
+  historie.forEach(function(p){
+    var jahr = p.erledigtAm.substring(0,4);
+    if(!proJahr[jahr]){
+      proJahr[jahr] = true;
+      historieDedupliziert.push(p);
+    }
+  });
+  historie = historieDedupliziert.slice(0, 5);
   if(historie.length){
     html += '<div class="card" style="margin-top:12px;">';
-    html += '<div class="section-title">Letzte Prüfungen</div>';
+    html += '<div class="section-title">Letzte Prüfungen (ein Eintrag pro Jahr)</div>';
     historie.forEach(function(p){
       var ei = ergebnisInfo(p.ergebnis);
       html += '<div class="row" style="margin-top:8px;"><span class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</span><span class="' + ei.cls + '">' + ei.label + '</span></div>';
