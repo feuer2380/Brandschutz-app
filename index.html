@@ -614,8 +614,9 @@ function renderInner(){
     var pinInput = document.getElementById('loginPin');
     var pruefen = function(){
       var wert = pinInput.value.trim();
-      if(wert === CHEF_PIN){ state.rolle = 'chef'; render(); }
-      else if(wert === MITARBEITER_PIN){ state.rolle = 'mitarbeiter'; render(); }
+      var mitarbeiterTreffer = MITARBEITER_LISTE.filter(function(m){ return m.pin === wert; })[0];
+      if(wert === CHEF_PIN){ state.rolle = 'chef'; state.mitarbeiterName = null; render(); }
+      else if(mitarbeiterTreffer){ state.rolle = 'mitarbeiter'; state.mitarbeiterName = mitarbeiterTreffer.name; render(); }
       else {
         document.getElementById('loginFehler').textContent = 'Falscher PIN';
         pinInput.value = '';
@@ -714,7 +715,7 @@ function renderDashboard(){
   }
 
   var html = '';
-  html += '<div class="row" style="margin-bottom:8px;"><span class="meta">Angemeldet als: ' + (state.rolle === 'chef' ? 'Chef' : 'Mitarbeiter') + '</span><button class="btn small secondary" id="logoutBtn">Abmelden</button></div>';
+  html += '<div class="row" style="margin-bottom:8px;"><span class="meta">Angemeldet als: ' + (state.rolle === 'chef' ? 'Chef' : escapeHtml(state.mitarbeiterName || 'Mitarbeiter')) + '</span><button class="btn small secondary" id="logoutBtn">Abmelden</button></div>';
   html += '<div class="statrow">';
   html += '<div class="stat"><div class="n">' + kundenSichtbar.length + '</div><div class="l">Kunden</div></div>';
   html += '<div class="stat"><div class="n">' + geraeteSichtbar.length + '</div><div class="l">Geräte</div></div>';
@@ -1210,6 +1211,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
   }
   offenePruefung.erledigt = true;
   offenePruefung.erledigtAm = jetztIso;
+  offenePruefung.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
   offenePruefung.bericht = true;
   offenePruefung.ergebnis = ergebnisLabel;
   dbPut('pruefungen', offenePruefung, function(){
@@ -1283,6 +1285,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
   }
   offenePruefung.erledigt = true;
   offenePruefung.erledigtAm = jetztIso;
+  offenePruefung.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
   offenePruefung.bericht = true;
   offenePruefung.ergebnis = ergebnisLabel;
   offenePruefung.bemerkung = bemerkung;
@@ -1352,7 +1355,11 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
 
 // ---------- Kunden ----------
 var CHEF_PIN = '0239';
-var MITARBEITER_PIN = '8276';
+var MITARBEITER_LISTE = [
+  { name: 'Mitarbeiter 1', pin: '8276' },
+  { name: 'Mitarbeiter 2', pin: '8277' },
+  { name: 'Mitarbeiter 3', pin: '8278' }
+];
 
 function kundeSichtbarFuerRolle(k){
   if(state.rolle !== 'mitarbeiter') return true;
@@ -1999,6 +2006,27 @@ function renderStatistik(){
   });
   html += '</div>';
   html += '<button class="btn block secondary no-print" id="druckBtnStat" style="margin-bottom:14px;">Drucken / Als PDF teilen</button>';
+
+  html += '<div class="section-title" style="margin-top:4px;">Tagesprotokoll</div>';
+  var protokollDatum = state.tagesprotokollDatum || new Date().toISOString().substring(0,10);
+  html += '<input type="date" id="tagesprotokollDatum" value="' + protokollDatum + '" style="margin-bottom:10px;">';
+  var protokollEintraege = state.pruefungen.filter(function(p){
+    return p.erledigt && p.erledigtAm && p.erledigtAm.substring(0,10) === protokollDatum;
+  });
+  protokollEintraege.sort(function(a,b){ return new Date(a.erledigtAm) - new Date(b.erledigtAm); });
+  if(protokollEintraege.length === 0){
+    html += '<div class="empty">An diesem Tag wurde nichts geprüft</div>';
+  } else {
+    protokollEintraege.forEach(function(p){
+      var k = kundeFuerPruefung(p);
+      var ei = ergebnisInfo(p.ergebnis);
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + fmtZeit(p.erledigtAm) + ' Uhr</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+      html += '<div class="meta">' + (k ? escapeHtml(k.name) : 'Unbekannt') + ' &middot; ' + pruefungAnzeigeText(p) + '</div>';
+      html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt (vor Namens-Erfassung)') + '</b></div>';
+      html += '</div>';
+    });
+  }
 
   var jetztDate = new Date();
   var alleErledigt = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm; });
@@ -2775,6 +2803,7 @@ function modalGeraetBearbeiten(geraetId){
         if(offenePruefung){
           offenePruefung.erledigt = true;
           offenePruefung.erledigtAm = letztePruefungVal + 'T12:00:00';
+          offenePruefung.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
           offenePruefung.bericht = false;
           offenePruefung.ergebnis = 'In Ordnung';
           dbPut('pruefungen', offenePruefung, function(){
@@ -3260,6 +3289,7 @@ function modalErledigt(pruefungId){
     var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
     p.erledigt = true;
     p.erledigtAm = jetztIso;
+    p.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
     p.bericht = true;
     p.ergebnis = ergebnisLabel;
     p.bemerkung = document.getElementById('fBemerkung').value.trim();
@@ -4212,6 +4242,7 @@ function modalSammelbericht(kundeId){
       }
       offenePruefung.erledigt = true;
       offenePruefung.erledigtAm = jetztIso;
+      offenePruefung.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
       offenePruefung.bericht = true;
       offenePruefung.ergebnis = ergebnisLabel;
       offenePruefung.bemerkung = notiz;
@@ -4599,7 +4630,7 @@ function bindDynamic(){
   }
 
   var logoutBtn = document.getElementById('logoutBtn');
-  if(logoutBtn) logoutBtn.onclick = function(){ state.rolle = null; state.tab = 'dashboard'; render(); };
+  if(logoutBtn) logoutBtn.onclick = function(){ state.rolle = null; state.mitarbeiterName = null; state.tab = 'dashboard'; render(); };
 
   var addGeraet = document.getElementById('addGeraetBtn');
   if(addGeraet) addGeraet.onclick = function(){ modalNeuesGeraet(state.activeKundeId); };
@@ -4609,6 +4640,12 @@ function bindDynamic(){
     var pa = document.getElementById('printArea');
     pa.innerHTML = buildStatistikDruckHtml(state.statFilter || 'tag');
     setTimeout(function(){ window.print(); }, 120);
+  };
+
+  var tagesprotokollDatumInput = document.getElementById('tagesprotokollDatum');
+  if(tagesprotokollDatumInput) tagesprotokollDatumInput.onchange = function(){
+    state.tagesprotokollDatum = tagesprotokollDatumInput.value;
+    render();
   };
 
   document.querySelectorAll('.filter-btn').forEach(function(b){
