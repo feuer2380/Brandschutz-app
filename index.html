@@ -1396,9 +1396,15 @@ function renderKundeDetail(kundeId){
   } else {
     html += '<button class="btn small secondary" id="kundeStilllegenBtn" style="margin-top:10px;">Stilllegen (keine Erinnerungen, bis reaktiviert)</button>';
     html += '<button class="btn small secondary" id="pruefungenVerschiebenBtn" style="margin-top:8px; margin-left:8px;">Prüfungen verschieben</button>';
-    html += '<button class="btn small secondary" id="pruefungenKorrigierenBtn" style="margin-top:8px; margin-left:8px;">Fälschlich "heute geprüft" korrigieren</button>';
-    html += '<button class="btn small secondary" id="fehlendeTermineBtn" style="margin-top:8px; margin-left:8px;">Fehlende Termine nachtragen</button>';
-    html += '<button class="btn small secondary" id="doppelteTermineBtn" style="margin-top:8px; margin-left:8px;">Doppelte Termine bereinigen</button>';
+    var erweitertOffen = !!state.kundeWerkzeugeOffen;
+    html += '<div id="erweiterteWerkzeugeToggle" style="margin-top:14px; font-size:13px; color:var(--muted); cursor:pointer;">Erweiterte Werkzeuge (Datenreparatur) ' + (erweitertOffen ? '&#9650;' : '&#9660;') + '</div>';
+    if(erweitertOffen){
+      html += '<div style="margin-top:8px;">';
+      html += '<button class="btn small secondary" id="pruefungenKorrigierenBtn">Fälschlich "heute geprüft" korrigieren</button>';
+      html += '<button class="btn small secondary" id="fehlendeTermineBtn" style="margin-top:8px; margin-left:8px;">Fehlende Termine nachtragen</button>';
+      html += '<button class="btn small secondary" id="doppelteTermineBtn" style="margin-top:8px; margin-left:8px;">Doppelte Termine bereinigen</button>';
+      html += '</div>';
+    }
   }
   html += '</div>';
 
@@ -4575,6 +4581,12 @@ function bindDynamic(){
 
   var pruefungenVerschieben = document.getElementById('pruefungenVerschiebenBtn');
   if(pruefungenVerschieben) pruefungenVerschieben.onclick = function(){ modalPruefungenVerschieben(state.activeKundeId); };
+
+  var erweiterteToggle = document.getElementById('erweiterteWerkzeugeToggle');
+  if(erweiterteToggle) erweiterteToggle.onclick = function(){
+    state.kundeWerkzeugeOffen = !state.kundeWerkzeugeOffen;
+    render();
+  };
 
   var pruefungenKorrigieren = document.getElementById('pruefungenKorrigierenBtn');
   if(pruefungenKorrigieren) pruefungenKorrigieren.onclick = function(){ modalPruefungenKorrigieren(state.activeKundeId); };
