@@ -1147,7 +1147,29 @@ function naechsterTerminNach(datumIso, intervallMonate){
   return basis.toISOString().substring(0,10);
 }
 
+function letzteErledigungInnerhalb24h(geraetId){
+  var grenze = new Date();
+  grenze.setHours(grenze.getHours() - 24);
+  var treffer = state.pruefungen.filter(function(p){
+    return p.geraetId === geraetId && p.erledigt && p.erledigtAm && new Date(p.erledigtAm) >= grenze;
+  });
+  if(treffer.length === 0) return null;
+  treffer.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
+  return treffer[0];
+}
+
 function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
+  var vorherige = letzteErledigungInnerhalb24h(geraetId);
+  if(vorherige){
+    customConfirm('Dieses Gerät wurde bereits am ' + fmtDate(vorherige.erledigtAm) + ' um ' + fmtZeit(vorherige.erledigtAm) + ' Uhr geprüft (Ergebnis: ' + escapeHtml(vorherige.ergebnis || '') + '). Trotzdem nochmal speichern?', function(){
+      schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride);
+    });
+    return;
+  }
+  schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride);
+}
+
+function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   var pruefDatumKurz = datumOverride || new Date().toISOString().substring(0,10);
@@ -1203,6 +1225,17 @@ render(); modalNeuesGeraet(kid); });
 
 function checkAbschliessen(geraetId, ergebnis){
   state.vorgewaehltesErgebnis = null;
+  var vorherige = letzteErledigungInnerhalb24h(geraetId);
+  if(vorherige){
+    customConfirm('Dieses Gerät wurde bereits am ' + fmtDate(vorherige.erledigtAm) + ' um ' + fmtZeit(vorherige.erledigtAm) + ' Uhr geprüft (Ergebnis: ' + escapeHtml(vorherige.ergebnis || '') + '). Trotzdem nochmal speichern?', function(){
+      checkAbschliessenAusfuehren(geraetId, ergebnis);
+    });
+    return;
+  }
+  checkAbschliessenAusfuehren(geraetId, ergebnis);
+}
+
+function checkAbschliessenAusfuehren(geraetId, ergebnis){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   var standortEl = document.getElementById('checkStandort');
   if(standortEl) g.standort = standortEl.value.trim();
