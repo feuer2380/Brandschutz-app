@@ -673,6 +673,10 @@ function pruefungAnzeigeText(p){
       var kBeg = kundeFuerPruefung(p);
       if(kBeg && kBeg.objekt) text += ' &middot; ' + escapeHtml(kBeg.objekt);
       else if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
+    } else {
+      var nrAnzeige = geraeteNummerAnzeige(g);
+      if(nrAnzeige) text += ' &middot; ' + nrAnzeige;
+      if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
     }
     return text;
   }
