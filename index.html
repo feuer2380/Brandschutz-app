@@ -3968,6 +3968,8 @@ function modalSammelbericht(kundeId){
   html += '<div class="modal-head"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
   html += '<label>Prüfbericht-Nr.</label><input id="sbBerichtNr" type="text" value="SB-' + fmtDate(new Date().toISOString()).split('.').reverse().join('') + '">';
+  html += '<label style="margin-top:10px;">Prüfdatum für alle Geräte setzen</label>';
+  html += '<div class="row" style="gap:8px;"><input type="date" id="sbPruefdatumAlle" style="flex:1; min-width:0;" value="' + new Date().toISOString().substring(0,10) + '"><button type="button" class="btn small secondary" id="sbPruefdatumAlleBtn" style="flex:0 0 auto;">Für alle übernehmen</button></div>';
 
   if(geraeteSortiert.length === 0){
     html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
@@ -4024,6 +4026,16 @@ function modalSammelbericht(kundeId){
 
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+
+  var sbPruefdatumAlleBtn = document.getElementById('sbPruefdatumAlleBtn');
+  if(sbPruefdatumAlleBtn) sbPruefdatumAlleBtn.onclick = function(){
+    var wert = document.getElementById('sbPruefdatumAlle').value;
+    if(!wert){ toast('Bitte zuerst ein Datum wählen'); return; }
+    document.querySelectorAll('input[id^="sbPruefdatum_"]').forEach(function(inp){
+      inp.value = wert;
+    });
+    toast('Datum für alle Geräte übernommen');
+  };
 
   var sigKunde = initSigPad('sbSigKunde');
   var sigTechniker = initSigPad('sbSigTechniker');
