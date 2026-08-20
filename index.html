@@ -1398,6 +1398,7 @@ function renderKundeDetail(kundeId){
     html += '<button class="btn small secondary" id="pruefungenVerschiebenBtn" style="margin-top:8px; margin-left:8px;">Prüfungen verschieben</button>';
     html += '<button class="btn small secondary" id="pruefungenKorrigierenBtn" style="margin-top:8px; margin-left:8px;">Fälschlich "heute geprüft" korrigieren</button>';
     html += '<button class="btn small secondary" id="fehlendeTermineBtn" style="margin-top:8px; margin-left:8px;">Fehlende Termine nachtragen</button>';
+    html += '<button class="btn small secondary" id="doppelteTermineBtn" style="margin-top:8px; margin-left:8px;">Doppelte Termine bereinigen</button>';
   }
   html += '</div>';
 
@@ -2325,6 +2326,50 @@ function modalPruefungenKorrigieren(kundeId){
   document.getElementById('korrSuchenBtn').onclick = sucheBetroffene;
 }
 
+function doppelteTermineBereinigen(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var offeneDesKunden = state.pruefungen.filter(function(p){ return p.kundeId === kundeId && !p.erledigt; });
+  var nachGeraet = {};
+  offeneDesKunden.forEach(function(p){
+    var gid = p.geraetId || 'ohne';
+    if(!nachGeraet[gid]) nachGeraet[gid] = [];
+    nachGeraet[gid].push(p);
+  });
+  var zuLoeschen = [];
+  Object.keys(nachGeraet).forEach(function(gid){
+    var liste = nachGeraet[gid];
+    if(liste.length > 1){
+      liste.sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+      for(var i = 1; i < liste.length; i++) zuLoeschen.push(liste[i]);
+    }
+  });
+  if(zuLoeschen.length === 0){
+    openModal('<div class="modal-head"><h3>Doppelte Termine</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine doppelten offenen Termine gefunden.</div>');
+    document.getElementById('mClose').onclick = closeModal;
+    return;
+  }
+  var html = '<div class="modal-head"><h3>Doppelte Termine bereinigen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">' + zuLoeschen.length + ' doppelte offene Termine gefunden (jeweils der neueste pro Gerät bleibt erhalten, die restlichen werden gelöscht). Es werden keine erledigten Prüfungen oder Geräte-Daten verändert.</div>';
+  html += '<button class="btn block" id="bereinigenBestaetigenBtn">' + zuLoeschen.length + ' doppelte Termine löschen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var btn = document.getElementById('bereinigenBestaetigenBtn');
+  btn.onclick = function(){
+    btn.disabled = true;
+    btn.textContent = 'Wird bereinigt...';
+    var verbleibend = zuLoeschen.length;
+    zuLoeschen.forEach(function(p){
+      dbDelete('pruefungen', p.id, function(){
+        verbleibend--;
+        if(verbleibend === 0){
+          loadAll(function(){ render(); closeModal(); toast('Doppelte Termine bereinigt'); });
+        }
+      });
+    });
+  };
+}
+
 function fehlendeTermineNachtragen(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -2347,7 +2392,10 @@ function fehlendeTermineNachtragen(kundeId){
   html += '<button class="btn block" id="fehlendeTermineBestaetigenBtn" style="margin-top:14px;">' + betroffene.length + ' Termine nachtragen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
-  document.getElementById('fehlendeTermineBestaetigenBtn').onclick = function(){
+  var bestaetigenBtn = document.getElementById('fehlendeTermineBestaetigenBtn');
+  bestaetigenBtn.onclick = function(){
+    bestaetigenBtn.disabled = true;
+    bestaetigenBtn.textContent = 'Wird nachgetragen...';
     var verbleibend = betroffene.length;
     betroffene.forEach(function(g){
       var pNeu = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: g.naechstePruefung, erledigt: false };
@@ -4533,6 +4581,9 @@ function bindDynamic(){
 
   var fehlendeTermine = document.getElementById('fehlendeTermineBtn');
   if(fehlendeTermine) fehlendeTermine.onclick = function(){ fehlendeTermineNachtragen(state.activeKundeId); };
+
+  var doppelteTermine = document.getElementById('doppelteTermineBtn');
+  if(doppelteTermine) doppelteTermine.onclick = function(){ doppelteTermineBereinigen(state.activeKundeId); };
 
   document.querySelectorAll('.device-item').forEach(function(d){
     d.onclick = function(){ modalGeraetBearbeiten(d.getAttribute('data-gid')); };
