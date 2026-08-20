@@ -1008,6 +1008,25 @@ function verarbeiteScan(text){
   render();
 }
 
+function geraeteNummerAnzeige(g){
+  var geraeteDesKunden = state.geraete.filter(function(x){ return x.kundeId === g.kundeId && !x.ausgeschieden; });
+  var geraeteSortiert = geraeteDesKunden.slice().sort(function(a,b){
+    return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
+  });
+  var katZaehler = {};
+  var nr = null;
+  for(var i = 0; i < geraeteSortiert.length; i++){
+    var gx = geraeteSortiert[i];
+    var katKey = gx.kategorie || 'Feuerlöscher';
+    katZaehler[katKey] = (katZaehler[katKey] || 0) + 1;
+    if(gx.id === g.id){
+      nr = gx.nr || katZaehler[katKey];
+      break;
+    }
+  }
+  return nr ? ('Nr. ' + nr) : '';
+}
+
 function renderGeraetCheck(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return '<div class="empty">Gerät nicht gefunden</div>';
@@ -1020,7 +1039,7 @@ function renderGeraetCheck(geraetId){
   html += '<div class="meta">Kunde</div><h3>' + (k ? escapeHtml(k.name) : '-') + '</h3>';
   if(k && k.kundennummer) html += '<div class="meta">Kundennummer: ' + escapeHtml(k.kundennummer) + '</div>';
   if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
-  html += '<div class="section-title" style="margin-top:12px;">Gerät</div>';
+  html += '<div class="section-title" style="margin-top:12px;">Gerät ' + geraeteNummerAnzeige(g) + '</div>';
   html += '<div class="w" style="font-size:15px; font-weight:600;">' + escapeHtml(g.typ) + '</div>';
   var istPerchtlZisch = (g.kategorie === 'Perchtl Zisch');
   if(istPerchtlZisch && !g.ausgeschieden){
@@ -2383,13 +2402,28 @@ function doppelteTermineBereinigen(kundeId){
       for(var i = 1; i < liste.length; i++) zuLoeschen.push(liste[i]);
     }
   });
+
+  var erledigteDesKunden = state.pruefungen.filter(function(p){ return p.kundeId === kundeId && p.erledigt && p.erledigtAm; });
+  var nachGeraetZeit = {};
+  erledigteDesKunden.forEach(function(p){
+    var schluessel = (p.geraetId || 'ohne') + '|' + p.erledigtAm;
+    if(!nachGeraetZeit[schluessel]) nachGeraetZeit[schluessel] = [];
+    nachGeraetZeit[schluessel].push(p);
+  });
+  Object.keys(nachGeraetZeit).forEach(function(schluessel){
+    var liste = nachGeraetZeit[schluessel];
+    if(liste.length > 1){
+      for(var i = 1; i < liste.length; i++) zuLoeschen.push(liste[i]);
+    }
+  });
+
   if(zuLoeschen.length === 0){
-    openModal('<div class="modal-head"><h3>Doppelte Termine</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine doppelten offenen Termine gefunden.</div>');
+    openModal('<div class="modal-head"><h3>Doppelte Termine</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine doppelten Termine gefunden.</div>');
     document.getElementById('mClose').onclick = closeModal;
     return;
   }
   var html = '<div class="modal-head"><h3>Doppelte Termine bereinigen</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:10px;">' + zuLoeschen.length + ' doppelte offene Termine gefunden (jeweils der neueste pro Gerät bleibt erhalten, die restlichen werden gelöscht). Es werden keine erledigten Prüfungen oder Geräte-Daten verändert.</div>';
+  html += '<div class="meta" style="margin-bottom:10px;">' + zuLoeschen.length + ' doppelte Einträge gefunden (offene Termine: jeweils der neueste pro Gerät bleibt; erledigte Prüfungen: exakt gleiches Gerät + exakt gleiche Uhrzeit gelten als Duplikat, davon bleibt einer). Es wird jeweils nur der Überschuss gelöscht.</div>';
   html += '<button class="btn block" id="bereinigenBestaetigenBtn">' + zuLoeschen.length + ' doppelte Termine löschen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
