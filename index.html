@@ -2655,38 +2655,58 @@ function doppelteTermineBereinigen(kundeId){
 function nummernNeuOrdnen(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
-  var alle = state.geraete.filter(function(g){ return g.kundeId === kundeId; });
-  if(alle.length === 0){
-    openModal('<div class="modal-head"><h3>Gerätenummern</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine Geräte vorhanden.</div>');
-    document.getElementById('mClose').onclick = closeModal;
-    return;
-  }
-  var html = '<div class="modal-head"><h3>Gerätenummern neu ordnen</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:14px;">Nummeriert alle ' + alle.length + ' Geräte dieses Kunden pro Kategorie neu durch, streng nach Anlegedatum (1, 2, 3, ...), ohne Lücken oder Sprünge. Bereits gedruckte Etiketten mit alten Nummern stimmen danach eventuell nicht mehr überein.</div>';
-  html += '<button class="btn block" id="nummernBestaetigenBtn">Jetzt neu nummerieren</button>';
-  openModal(html);
+  openModal('<div class="modal-head"><h3>Gerätenummern neu ordnen</h3><button class="close" id="mClose">&times;</button></div><div class="meta">Lade aktuellen Gerätestand...</div>');
   document.getElementById('mClose').onclick = closeModal;
-  var btn = document.getElementById('nummernBestaetigenBtn');
-  btn.onclick = function(){
-    btn.disabled = true;
-    btn.textContent = 'Wird nummeriert...';
-    var proKategorie = {};
-    var sortiert = alle.slice().sort(function(a,b){
-      return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
+
+  dbGetAll('geraete', function(alleGeraete){
+    var alle = alleGeraete.filter(function(g){ return g.kundeId === kundeId; });
+    if(alle.length === 0){
+      openModal('<div class="modal-head"><h3>Gerätenummern</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine Geräte vorhanden.</div>');
+      document.getElementById('mClose').onclick = closeModal;
+      return;
+    }
+    // Mögliche Doppel-Erfassungen erkennen (gleicher Typ + Standort + Kategorie)
+    var schluesselZaehlung = {};
+    alle.forEach(function(g){
+      var schluessel = (g.kategorie||'') + '|' + (g.typ||'') + '|' + (g.standort||'');
+      schluesselZaehlung[schluessel] = (schluesselZaehlung[schluessel] || 0) + 1;
     });
-    var verbleibend = sortiert.length;
-    sortiert.forEach(function(g){
-      var kat = g.kategorie || 'Feuerlöscher';
-      proKategorie[kat] = (proKategorie[kat] || 0) + 1;
-      g.nr = proKategorie[kat];
-      dbPut('geraete', g, function(){
-        verbleibend--;
-        if(verbleibend === 0){
-          loadAll(function(){ render(); closeModal(); toast('Nummern neu geordnet'); });
-        }
+    var moeglicheDuplikate = Object.keys(schluesselZaehlung).filter(function(s){ return schluesselZaehlung[s] > 1; });
+
+    var html = '<div class="modal-head"><h3>Gerätenummern neu ordnen</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<div class="meta" style="margin-bottom:10px;">Nummeriert alle ' + alle.length + ' Geräte dieses Kunden pro Kategorie neu durch, streng nach Anlegedatum (1, 2, 3, ...), ohne Lücken oder Sprünge. Bereits gedruckte Etiketten mit alten Nummern stimmen danach eventuell nicht mehr überein.</div>';
+    if(moeglicheDuplikate.length){
+      html += '<div class="meta" style="color:#a3300d; margin-bottom:10px;">Achtung: ' + moeglicheDuplikate.length + ' möglicherweise doppelt erfasste Geräte gefunden (gleicher Typ + Standort). Bitte nach dem Nummerieren die Geräteliste kontrollieren, ob wirklich zwei separate Türen gemeint sind oder eine davon gelöscht werden sollte.</div>';
+    }
+    html += '<button class="btn block" id="nummernBestaetigenBtn">Jetzt neu nummerieren</button>';
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+    var btn = document.getElementById('nummernBestaetigenBtn');
+    btn.onclick = function(){
+      btn.disabled = true;
+      btn.textContent = 'Wird nummeriert...';
+      var proKategorie = {};
+      var sortiert = alle.slice().sort(function(a,b){
+        return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
       });
-    });
-  };
+      var verbleibend = sortiert.length;
+      sortiert.forEach(function(g){
+        var kat = g.kategorie || 'Feuerlöscher';
+        proKategorie[kat] = (proKategorie[kat] || 0) + 1;
+        g.nr = proKategorie[kat];
+        dbPut('geraete', g, function(){
+          verbleibend--;
+          if(verbleibend === 0){
+            loadAll(function(){
+              render();
+              closeModal();
+              toast('Nummern neu geordnet (' + alle.length + ' Geräte)');
+            });
+          }
+        });
+      });
+    };
+  });
 }
 
 function fehlendeTermineNachtragen(kundeId){
