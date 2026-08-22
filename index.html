@@ -2908,7 +2908,12 @@ function modalNeuerKunde(){
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Kunde</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Name / Firma</label><input id="fName" type="text" placeholder="z.B. Kindergarten Sonnenschein">';
-  html += '<label>Objekt / Standort (optional)</label><input id="fObjekt" type="text" placeholder="z.B. Werk 13, Filiale Nord">';
+  html += '<div style="display:flex; gap:10px;">';
+  html += '<div style="flex:1;"><label>Vorname (optional)</label><input id="fVorname" type="text" placeholder="z.B. Georg"></div>';
+  html += '<div style="flex:1;"><label>Nachname (optional)</label><input id="fNachname" type="text" placeholder="z.B. Sommerbauer"></div>';
+  html += '</div>';
+  html += '<div class="meta" style="margin-top:2px;">Wenn "Name / Firma" oben leer bleibt, wird automatisch Vorname + Nachname übernommen.</div>';
+  html += '<label style="margin-top:10px;">Objekt / Standort (optional)</label><input id="fObjekt" type="text" placeholder="z.B. Werk 13, Filiale Nord">';
   html += '<label>Objekt-Adresse (falls abweichend vom Kunden, optional)</label><input id="fObjektAdresse" type="text" placeholder="z.B. Handelskai 267, 1030 Wien">';
   html += '<label>Kundennummer</label><input id="fKundennr" type="text" placeholder="z.B. K-1024">';
   html += '<label>Straße und Hausnummer</label><input id="fStrasse" type="text" placeholder="z.B. Ketzergasse 299">';
@@ -2922,6 +2927,15 @@ function modalNeuerKunde(){
   html += '<button class="btn block" id="fSave">Kunde speichern</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('fVorname').addEventListener('input', autoNameAusVorNachname);
+  document.getElementById('fNachname').addEventListener('input', autoNameAusVorNachname);
+  function autoNameAusVorNachname(){
+    var nameFeld = document.getElementById('fName');
+    if(nameFeld.value.trim()) return;
+    var v = document.getElementById('fVorname').value.trim();
+    var n = document.getElementById('fNachname').value.trim();
+    nameFeld.value = (v + ' ' + n).trim();
+  }
   document.getElementById('fTelefonLeerBtn').onclick = function(){
     var f = document.getElementById('fTelefon');
     var pos = f.selectionStart != null ? f.selectionStart : f.value.length;
@@ -2931,6 +2945,9 @@ function modalNeuerKunde(){
   };
   document.getElementById('fSave').onclick = function(){
     var name = document.getElementById('fName').value.trim();
+    var vorname = document.getElementById('fVorname').value.trim();
+    var nachname = document.getElementById('fNachname').value.trim();
+    if(!name) name = (vorname + ' ' + nachname).trim();
     if(!name){ toast('Bitte Namen eingeben'); return; }
     var plz = document.getElementById('fPlz').value.trim();
     var ort = document.getElementById('fOrt').value.trim();
@@ -2940,6 +2957,8 @@ function modalNeuerKunde(){
     var k = {
       id: uid(),
       name: name,
+      vorname: vorname,
+      nachname: nachname,
       kundennummer: document.getElementById('fKundennr').value.trim(),
       objekt: document.getElementById('fObjekt').value.trim(),
       objektAdresse: document.getElementById('fObjektAdresse').value.trim(),
@@ -2962,7 +2981,11 @@ function modalKundeBearbeiten(kundeId){
   var html = '';
   html += '<div class="modal-head"><h3>Kunde bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Name / Firma</label><input id="fName" type="text" value="' + escapeHtml(k.name || '') + '">';
-  html += '<label>Objekt / Standort (optional)</label><input id="fObjekt" type="text" value="' + escapeHtml(k.objekt || '') + '" placeholder="z.B. Werk 13, Filiale Nord">';
+  html += '<div style="display:flex; gap:10px;">';
+  html += '<div style="flex:1;"><label>Vorname (optional)</label><input id="fVorname" type="text" value="' + escapeHtml(k.vorname || '') + '"></div>';
+  html += '<div style="flex:1;"><label>Nachname (optional)</label><input id="fNachname" type="text" value="' + escapeHtml(k.nachname || '') + '"></div>';
+  html += '</div>';
+  html += '<label style="margin-top:10px;">Objekt / Standort (optional)</label><input id="fObjekt" type="text" value="' + escapeHtml(k.objekt || '') + '" placeholder="z.B. Werk 13, Filiale Nord">';
   html += '<label>Objekt-Adresse (falls abweichend vom Kunden, optional)</label><input id="fObjektAdresse" type="text" value="' + escapeHtml(k.objektAdresse || '') + '" placeholder="z.B. Handelskai 267, 1030 Wien">';
   html += '<label>Kundennummer</label><input id="fKundennr" type="text" value="' + escapeHtml(k.kundennummer || '') + '">';
   html += '<label>Straße und Hausnummer</label><input id="fStrasse" type="text" value="' + escapeHtml(k.strasse || '') + '">';
@@ -2989,11 +3012,23 @@ function modalKundeBearbeiten(kundeId){
     f.focus();
     try{ f.setSelectionRange(pos+1, pos+1); } catch(e){}
   };
+  document.getElementById('fVorname').addEventListener('input', autoNameAusVorNachnameBearbeiten);
+  document.getElementById('fNachname').addEventListener('input', autoNameAusVorNachnameBearbeiten);
+  function autoNameAusVorNachnameBearbeiten(){
+    var nameFeld = document.getElementById('fName');
+    if(nameFeld.value.trim()) return;
+    var v = document.getElementById('fVorname').value.trim();
+    var n = document.getElementById('fNachname').value.trim();
+    nameFeld.value = (v + ' ' + n).trim();
+  }
   document.getElementById('fCodeNeuBtn').onclick = function(){
     document.getElementById('fZugangscode').value = generiereZugangscode();
   };
   document.getElementById('fSave').onclick = function(){
     var name = document.getElementById('fName').value.trim();
+    var vorname = document.getElementById('fVorname').value.trim();
+    var nachname = document.getElementById('fNachname').value.trim();
+    if(!name) name = (vorname + ' ' + nachname).trim();
     if(!name){ toast('Bitte Namen eingeben'); return; }
     var plz = document.getElementById('fPlz').value.trim();
     var ort = document.getElementById('fOrt').value.trim();
@@ -3001,6 +3036,8 @@ function modalKundeBearbeiten(kundeId){
     var adresse = strasse;
     if(plz || ort) adresse += (adresse ? ', ' : '') + (plz + ' ' + ort).trim();
     k.name = name;
+    k.vorname = vorname;
+    k.nachname = nachname;
     k.kundennummer = document.getElementById('fKundennr').value.trim();
     k.objekt = document.getElementById('fObjekt').value.trim();
     k.objektAdresse = document.getElementById('fObjektAdresse').value.trim();
