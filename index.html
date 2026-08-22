@@ -2209,14 +2209,49 @@ function renderStatistik(){
   if(protokollEintraege.length === 0){
     html += '<div class="empty">An diesem Tag wurde nichts geprüft</div>';
   } else {
+    // Kurze Zusammenfassung pro Mitarbeiter oben
+    var proMitarbeiter = {};
+    protokollEintraege.forEach(function(p){
+      var name = p.erledigtVon || 'unbekannt';
+      proMitarbeiter[name] = (proMitarbeiter[name] || 0) + 1;
+    });
+    html += '<div class="meta" style="margin-bottom:10px;">' + protokollEintraege.length + ' Prüfungen &middot; ' + Object.keys(proMitarbeiter).map(function(n){ return escapeHtml(n) + ': ' + proMitarbeiter[n]; }).join(' &middot; ') + '</div>';
+
+    // Gruppiert nach Kunde, klappbar
+    var proKunde = {};
+    var kundenReihenfolge = [];
     protokollEintraege.forEach(function(p){
       var k = kundeFuerPruefung(p);
-      var ei = ergebnisInfo(p.ergebnis);
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + fmtZeit(p.erledigtAm) + ' Uhr</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
-      html += '<div class="meta">' + (k ? escapeHtml(k.name) : 'Unbekannt') + ' &middot; ' + pruefungAnzeigeText(p) + '</div>';
-      html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt (vor Namens-Erfassung)') + '</b></div>';
-      html += '</div>';
+      var kid = k ? k.id : 'unbekannt';
+      if(!proKunde[kid]){ proKunde[kid] = { kunde: k, eintraege: [] }; kundenReihenfolge.push(kid); }
+      proKunde[kid].eintraege.push(p);
+    });
+    kundenReihenfolge.forEach(function(kid){
+      var gruppe = proKunde[kid];
+      var name = gruppe.kunde ? gruppe.kunde.name : 'Unbekannt';
+      if(gruppe.eintraege.length === 1){
+        var p = gruppe.eintraege[0];
+        var ei = ergebnisInfo(p.ergebnis);
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + fmtZeit(p.erledigtAm) + ' Uhr</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+        html += '<div class="meta">' + escapeHtml(name) + ' &middot; ' + pruefungAnzeigeText(p) + '</div>';
+        html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt') + '</b></div>';
+        html += '</div>';
+      } else {
+        var aufgeklappt = !!(state.tagesprotokollAufgeklappt && state.tagesprotokollAufgeklappt[kid]);
+        html += '<div class="card">';
+        html += '<div class="row tagesprotokollToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + escapeHtml(name) + '</h3><span class="badge ok">' + gruppe.eintraege.length + ' Prüfungen ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        if(aufgeklappt){
+          gruppe.eintraege.forEach(function(p, idx){
+            var ei = ergebnisInfo(p.ergebnis);
+            html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
+            html += '<div class="row"><span class="meta">' + fmtZeit(p.erledigtAm) + ' Uhr &middot; ' + pruefungAnzeigeText(p) + '</span><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+            html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt') + '</b></div>';
+            html += '</div>';
+          });
+        }
+        html += '</div>';
+      }
     });
   }
 
@@ -4874,6 +4909,15 @@ function bindDynamic(){
       var kid = el.getAttribute('data-kid');
       if(!state.pruefungOffenAufgeklappt) state.pruefungOffenAufgeklappt = {};
       state.pruefungOffenAufgeklappt[kid] = !state.pruefungOffenAufgeklappt[kid];
+      render();
+    };
+  });
+
+  document.querySelectorAll('.tagesprotokollToggle').forEach(function(el){
+    el.onclick = function(){
+      var kid = el.getAttribute('data-kid');
+      if(!state.tagesprotokollAufgeklappt) state.tagesprotokollAufgeklappt = {};
+      state.tagesprotokollAufgeklappt[kid] = !state.tagesprotokollAufgeklappt[kid];
       render();
     };
   });
