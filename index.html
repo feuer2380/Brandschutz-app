@@ -53,7 +53,7 @@ if('serviceWorker' in navigator){
   .app{display:flex; flex-direction:column; height:100vh; height:100dvh;}
   header.top{
     background:var(--ink); color:var(--paper);
-    padding:16px 18px 14px 18px;
+    padding:calc(16px + env(safe-area-inset-top)) 18px 14px 18px;
     display:flex; align-items:baseline; justify-content:space-between;
     border-bottom:3px solid var(--ember);
   }
@@ -2374,6 +2374,33 @@ function renderStatistik(){
     html += buildErgebnisChart(anzInOrdnung, anzReparatur, anzAusgeschieden);
     if(statFilter !== 'tag'){
       html += buildZeitChart(statListe.map(function(p){ return p.erledigtAm; }), statFilter, jetztDate, monatNamen);
+    }
+
+    html += '<div class="section-title" style="margin-top:20px;">Nach Gerätetyp</div>';
+    var proKategorieAnz = {};
+    var kategorieReihenfolgeStat = [];
+    statListe.forEach(function(p){
+      var g = geraetFuerPruefung(p);
+      var kat = g ? (g.kategorie || 'Feuerlöscher').trim() : (p.typ || 'Unbekannt');
+      if(!proKategorieAnz[kat]){ proKategorieAnz[kat] = 0; kategorieReihenfolgeStat.push(kat); }
+      proKategorieAnz[kat]++;
+    });
+    kategorieReihenfolgeStat.sort(function(a,b){ return proKategorieAnz[b] - proKategorieAnz[a]; });
+    if(kategorieReihenfolgeStat.length === 0){
+      html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
+    } else {
+      var maxKatWert = proKategorieAnz[kategorieReihenfolgeStat[0]];
+      html += '<div class="ergebnis-chart">';
+      kategorieReihenfolgeStat.forEach(function(kat){
+        var wert = proKategorieAnz[kat];
+        var proz = maxKatWert > 0 ? Math.round((wert / maxKatWert) * 100) : 0;
+        html += '<div class="ergebnis-zeile">';
+        html += '<div class="ergebnis-label" style="width:130px;">' + escapeHtml(kat) + '</div>';
+        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar" style="width:' + proz + '%; background:#1d5fa8;"></div></div>';
+        html += '<div class="ergebnis-zahl">' + wert + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
     }
 
     html += '<div class="section-title" style="margin-top:20px;">Einzelne Prüfungen</div>';
