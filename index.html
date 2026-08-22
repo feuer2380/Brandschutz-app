@@ -1717,7 +1717,7 @@ function renderKundeDetail(kundeId){
         var aktLetzte = letztePruefungFuerGeraet(g.id);
         var istBegehung = g.kategorie === 'Brandschutzbegehung';
         var heuteIsoKurz = new Date().toISOString().substring(0,10);
-        var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || heuteIsoKurz;
+        var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || g.letztePruefung || heuteIsoKurz;
         html += '<div style="margin-top:8px;">';
         html += '<div style="display:flex; align-items:center; gap:6px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum der Prüfung</label>';
