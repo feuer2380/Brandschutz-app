@@ -1157,7 +1157,8 @@ function verarbeiteScan(text){
   render();
 }
 
-function geraeteNummerAnzeige(g){
+function geraeteNummerWert(g){
+  if(g.nr) return g.nr;
   var geraeteDesKunden = state.geraete.filter(function(x){ return x.kundeId === g.kundeId && !x.ausgeschieden; });
   var geraeteSortiert = geraeteDesKunden.slice().sort(function(a,b){
     return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
@@ -1173,7 +1174,22 @@ function geraeteNummerAnzeige(g){
       break;
     }
   }
+  return nr;
+}
+
+function geraeteNummerAnzeige(g){
+  var nr = geraeteNummerWert(g);
   return nr ? ('Nr. ' + nr) : '';
+}
+
+function naechsteGeraeteNummer(kundeId, kategorie){
+  var alle = state.geraete.filter(function(g){ return g.kundeId === kundeId && (g.kategorie || 'Feuerlöscher') === kategorie; });
+  var maxNr = 0;
+  alle.forEach(function(g){
+    var nr = g.nr || 0;
+    if(nr > maxNr) maxNr = nr;
+  });
+  return maxNr + 1;
 }
 
 function renderGeraetCheck(geraetId){
@@ -1364,6 +1380,8 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
   offenePruefung.ergebnis = ergebnisLabel;
   dbPut('pruefungen', offenePruefung, function(){
     if(ergebnis === 'ausscheiden'){
+      var altNrFuerErsatz = geraeteNummerWert(g);
+      var katFuerErsatz = g.kategorie;
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
       dbPut('geraete', g, function(){
@@ -1376,7 +1394,9 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
         openModal(ersatzHtml);
         document.getElementById('ersatzJa').onclick = function(){
           loadAll(function(){
-render(); modalNeuesGeraet(kid); });
+            render();
+            zeigeErsatzNummerWahl(kid, katFuerErsatz, altNrFuerErsatz);
+          });
         };
         document.getElementById('ersatzNein').onclick = function(){
           closeModal();
@@ -1458,6 +1478,8 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
       });
     }
     if(ergebnis === 'ausscheiden'){
+      var altNrFuerErsatz2 = geraeteNummerWert(g);
+      var katFuerErsatz2 = g.kategorie;
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
       dbPut('geraete', g, function(){
@@ -1474,7 +1496,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
             state.checkRueckkehrZuKunde = null;
             state.tab = 'kundeDetail';
             render();
-            modalNeuesGeraet(kid);
+            zeigeErsatzNummerWahl(kid, katFuerErsatz2, altNrFuerErsatz2);
           });
         };
         document.getElementById('ersatzNein').onclick = function(){
@@ -1619,6 +1641,7 @@ function renderKundeDetail(kundeId){
       html += '<button class="btn small secondary" id="pruefungenKorrigierenBtn">Fälschlich "heute geprüft" korrigieren</button>';
       html += '<button class="btn small secondary" id="fehlendeTermineBtn" style="margin-top:8px; margin-left:8px;">Fehlende Termine nachtragen</button>';
       html += '<button class="btn small secondary" id="doppelteTermineBtn" style="margin-top:8px; margin-left:8px;">Doppelte Termine bereinigen</button>';
+      html += '<button class="btn small secondary" id="nummernReparierenBtn" style="margin-top:8px; margin-left:8px;">Gerätenummern neu ordnen</button>';
       html += '</div>';
     }
   }
@@ -2629,6 +2652,43 @@ function doppelteTermineBereinigen(kundeId){
   };
 }
 
+function nummernNeuOrdnen(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var alle = state.geraete.filter(function(g){ return g.kundeId === kundeId; });
+  if(alle.length === 0){
+    openModal('<div class="modal-head"><h3>Gerätenummern</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine Geräte vorhanden.</div>');
+    document.getElementById('mClose').onclick = closeModal;
+    return;
+  }
+  var html = '<div class="modal-head"><h3>Gerätenummern neu ordnen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:14px;">Nummeriert alle ' + alle.length + ' Geräte dieses Kunden pro Kategorie neu durch, streng nach Anlegedatum (1, 2, 3, ...), ohne Lücken oder Sprünge. Bereits gedruckte Etiketten mit alten Nummern stimmen danach eventuell nicht mehr überein.</div>';
+  html += '<button class="btn block" id="nummernBestaetigenBtn">Jetzt neu nummerieren</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var btn = document.getElementById('nummernBestaetigenBtn');
+  btn.onclick = function(){
+    btn.disabled = true;
+    btn.textContent = 'Wird nummeriert...';
+    var proKategorie = {};
+    var sortiert = alle.slice().sort(function(a,b){
+      return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
+    });
+    var verbleibend = sortiert.length;
+    sortiert.forEach(function(g){
+      var kat = g.kategorie || 'Feuerlöscher';
+      proKategorie[kat] = (proKategorie[kat] || 0) + 1;
+      g.nr = proKategorie[kat];
+      dbPut('geraete', g, function(){
+        verbleibend--;
+        if(verbleibend === 0){
+          loadAll(function(){ render(); closeModal(); toast('Nummern neu geordnet'); });
+        }
+      });
+    });
+  };
+}
+
 function fehlendeTermineNachtragen(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -3005,24 +3065,10 @@ function modalGeraetBearbeiten(geraetId){
   if(!g.ausgeschieden){
     document.getElementById('fAusscheiden').onclick = function(){
       customConfirm('Gerät als ausgeschieden markieren? Es erscheint dann in der Liste der ausgeschiedenen Feuerlöscher (Reiter Berichte) und nicht mehr in der aktiven Geräteliste.', function(){
-        var altNr = berechneAktuelleGeraeteNr(g);
-        var kat = g.kategorie || 'Feuerlöscher';
         g.ausgeschieden = true;
         g.ausgeschiedenAm = new Date().toISOString();
         dbPut('geraete', g, function(){
-          loadAll(function(){
-            render(); closeModal(); toast('Gerät ausgeschieden');
-            if(altNr){
-              customConfirm('Nr. ' + altNr + ' (' + escapeHtml(kat) + ') für ein Ersatzgerät reservieren? Der nächste neu angelegte ' + escapeHtml(kat) + ' bei diesem Kunden bekommt dann automatisch wieder Nr. ' + altNr + '.', function(){
-                var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-                if(!k) return;
-                if(!k.reserveNummern) k.reserveNummern = {};
-                if(!k.reserveNummern[kat]) k.reserveNummern[kat] = [];
-                if(k.reserveNummern[kat].indexOf(altNr) === -1) k.reserveNummern[kat].push(altNr);
-                dbPut('kunden', k, function(){ loadAll(function(){ render(); toast('Nummer ' + altNr + ' reserviert'); }); });
-              });
-            }
-          });
+          loadAll(function(){ render(); closeModal(); toast('Gerät ausgeschieden'); });
         });
       });
     };
@@ -3211,7 +3257,6 @@ function bindKategorieToggle(kundeIdFuerReserve){
   var typInput = document.getElementById('fTyp');
   var intervallSel = document.getElementById('fIntervall');
   var nrFeld = document.getElementById('fNr');
-  var hinweisReserve = document.getElementById('fjHinweisReserve');
   if(!sel) return;
   function aktualisieren(){
     var istBegehung = (sel.value === 'Brandschutzbegehung');
@@ -3224,21 +3269,15 @@ function bindKategorieToggle(kundeIdFuerReserve){
     if(intervallSel && !intervallSel.getAttribute('data-manuell')){
       intervallSel.value = (sel.value === 'Feuerlöscher') ? '24' : (istBegehung ? '3' : '12');
     }
-    if(kundeIdFuerReserve && nrFeld && hinweisReserve){
-      var k = state.kunden.filter(function(x){ return x.id === kundeIdFuerReserve; })[0];
-      var reserve = ((k && k.reserveNummern) || {})[sel.value] || [];
-      reserve = reserve.slice().sort(function(a,b){return a-b;});
-      if(reserve.length){
-        nrFeld.value = reserve[0];
-        hinweisReserve.textContent = 'Reservierte Nummer ' + reserve[0] + ' von ausgeschiedenem Gerät wird vorgeschlagen.';
-      } else {
-        nrFeld.value = '';
-        hinweisReserve.textContent = '';
-      }
+    if(kundeIdFuerReserve && nrFeld && !nrFeld.getAttribute('data-manuell')){
+      nrFeld.value = naechsteGeraeteNummer(kundeIdFuerReserve, sel.value);
     }
   }
   aktualisieren();
   sel.onchange = aktualisieren;
+  if(nrFeld){
+    nrFeld.oninput = function(){ nrFeld.setAttribute('data-manuell', '1'); };
+  }
   if(intervallSel){
     intervallSel.onchange = function(){ intervallSel.setAttribute('data-manuell', '1'); };
   }
@@ -3252,10 +3291,27 @@ function bindTypChips(){
   });
 }
 
-function modalNeuesGeraet(kundeId){
+function zeigeErsatzNummerWahl(kundeId, kategorie, alteNr){
+  if(!alteNr){
+    modalNeuesGeraet(kundeId, { kategorie: kategorie });
+    return;
+  }
+  var neueNr = naechsteGeraeteNummer(kundeId, kategorie);
+  var html = '';
+  html += '<div class="modal-head"><h3>Welche Nummer?</h3></div>';
+  html += '<div style="font-size:14px; margin-bottom:16px;">Soll das Ersatzgerät die alte Nummer des ausgeschiedenen Geräts übernehmen, oder eine neue bekommen?</div>';
+  html += '<button class="btn block" id="ersatzAlteNr">Alte Nummer (Nr. ' + alteNr + ')</button>';
+  html += '<button class="btn block secondary" id="ersatzNeueNr" style="margin-top:10px;">Neue Nummer (Nr. ' + neueNr + ')</button>';
+  openModal(html);
+  document.getElementById('ersatzAlteNr').onclick = function(){ modalNeuesGeraet(kundeId, { kategorie: kategorie, nr: alteNr }); };
+  document.getElementById('ersatzNeueNr').onclick = function(){ modalNeuesGeraet(kundeId, { kategorie: kategorie, nr: neueNr }); };
+}
+
+function modalNeuesGeraet(kundeId, vorgabe){
+  vorgabe = vorgabe || {};
   var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
   var letzte = (state.letzteGeraeteWerte && state.letzteGeraeteWerte.kundeId === kundeId) ? state.letzteGeraeteWerte : null;
-  var vorKategorie = letzte ? letzte.kategorie : 'Feuerlöscher';
+  var vorKategorie = vorgabe.kategorie || (letzte ? letzte.kategorie : 'Feuerlöscher');
   var html = '';
   html += '<div class="modal-head"><h3>Neues Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Kategorie</label><select id="fKategorie">';
@@ -3263,10 +3319,8 @@ function modalNeuesGeraet(kundeId){
     html += '<option' + (kat === vorKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
-  var kReserve = (state.kunden.filter(function(x){ return x.id === kundeId; })[0] || {}).reserveNummern || {};
-  var reservierteFuerKat = (kReserve[vorKategorie] || []).slice().sort(function(a,b){return a-b;});
-  html += '<div id="fjHinweisReserve" class="meta" style="margin-bottom:6px;"></div>';
-  html += '<label>Nr. (leer lassen für automatisch)</label><input id="fNr" type="number" inputmode="numeric" placeholder="automatisch" value="' + (reservierteFuerKat.length ? reservierteFuerKat[0] : '') + '">';
+  var vorschlagNr = vorgabe.nr || naechsteGeraeteNummer(kundeId, vorKategorie);
+  html += '<label>Nr. (automatisch, bei Bedarf änderbar)</label><input id="fNr" type="number" inputmode="numeric" value="' + vorschlagNr + '">';
   html += '<label id="fTypLabel">Typ</label><input id="fTyp" type="text" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
   html += buildTypDatalist();
   html += buildTypChips();
@@ -4901,6 +4955,9 @@ function bindDynamic(){
 
   var doppelteTermine = document.getElementById('doppelteTermineBtn');
   if(doppelteTermine) doppelteTermine.onclick = function(){ doppelteTermineBereinigen(state.activeKundeId); };
+
+  var nummernReparieren = document.getElementById('nummernReparierenBtn');
+  if(nummernReparieren) nummernReparieren.onclick = function(){ nummernNeuOrdnen(state.activeKundeId); };
 
   document.querySelectorAll('.device-item').forEach(function(d){
     d.onclick = function(){ modalGeraetBearbeiten(d.getAttribute('data-gid')); };
