@@ -4835,9 +4835,25 @@ function modalSammelberichtAnsicht(sbId){
     });
   };
   document.getElementById('druckBtnSb').onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildSammelberichtHtml(sb, k);
-    setTimeout(function(){ window.print(); }, 120);
+    var druckBtnSbEl = document.getElementById('druckBtnSb');
+    druckBtnSbEl.disabled = true;
+    druckBtnSbEl.textContent = 'Bereite vor...';
+    try {
+      var pa = document.getElementById('printArea');
+      pa.innerHTML = buildSammelberichtHtml(sb, k);
+      var anzahlGeraete = (sb.geraeteSnapshot || []).length;
+      var wartezeit = Math.min(120 + anzahlGeraete * 15, 3000);
+      setTimeout(function(){
+        druckBtnSbEl.disabled = false;
+        druckBtnSbEl.textContent = 'Drucken / Als PDF teilen';
+        window.print();
+      }, wartezeit);
+    } catch(err){
+      druckBtnSbEl.disabled = false;
+      druckBtnSbEl.textContent = 'Drucken / Als PDF teilen';
+      console.error('Druck-Fehler Sammelbericht', err);
+      toast('Fehler beim Vorbereiten des Drucks: ' + (err && err.message ? err.message : err));
+    }
   };
   document.getElementById('mailBtnSb').onclick = function(){
     var betreff = 'Sammelbericht ' + (k ? k.name : '') + ' - ' + fmtDate(sb.datum);
