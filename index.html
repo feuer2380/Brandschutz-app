@@ -2690,20 +2690,40 @@ function nummernNeuOrdnen(kundeId){
         return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1;
       });
       var verbleibend = sortiert.length;
-      sortiert.forEach(function(g){
-        var kat = (g.kategorie || 'Feuerlöscher').trim();
-        proKategorie[kat] = (proKategorie[kat] || 0) + 1;
-        g.nr = proKategorie[kat];
-        dbPut('geraete', g, function(){
-          verbleibend--;
-          if(verbleibend === 0){
+      var fehlerListe = [];
+      var fertig = function(){
+        verbleibend--;
+        if(verbleibend === 0){
+          if(fehlerListe.length){
+            btn.disabled = false;
+            btn.textContent = 'Jetzt neu nummerieren';
+            toast(fehlerListe.length + ' von ' + sortiert.length + ' Geräten konnten NICHT gespeichert werden (siehe Konsole). Bitte Internetverbindung prüfen und nochmal versuchen.');
+          } else {
             loadAll(function(){
               render();
               closeModal();
               toast('Nummern neu geordnet (' + alle.length + ' Geräte)');
             });
           }
-        });
+        }
+      };
+      sortiert.forEach(function(g){
+        var kat = (g.kategorie || 'Feuerlöscher').trim();
+        proKategorie[kat] = (proKategorie[kat] || 0) + 1;
+        g.nr = proKategorie[kat];
+        try{
+          db.collection('geraete').doc(g.id).set(g).then(function(){
+            fertig();
+          }).catch(function(err){
+            console.error('Nummerieren-Fehler bei Gerät', g.id, g.typ, err);
+            fehlerListe.push(g.id);
+            fertig();
+          });
+        } catch(e){
+          console.error('Nummerieren-Ausnahme bei Gerät', g.id, e);
+          fehlerListe.push(g.id);
+          fertig();
+        }
       });
     };
   });
