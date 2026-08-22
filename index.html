@@ -2711,18 +2711,44 @@ function nummernNeuOrdnen(kundeId){
       });
       var verbleibend = sortiert.length;
       var fehlerListe = [];
+      var neueWerte = {};
       var fertig = function(){
         verbleibend--;
         if(verbleibend === 0){
           if(fehlerListe.length){
             btn.disabled = false;
             btn.textContent = 'Jetzt neu nummerieren';
-            toast(fehlerListe.length + ' von ' + sortiert.length + ' Geräten konnten NICHT gespeichert werden (siehe Konsole). Bitte Internetverbindung prüfen und nochmal versuchen.');
+            toast(fehlerListe.length + ' von ' + sortiert.length + ' Geräten konnten NICHT gespeichert werden. Bitte Internetverbindung prüfen und nochmal versuchen.');
           } else {
-            loadAll(function(){
-              render();
-              closeModal();
-              toast('Nummern neu geordnet (' + alle.length + ' Geräte)');
+            // Zur Kontrolle NICHT aus dem Zwischenspeicher, sondern direkt vom Server nachfragen
+            db.collection('geraete').where('kundeId', '==', kundeId).get({ source: 'server' }).then(function(snap){
+              var kontrollHtml = '<div class="modal-head"><h3>Ergebnis (vom Server geprüft)</h3><button class="close" id="mClose2">&times;</button></div>';
+              var passtNicht = 0;
+              var zeilen = [];
+              snap.forEach(function(doc){
+                var g = doc.data();
+                var erwartet = neueWerte[g.id];
+                var stimmt = (g.nr === erwartet);
+                if(!stimmt) passtNicht++;
+                zeilen.push({ g: g, erwartet: erwartet, stimmt: stimmt });
+              });
+              zeilen.sort(function(a,b){ return (a.erwartet||0) - (b.erwartet||0); });
+              if(passtNicht === 0){
+                kontrollHtml += '<div class="meta" style="color:#226b32; margin-bottom:10px;">Server bestätigt: Alle ' + zeilen.length + ' Geräte korrekt gespeichert.</div>';
+              } else {
+                kontrollHtml += '<div class="meta" style="color:#a3300d; margin-bottom:10px;">Achtung: Bei ' + passtNicht + ' Geräten stimmt der Server-Stand NICHT mit dem erwarteten Wert überein (unten rot markiert).</div>';
+              }
+              zeilen.forEach(function(z){
+                kontrollHtml += '<div class="meta" style="' + (z.stimmt ? '' : 'color:#a3300d; font-weight:700;') + '">Nr. ' + z.g.nr + ' (erwartet ' + z.erwartet + ') &middot; ' + escapeHtml(z.g.typ || '') + ' &middot; ' + escapeHtml(z.g.standort || '') + '</div>';
+              });
+              openModal(kontrollHtml);
+              document.getElementById('mClose2').onclick = function(){
+                closeModal();
+                loadAll(function(){ render(); });
+              };
+            }).catch(function(err){
+              toast('Server-Kontrolle fehlgeschlagen: ' + (err && err.message ? err.message : err));
+              console.error('Server-Kontrolle Fehler', err);
             });
           }
         }
@@ -2731,6 +2757,7 @@ function nummernNeuOrdnen(kundeId){
         var kat = (g.kategorie || 'Feuerlöscher').trim();
         proKategorie[kat] = (proKategorie[kat] || 0) + 1;
         g.nr = proKategorie[kat];
+        neueWerte[g.id] = g.nr;
         try{
           db.collection('geraete').doc(g.id).set(g).then(function(){
             fertig();
