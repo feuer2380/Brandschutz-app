@@ -459,6 +459,7 @@ var state = {
   kundenSuche: '',
   pruefungFilter: 'alle',
   pruefungOffenAufgeklappt: {},
+  schnellDatumWerte: {},
   pruefungTage: '',
   geraeteFilter: 'alle',
   statFilter: 'tag'
@@ -1653,9 +1654,10 @@ function renderKundeDetail(kundeId){
         var aktLetzte = letztePruefungFuerGeraet(g.id);
         var istBegehung = g.kategorie === 'Brandschutzbegehung';
         var heuteIsoKurz = new Date().toISOString().substring(0,10);
+        var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || heuteIsoKurz;
         html += '<div style="display:flex; align-items:center; gap:6px; margin-top:8px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum</label>';
-        html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + heuteIsoKurz + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
+        html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + datumWert + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
         html += '</div>';
         if(istBegehung){
           html += '<div style="display:flex; gap:6px; margin-top:8px;">';
@@ -4911,6 +4913,13 @@ function bindDynamic(){
     };
   });
 
+  document.querySelectorAll('.schnellDatumInput').forEach(function(inp){
+    inp.onchange = function(){
+      if(!state.schnellDatumWerte) state.schnellDatumWerte = {};
+      state.schnellDatumWerte[inp.getAttribute('data-gid')] = inp.value;
+    };
+  });
+
   document.querySelectorAll('[data-schnellcheck]').forEach(function(b){
     b.onclick = function(e){
       e.stopPropagation();
@@ -4918,6 +4927,7 @@ function bindDynamic(){
       var erg = b.getAttribute('data-erg');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
       var datumOverride = datumInput ? datumInput.value : null;
+      if(state.schnellDatumWerte) delete state.schnellDatumWerte[gid];
       schnellErgebnisSetzen(gid, erg, datumOverride);
     };
   });
