@@ -376,7 +376,7 @@ function baueOeffentlichesGeraet(g, k){
     kundennummer: null,
     zugangscode: k ? (k.zugangscode || null) : null,
     typ: g.typ || '',
-    kategorie: g.kategorie || 'Feuerlöscher',
+    kategorie: (g.kategorie || 'Feuerlöscher').trim(),
     standort: g.standort || '',
     letztePruefung: g.letztePruefung || null,
     naechstePruefung: g.naechstePruefung || null,
@@ -674,7 +674,7 @@ function geraetFuerPruefung(p){
 function pruefungAnzeigeText(p){
   var g = geraetFuerPruefung(p);
   if(g){
-    var kat = g.kategorie || 'Feuerlöscher';
+    var kat = (g.kategorie || 'Feuerlöscher').trim();
     var text = escapeHtml(kat) + (g.typ ? (' &middot; ' + escapeHtml(g.typ)) : '');
     if(kat === 'Brandschutzbegehung'){
       var kBeg = kundeFuerPruefung(p);
@@ -1167,7 +1167,7 @@ function geraeteNummerWert(g){
   var nr = null;
   for(var i = 0; i < geraeteSortiert.length; i++){
     var gx = geraeteSortiert[i];
-    var katKey = gx.kategorie || 'Feuerlöscher';
+    var katKey = (gx.kategorie || 'Feuerlöscher').trim();
     katZaehler[katKey] = (katZaehler[katKey] || 0) + 1;
     if(gx.id === g.id){
       nr = gx.nr || katZaehler[katKey];
@@ -1183,7 +1183,7 @@ function geraeteNummerAnzeige(g){
 }
 
 function naechsteGeraeteNummer(kundeId, kategorie){
-  var alle = state.geraete.filter(function(g){ return g.kundeId === kundeId && (g.kategorie || 'Feuerlöscher') === kategorie; });
+  var alle = state.geraete.filter(function(g){ return g.kundeId === kundeId && ((g.kategorie || 'Feuerlöscher').trim()) === kategorie; });
   var maxNr = 0;
   alle.forEach(function(g){
     var nr = g.nr || 0;
@@ -1406,7 +1406,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
     } else if(ergebnis === 'in_ordnung' || ergebnis === 'begehung'){
       g.letztePruefung = jetztIso.substring(0,10);
       g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
-      if(ergebnis === 'in_ordnung' && istFuellKategorie(g.kategorie || 'Feuerlöscher')){
+      if(ergebnis === 'in_ordnung' && istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
         g.abfuelldatum = jetztLokalDatumZeit();
         if(!g.fuellungen) g.fuellungen = [];
         var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
@@ -1507,7 +1507,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
       if(ergebnis === 'in_ordnung'){
         g.letztePruefung = jetztIso.substring(0,10);
         g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
-        if(istFuellKategorie(g.kategorie || 'Feuerlöscher')){
+        if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
           g.abfuelldatum = jetztLokalDatumZeit();
           if(!g.fuellungen) g.fuellungen = [];
           var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
@@ -1659,7 +1659,7 @@ function renderKundeDetail(kundeId){
     var katZaehler1 = {};
     html += '<div class="card">';
     geraeteSortiert.forEach(function(g, idx){
-      var katKey = g.kategorie || 'Feuerlöscher';
+      var katKey = (g.kategorie || 'Feuerlöscher').trim();
       katZaehler1[katKey] = (katZaehler1[katKey] || 0) + 1;
       var katNr = g.nr || katZaehler1[katKey];
       var st = statusForDate(g.naechstePruefung);
@@ -1885,12 +1885,12 @@ function buildTerminlisteHtml(){
 
 function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
-  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!nurKategorie || (g.kategorie || 'Feuerlöscher') === nurKategorie); });
+  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!nurKategorie || ((g.kategorie || 'Feuerlöscher').trim()) === nurKategorie); });
 
   var gruppen = {};
   var reihenfolge = [];
   geraete.forEach(function(g){
-    var kat = g.kategorie || 'Feuerlöscher';
+    var kat = (g.kategorie || 'Feuerlöscher').trim();
     if(!gruppen[kat]){ gruppen[kat] = []; reihenfolge.push(kat); }
     gruppen[kat].push(g);
   });
@@ -1942,7 +1942,7 @@ function modalGeraeteuebersicht(kundeId){
   var alleGeraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
   var kategorienVorhanden = [];
   alleGeraete.forEach(function(g){
-    var kat = g.kategorie || 'Feuerlöscher';
+    var kat = (g.kategorie || 'Feuerlöscher').trim();
     if(kategorienVorhanden.indexOf(kat) === -1) kategorienVorhanden.push(kat);
   });
   var aktKat = null;
@@ -1976,13 +1976,13 @@ function modalGeraeteuebersicht(kundeId){
     };
     document.getElementById('mailBtnAL').onclick = function(){
       var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
-      var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!aktKat || (g.kategorie || 'Feuerlöscher') === aktKat); });
+      var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!aktKat || ((g.kategorie || 'Feuerlöscher').trim()) === aktKat); });
       var zeilen = [];
       zeilen.push('Ausstattungsliste - ' + (k ? k.name : '') + (k && k.objekt ? ' / ' + k.objekt : '') + (aktKat ? ' (' + aktKat + ')' : ''));
       zeilen.push('');
       geraete.forEach(function(g){
         var zusatz = (g.baujahr ? ', Baujahr ' + g.baujahr : '') + (g.letzteInnenrevision ? ', Innenrevision zuletzt ' + fmtDate(g.letzteInnenrevision) : '');
-        zeilen.push((g.kategorie || 'Feuerlöscher') + ': ' + g.typ + ' - ' + (g.standort || 'Standort unbekannt') + zusatz);
+        zeilen.push(((g.kategorie || 'Feuerlöscher').trim()) + ': ' + g.typ + ' - ' + (g.standort || 'Standort unbekannt') + zusatz);
       });
       zeilen.push('');
       zeilen.push('Wolfgang Janiba Brandschutztechnik GmbH, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
@@ -2691,7 +2691,7 @@ function nummernNeuOrdnen(kundeId){
       });
       var verbleibend = sortiert.length;
       sortiert.forEach(function(g){
-        var kat = g.kategorie || 'Feuerlöscher';
+        var kat = (g.kategorie || 'Feuerlöscher').trim();
         proKategorie[kat] = (proKategorie[kat] || 0) + 1;
         g.nr = proKategorie[kat];
         dbPut('geraete', g, function(){
@@ -2932,7 +2932,7 @@ function modalGeraetBearbeiten(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
-  var aktKategorie = g.kategorie || 'Feuerlöscher';
+  var aktKategorie = (g.kategorie || 'Feuerlöscher').trim();
   var html = '';
   html += '<div class="modal-head"><h3>Gerät bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Kategorie</label><select id="fKategorie">';
@@ -3190,8 +3190,8 @@ function findeDuplikatExterneId(externeId, eigeneGeraetId){
 
 function berechneAktuelleGeraeteNr(g){
   if(g.nr) return g.nr;
-  var kat = g.kategorie || 'Feuerlöscher';
-  var geschwister = state.geraete.filter(function(x){ return x.kundeId === g.kundeId && !x.ausgeschieden && (x.kategorie || 'Feuerlöscher') === kat; });
+  var kat = (g.kategorie || 'Feuerlöscher').trim();
+  var geschwister = state.geraete.filter(function(x){ return x.kundeId === g.kundeId && !x.ausgeschieden && ((x.kategorie || 'Feuerlöscher').trim()) === kat; });
   geschwister.sort(function(a,b){ return (a.erstelltAm || a.id) < (b.erstelltAm || b.id) ? -1 : 1; });
   for(var i=0; i<geschwister.length; i++){
     if(geschwister[i].id === g.id) return i+1;
@@ -4255,7 +4255,7 @@ function modalSammelbericht(kundeId){
 
   var einzelErgebnisse = {};
   geraeteSortiert.forEach(function(g){
-    if((g.kategorie || 'Feuerlöscher') === 'RWA-Anlage'){
+    if(((g.kategorie || 'Feuerlöscher').trim()) === 'RWA-Anlage'){
       einzelErgebnisse[g.id] = dienstleistungenFuerGeraet('RWA-Anlage', g.typ).map(function(text){ return { text: text, ok: true }; });
     }
   });
@@ -4272,10 +4272,10 @@ function modalSammelbericht(kundeId){
   } else {
     var katZaehler2 = {};
     geraeteSortiert.forEach(function(g, idx){
-      var katKey2 = g.kategorie || 'Feuerlöscher';
+      var katKey2 = (g.kategorie || 'Feuerlöscher').trim();
       katZaehler2[katKey2] = (katZaehler2[katKey2] || 0) + 1;
       var katNr2 = g.nr || katZaehler2[katKey2];
-      var istRWA = (g.kategorie || 'Feuerlöscher') === 'RWA-Anlage';
+      var istRWA = ((g.kategorie || 'Feuerlöscher').trim()) === 'RWA-Anlage';
       var aktErg = auswahl[g.id];
       var letzte = letztePruefungFuerGeraet(g.id);
       var farbe = function(key){ return key === 'in_ordnung' ? 'var(--ok)' : (key === 'reparatur' ? '#c98a1c' : '#c23f12'); };
@@ -4298,11 +4298,11 @@ function modalSammelbericht(kundeId){
         html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
         html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
         html += '</div>';
-        if(istFuellKategorie(g.kategorie || 'Feuerlöscher')){
+        if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
           var fuellLabel = (g.kategorie === 'CO2-Flaschen') ? 'Neufüllung Gasflasche am' : 'Neufüllung Sodawasser am';
           html += '<label style="margin-top:6px;">' + fuellLabel + '</label><input type="date" id="sbAbfuell_' + g.id + '" value="' + (g.abfuelldatum || new Date().toISOString().substring(0,10)) + '">';
         }
-        if((g.kategorie || 'Feuerlöscher') === 'Brandschutzbegehung'){
+        if(((g.kategorie || 'Feuerlöscher').trim()) === 'Brandschutzbegehung'){
           html += '<label style="margin-top:6px;">Mängel</label><textarea id="sbMaengel_' + g.id + '" rows="3" placeholder="Festgestellte Mängel eintragen...">' + escapeHtml(g.maengel || '') + '</textarea>';
         }
       }
@@ -4382,7 +4382,7 @@ function modalSammelbericht(kundeId){
         var gruppenNachKategorie = {};
         var kategorienReihenfolge = [];
         snapshot.forEach(function(g){
-          var kat = g.kategorie || 'Feuerlöscher';
+          var kat = (g.kategorie || 'Feuerlöscher').trim();
           if(!gruppenNachKategorie[kat]){
             gruppenNachKategorie[kat] = [];
             kategorienReihenfolge.push(kat);
@@ -4424,11 +4424,11 @@ function modalSammelbericht(kundeId){
         return;
       }
       var g = geraeteSortiert[idx];
-      var istRWA = (g.kategorie || 'Feuerlöscher') === 'RWA-Anlage';
+      var istRWA = ((g.kategorie || 'Feuerlöscher').trim()) === 'RWA-Anlage';
       var akkuEl = istRWA ? document.getElementById('sbAkku_' + g.id) : null;
       var akkuVal = akkuEl ? akkuEl.value : '';
       if(akkuVal){ g.akkuTauschDatum = akkuVal; }
-      var istPZ = istFuellKategorie(g.kategorie || 'Feuerlöscher');
+      var istPZ = istFuellKategorie((g.kategorie || 'Feuerlöscher').trim());
       var abfuellEl = istPZ ? document.getElementById('sbAbfuell_' + g.id) : null;
       var abfuellVal = abfuellEl ? abfuellEl.value : '';
       if(abfuellVal){
@@ -4440,7 +4440,7 @@ function modalSammelbericht(kundeId){
         var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
         g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '' });
       }
-      var istBegehung = (g.kategorie || 'Feuerlöscher') === 'Brandschutzbegehung';
+      var istBegehung = ((g.kategorie || 'Feuerlöscher').trim()) === 'Brandschutzbegehung';
       var maengelEl = istBegehung ? document.getElementById('sbMaengel_' + g.id) : null;
       var maengelVal = maengelEl ? maengelEl.value.trim() : '';
       if(maengelEl){ g.maengel = maengelVal; }
@@ -4478,7 +4478,7 @@ function modalSammelbericht(kundeId){
           snapshot.push({
             nr: g.nr || (idx + 1),
             typ: g.typ,
-            kategorie: g.kategorie || 'Feuerlöscher',
+            kategorie: (g.kategorie || 'Feuerlöscher').trim(),
             standort: g.standort || '',
             baujahr: g.baujahr || null,
             seriennummer: g.seriennummer || '',
@@ -4525,7 +4525,7 @@ function buildSammelberichtHtml(sb, k){
   var gruppenNachKategorie = {};
   var kategorienReihenfolge = [];
   (sb.geraeteSnapshot || []).forEach(function(g){
-    var kat = g.kategorie || 'Feuerlöscher';
+    var kat = (g.kategorie || 'Feuerlöscher').trim();
     if(!gruppenNachKategorie[kat]){
       gruppenNachKategorie[kat] = [];
       kategorienReihenfolge.push(kat);
