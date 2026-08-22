@@ -2679,9 +2679,10 @@ function nummernNeuOrdnen(kundeId){
   document.getElementById('mClose').onclick = closeModal;
 
   dbGetAll('geraete', function(alleGeraete){
-    var alle = alleGeraete.filter(function(g){ return g.kundeId === kundeId; });
+    var alle = alleGeraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+    var ausgeschiedeneAnzahl = alleGeraete.filter(function(g){ return g.kundeId === kundeId && g.ausgeschieden; }).length;
     if(alle.length === 0){
-      openModal('<div class="modal-head"><h3>Gerätenummern</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine Geräte vorhanden.</div>');
+      openModal('<div class="modal-head"><h3>Gerätenummern</h3><button class="close" id="mClose">&times;</button></div><div class="empty">Keine aktiven Geräte vorhanden.</div>');
       document.getElementById('mClose').onclick = closeModal;
       return;
     }
@@ -2694,7 +2695,7 @@ function nummernNeuOrdnen(kundeId){
     var moeglicheDuplikate = Object.keys(schluesselZaehlung).filter(function(s){ return schluesselZaehlung[s] > 1; });
 
     var html = '<div class="modal-head"><h3>Gerätenummern neu ordnen</h3><button class="close" id="mClose">&times;</button></div>';
-    html += '<div class="meta" style="margin-bottom:10px;">Nummeriert alle ' + alle.length + ' Geräte dieses Kunden pro Kategorie neu durch, streng nach Anlegedatum (1, 2, 3, ...), ohne Lücken oder Sprünge. Bereits gedruckte Etiketten mit alten Nummern stimmen danach eventuell nicht mehr überein.</div>';
+    html += '<div class="meta" style="margin-bottom:10px;">Nummeriert alle ' + alle.length + ' aktiven Geräte dieses Kunden pro Kategorie neu durch, streng nach Anlegedatum (1, 2, 3, ...), ohne Lücken oder Sprünge. Ausgeschiedene Geräte (' + ausgeschiedeneAnzahl + ') werden dabei übersprungen, damit in der sichtbaren Liste keine Lücken entstehen. Bereits gedruckte Etiketten mit alten Nummern stimmen danach eventuell nicht mehr überein.</div>';
     if(moeglicheDuplikate.length){
       html += '<div class="meta" style="color:#a3300d; margin-bottom:10px;">Achtung: ' + moeglicheDuplikate.length + ' möglicherweise doppelt erfasste Geräte gefunden (gleicher Typ + Standort). Bitte nach dem Nummerieren die Geräteliste kontrollieren, ob wirklich zwei separate Türen gemeint sind oder eine davon gelöscht werden sollte.</div>';
     }
@@ -2727,6 +2728,7 @@ function nummernNeuOrdnen(kundeId){
               var zeilen = [];
               snap.forEach(function(doc){
                 var g = doc.data();
+                if(!(g.id in neueWerte)) return; // ausgeschiedene/nicht mit-nummerierte Geräte hier nicht anzeigen
                 var erwartet = neueWerte[g.id];
                 var stimmt = (g.nr === erwartet);
                 if(!stimmt) passtNicht++;
