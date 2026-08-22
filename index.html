@@ -2222,60 +2222,74 @@ function renderStatistik(){
   html += '</div>';
   html += '<button class="btn block secondary no-print" id="druckBtnStat" style="margin-bottom:14px;">Drucken / Als PDF teilen</button>';
 
-  html += '<div class="section-title" style="margin-top:4px;">Tagesprotokoll</div>';
-  var protokollDatum = state.tagesprotokollDatum || new Date().toISOString().substring(0,10);
-  html += '<input type="date" id="tagesprotokollDatum" value="' + protokollDatum + '" style="margin-bottom:10px;">';
-  var protokollEintraege = state.pruefungen.filter(function(p){
-    return p.erledigt && p.erledigtAm && p.erledigtAm.substring(0,10) === protokollDatum;
+  var subTab = state.statSubTab || 'pruefungen';
+  var subTabs = [
+    {key:'pruefungen', label:'Prüfungen'},
+    {key:'portal', label:'Kundenportal'},
+    {key:'fuellungen', label:'Füllungen'}
+  ];
+  html += '<div class="filter-bar" style="margin-bottom:14px;">';
+  subTabs.forEach(function(t){
+    html += '<button class="filter-btn' + (subTab === t.key ? ' active' : '') + '" data-statsubtab="' + t.key + '">' + t.label + '</button>';
   });
-  protokollEintraege.sort(function(a,b){ return new Date(a.erledigtAm) - new Date(b.erledigtAm); });
-  if(protokollEintraege.length === 0){
-    html += '<div class="empty">An diesem Tag wurde nichts geprüft</div>';
-  } else {
-    // Kurze Zusammenfassung pro Mitarbeiter oben
-    var proMitarbeiter = {};
-    protokollEintraege.forEach(function(p){
-      var name = p.erledigtVon || 'unbekannt';
-      proMitarbeiter[name] = (proMitarbeiter[name] || 0) + 1;
-    });
-    html += '<div class="meta" style="margin-bottom:10px;">' + protokollEintraege.length + ' Prüfungen &middot; ' + Object.keys(proMitarbeiter).map(function(n){ return escapeHtml(n) + ': ' + proMitarbeiter[n]; }).join(' &middot; ') + '</div>';
+  html += '</div>';
 
-    // Gruppiert nach Kunde, klappbar
-    var proKunde = {};
-    var kundenReihenfolge = [];
-    protokollEintraege.forEach(function(p){
-      var k = kundeFuerPruefung(p);
-      var kid = k ? k.id : 'unbekannt';
-      if(!proKunde[kid]){ proKunde[kid] = { kunde: k, eintraege: [] }; kundenReihenfolge.push(kid); }
-      proKunde[kid].eintraege.push(p);
+  if(subTab === 'pruefungen'){
+    html += '<div class="section-title" style="margin-top:4px;">Tagesprotokoll</div>';
+    var protokollDatum = state.tagesprotokollDatum || new Date().toISOString().substring(0,10);
+    html += '<input type="date" id="tagesprotokollDatum" value="' + protokollDatum + '" style="margin-bottom:10px;">';
+    var protokollEintraege = state.pruefungen.filter(function(p){
+      return p.erledigt && p.erledigtAm && p.erledigtAm.substring(0,10) === protokollDatum;
     });
-    kundenReihenfolge.forEach(function(kid){
-      var gruppe = proKunde[kid];
-      var name = gruppe.kunde ? gruppe.kunde.name : 'Unbekannt';
-      if(gruppe.eintraege.length === 1){
-        var p = gruppe.eintraege[0];
-        var ei = ergebnisInfo(p.ergebnis);
-        html += '<div class="card">';
-        html += '<div class="row"><h3>' + fmtZeit(p.erledigtAm) + ' Uhr</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
-        html += '<div class="meta">' + escapeHtml(name) + ' &middot; ' + pruefungAnzeigeText(p) + '</div>';
-        html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt') + '</b></div>';
-        html += '</div>';
-      } else {
-        var aufgeklappt = !!(state.tagesprotokollAufgeklappt && state.tagesprotokollAufgeklappt[kid]);
-        html += '<div class="card">';
-        html += '<div class="row tagesprotokollToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + escapeHtml(name) + '</h3><span class="badge ok">' + gruppe.eintraege.length + ' Prüfungen ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
-        if(aufgeklappt){
-          gruppe.eintraege.forEach(function(p, idx){
-            var ei = ergebnisInfo(p.ergebnis);
-            html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
-            html += '<div class="row"><span class="meta">' + fmtZeit(p.erledigtAm) + ' Uhr &middot; ' + pruefungAnzeigeText(p) + '</span><span class="' + ei.cls + '">' + ei.label + '</span></div>';
-            html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt') + '</b></div>';
-            html += '</div>';
-          });
+    protokollEintraege.sort(function(a,b){ return new Date(a.erledigtAm) - new Date(b.erledigtAm); });
+    if(protokollEintraege.length === 0){
+      html += '<div class="empty">An diesem Tag wurde nichts geprüft</div>';
+    } else {
+      // Kurze Zusammenfassung pro Mitarbeiter oben
+      var proMitarbeiter = {};
+      protokollEintraege.forEach(function(p){
+        var name = p.erledigtVon || 'unbekannt';
+        proMitarbeiter[name] = (proMitarbeiter[name] || 0) + 1;
+      });
+      html += '<div class="meta" style="margin-bottom:10px;">' + protokollEintraege.length + ' Prüfungen &middot; ' + Object.keys(proMitarbeiter).map(function(n){ return escapeHtml(n) + ': ' + proMitarbeiter[n]; }).join(' &middot; ') + '</div>';
+
+      // Gruppiert nach Kunde, klappbar
+      var proKunde = {};
+      var kundenReihenfolge = [];
+      protokollEintraege.forEach(function(p){
+        var k = kundeFuerPruefung(p);
+        var kid = k ? k.id : 'unbekannt';
+        if(!proKunde[kid]){ proKunde[kid] = { kunde: k, eintraege: [] }; kundenReihenfolge.push(kid); }
+        proKunde[kid].eintraege.push(p);
+      });
+      kundenReihenfolge.forEach(function(kid){
+        var gruppe = proKunde[kid];
+        var name = gruppe.kunde ? gruppe.kunde.name : 'Unbekannt';
+        if(gruppe.eintraege.length === 1){
+          var p = gruppe.eintraege[0];
+          var ei = ergebnisInfo(p.ergebnis);
+          html += '<div class="card">';
+          html += '<div class="row"><h3>' + fmtZeit(p.erledigtAm) + ' Uhr</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+          html += '<div class="meta">' + escapeHtml(name) + ' &middot; ' + pruefungAnzeigeText(p) + '</div>';
+          html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt') + '</b></div>';
+          html += '</div>';
+        } else {
+          var aufgeklappt = !!(state.tagesprotokollAufgeklappt && state.tagesprotokollAufgeklappt[kid]);
+          html += '<div class="card">';
+          html += '<div class="row tagesprotokollToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + escapeHtml(name) + '</h3><span class="badge ok">' + gruppe.eintraege.length + ' Prüfungen ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+          if(aufgeklappt){
+            gruppe.eintraege.forEach(function(p, idx){
+              var ei = ergebnisInfo(p.ergebnis);
+              html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
+              html += '<div class="row"><span class="meta">' + fmtZeit(p.erledigtAm) + ' Uhr &middot; ' + pruefungAnzeigeText(p) + '</span><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+              html += '<div class="meta">Geprüft von: <b>' + escapeHtml(p.erledigtVon || 'unbekannt') + '</b></div>';
+              html += '</div>';
+            });
+          }
+          html += '</div>';
         }
-        html += '</div>';
-      }
-    });
+      });
+    }
   }
 
   var jetztDate = new Date();
@@ -2294,121 +2308,161 @@ function renderStatistik(){
   var statListe = alleErledigt.filter(function(p){ return new Date(p.erledigtAm) >= startBereich; });
   statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
 
-  var anzInOrdnung = statListe.filter(function(p){ return p.ergebnis === 'In Ordnung'; }).length;
-  var anzReparatur = statListe.filter(function(p){ return p.ergebnis === 'Reparatur nötig'; }).length;
-  var anzAusgeschieden = statListe.filter(function(p){ return p.ergebnis === 'Ausgeschieden'; }).length;
-  var kundenSet = {};
-  statListe.forEach(function(p){
-    var k = kundeFuerPruefung(p);
-    if(k) kundenSet[k.id] = true;
-  });
-  var anzKunden = Object.keys(kundenSet).length;
-
-  html += '<div class="statrow">';
-  html += '<div class="stat"><div class="n">' + statListe.length + '</div><div class="l">Überprüft</div></div>';
-  html += '<div class="stat"><div class="n">' + anzKunden + '</div><div class="l">Kunden geprüft</div></div>';
-  html += '</div>';
-  html += '<div class="statrow">';
-  html += '<div class="stat"><div class="n" style="color:var(--ok);">' + anzInOrdnung + '</div><div class="l">In Ordnung</div></div>';
-  html += '<div class="stat"><div class="n" style="color:#1d5fa8;">' + anzReparatur + '</div><div class="l">Reparatur</div></div>';
-  html += '<div class="stat"><div class="n" style="color:var(--warn);">' + anzAusgeschieden + '</div><div class="l">Ausgeschieden</div></div>';
-  html += '</div>';
-
-  html += buildErgebnisChart(anzInOrdnung, anzReparatur, anzAusgeschieden);
-  if(statFilter !== 'tag'){
-    html += buildZeitChart(statListe.map(function(p){ return p.erledigtAm; }), statFilter, jetztDate, monatNamen);
-  }
-
-  html += '<div class="section-title" style="margin-top:20px;">CO2-Flaschen Füllungen</div>';
-  var co2Zeilen = [];
-  state.geraete.filter(function(g){ return g.kategorie === 'CO2-Flaschen'; }).forEach(function(g){
-    (g.fuellungen || []).forEach(function(f){
-      if(new Date(f.datum) >= startBereich){
-        co2Zeilen.push({ geraet: g, fuellung: f });
-      }
+  if(subTab === 'pruefungen'){
+    var anzInOrdnung = statListe.filter(function(p){ return p.ergebnis === 'In Ordnung'; }).length;
+    var anzReparatur = statListe.filter(function(p){ return p.ergebnis === 'Reparatur nötig'; }).length;
+    var anzAusgeschieden = statListe.filter(function(p){ return p.ergebnis === 'Ausgeschieden'; }).length;
+    var kundenSet = {};
+    statListe.forEach(function(p){
+      var k = kundeFuerPruefung(p);
+      if(k) kundenSet[k.id] = true;
     });
-  });
-  co2Zeilen.sort(function(a,b){ return new Date(b.fuellung.datum) - new Date(a.fuellung.datum); });
-  var co2GesamtMenge = 0;
-  co2Zeilen.forEach(function(z){ co2GesamtMenge += (z.fuellung.menge || 0); });
-  html += '<div class="statrow">';
-  html += '<div class="stat"><div class="n">' + co2Zeilen.length + '</div><div class="l">Füllungen</div></div>';
-  html += '<div class="stat"><div class="n">' + Math.round(co2GesamtMenge) + ' g</div><div class="l">Gesamtmenge</div></div>';
-  html += '</div>';
-  if(statFilter !== 'tag' && co2Zeilen.length > 0){
-    html += buildZeitChart(co2Zeilen.map(function(z){ return z.fuellung.datum; }), statFilter, jetztDate, monatNamen);
-  }
-  if(co2Zeilen.length === 0){
-    html += '<div class="empty">In diesem Zeitraum keine CO2-Flaschen gefüllt</div>';
-  } else {
-    var co2NachKunde = {};
-    var co2Reihenfolge = [];
-    co2Zeilen.forEach(function(z){
-      var kid = z.geraet.kundeId || 'unbekannt';
-      if(!co2NachKunde[kid]){ co2NachKunde[kid] = []; co2Reihenfolge.push(kid); }
-      co2NachKunde[kid].push(z);
-    });
-    co2Reihenfolge.forEach(function(kid){
-      var zeilen = co2NachKunde[kid];
-      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
-      var summe = 0;
-      zeilen.forEach(function(z){ summe += (z.fuellung.menge || 0); });
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge blau">' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + '</span></div>';
-      html += '<div class="meta">Gesamtmenge: ' + Math.round(summe) + ' g</div>';
-      zeilen.forEach(function(z){
-        html += '<div class="meta">' + fmtDate(z.fuellung.datum) + ' &middot; ' + escapeHtml(z.geraet.typ || 'Flasche') + (z.fuellung.standort ? ' &middot; ' + escapeHtml(z.fuellung.standort) : '') + (z.fuellung.menge ? ' &middot; ' + z.fuellung.menge + ' g' : '') + '</div>';
+    var anzKunden = Object.keys(kundenSet).length;
+
+    html += '<div class="statrow">';
+    html += '<div class="stat"><div class="n">' + statListe.length + '</div><div class="l">Überprüft</div></div>';
+    html += '<div class="stat"><div class="n">' + anzKunden + '</div><div class="l">Kunden geprüft</div></div>';
+    html += '</div>';
+    html += '<div class="statrow">';
+    html += '<div class="stat"><div class="n" style="color:var(--ok);">' + anzInOrdnung + '</div><div class="l">In Ordnung</div></div>';
+    html += '<div class="stat"><div class="n" style="color:#1d5fa8;">' + anzReparatur + '</div><div class="l">Reparatur</div></div>';
+    html += '<div class="stat"><div class="n" style="color:var(--warn);">' + anzAusgeschieden + '</div><div class="l">Ausgeschieden</div></div>';
+    html += '</div>';
+
+    html += buildErgebnisChart(anzInOrdnung, anzReparatur, anzAusgeschieden);
+    if(statFilter !== 'tag'){
+      html += buildZeitChart(statListe.map(function(p){ return p.erledigtAm; }), statFilter, jetztDate, monatNamen);
+    }
+
+    html += '<div class="section-title" style="margin-top:20px;">Einzelne Prüfungen</div>';
+    var statSuchtext = (state.statSuchtext || '').trim().toLowerCase();
+    html += '<input type="text" id="statKundenSuche" placeholder="Nach Kunde suchen..." value="' + escapeHtml(state.statSuchtext || '') + '" style="margin-bottom:10px;">';
+    var statListeGefiltert = statSuchtext ? statListe.filter(function(p){
+      var k = kundeFuerPruefung(p);
+      var name = (k ? k.name : 'Unbekannt').toLowerCase();
+      return name.indexOf(statSuchtext) !== -1;
+    }) : statListe;
+    if(statListeGefiltert.length === 0){
+      html += '<div class="empty">' + (statSuchtext ? 'Kein Treffer für "' + escapeHtml(state.statSuchtext) + '"' : 'In diesem Zeitraum wurde nichts überprüft') + '</div>';
+    } else {
+      var statProKunde = {};
+      var statKundenReihenfolge = [];
+      statListeGefiltert.forEach(function(p){
+        var k = kundeFuerPruefung(p);
+        var kid = k ? k.id : 'unbekannt';
+        if(!statProKunde[kid]){ statProKunde[kid] = { kunde: k, eintraege: [] }; statKundenReihenfolge.push(kid); }
+        statProKunde[kid].eintraege.push(p);
       });
-      html += '</div>';
-    });
-  }
-
-  html += '<div class="section-title" style="margin-top:20px;">Kunden mit Portalzugang</div>';
-  var portalKunden = state.kunden.filter(function(k){ return k.freigabe; });
-  if(portalKunden.length === 0){
-    html += '<div class="empty">Noch kein Kunde freigegeben</div>';
-  } else {
-    portalKunden.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); }).forEach(function(k){
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3></div>';
-      html += '<div class="meta">Zugangscode: <b>' + escapeHtml(k.zugangscode || '(keiner erzeugt)') + '</b></div>';
-      html += '</div>';
-    });
-  }
-
-  html += '<div class="section-title" style="margin-top:20px;">Portal-Zugriffe</div>';
-  var zugriffe = (state.portal_zugriffe || []).slice().sort(function(a,b){
-    return new Date(b.zeitpunkt) - new Date(a.zeitpunkt);
-  });
-  if(zugriffe.length === 0){
-    html += '<div class="empty">Noch kein Kunde hat das Portal aufgerufen</div>';
-  } else {
-    zugriffe.slice(0, 50).forEach(function(z){
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + escapeHtml(z.kundenname || 'Unbekannt') + '</h3>' + (z.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(z.kundennummer) + '</span>' : '') + '</div>';
-      html += '<div class="meta">' + escapeHtml(z.typ || '') + (z.standort ? ' &middot; ' + escapeHtml(z.standort) : '') + '</div>';
-      html += '<div class="meta">' + fmtDate(z.zeitpunkt) + ' um ' + fmtZeit(z.zeitpunkt) + ' Uhr</div>';
-      html += '</div>';
-    });
-    if(zugriffe.length > 50){
-      html += '<div class="meta" style="text-align:center;">... und ' + (zugriffe.length - 50) + ' weitere</div>';
+      statKundenReihenfolge.forEach(function(kid){
+        var gruppe = statProKunde[kid];
+        var name = gruppe.kunde ? gruppe.kunde.name : 'Unbekannt';
+        if(gruppe.eintraege.length === 1){
+          var p = gruppe.eintraege[0];
+          var ei = ergebnisInfo(p.ergebnis);
+          html += '<div class="card">';
+          html += '<div class="row"><h3>' + escapeHtml(name) + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+          html += '<div class="meta">' + pruefungAnzeigeText(p) + '</div>';
+          html += '<div class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</div>';
+          html += '</div>';
+        } else {
+          var aufgeklappt = !!(state.statEinzelnAufgeklappt && state.statEinzelnAufgeklappt[kid]);
+          html += '<div class="card">';
+          html += '<div class="row statEinzelnToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + escapeHtml(name) + '</h3><span class="badge ok">' + gruppe.eintraege.length + ' Prüfungen ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+          if(aufgeklappt){
+            gruppe.eintraege.forEach(function(p, idx){
+              var ei = ergebnisInfo(p.ergebnis);
+              html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
+              html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + '</span><span class="' + ei.cls + '">' + ei.label + '</span></div>';
+              html += '<div class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</div>';
+              html += '</div>';
+            });
+          }
+          html += '</div>';
+        }
+      });
     }
   }
 
-  html += '<div class="section-title" style="margin-top:20px;">Einzelne Prüfungen</div>';
-  if(statListe.length === 0){
-    html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
-  } else {
-    statListe.forEach(function(p){
-      var k = kundeFuerPruefung(p);
-      var ei = ergebnisInfo(p.ergebnis);
-      html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="' + ei.cls + '">' + ei.label + '</span></div>';
-      html += '<div class="meta">' + pruefungAnzeigeText(p) + '</div>';
-      html += '<div class="meta">' + fmtDate(p.erledigtAm) + ' um ' + fmtZeit(p.erledigtAm) + ' Uhr</div>';
-      html += '</div>';
+  if(subTab === 'fuellungen'){
+    html += '<div class="section-title" style="margin-top:4px;">CO2-Flaschen Füllungen</div>';
+    var co2Zeilen = [];
+    state.geraete.filter(function(g){ return g.kategorie === 'CO2-Flaschen'; }).forEach(function(g){
+      (g.fuellungen || []).forEach(function(f){
+        if(new Date(f.datum) >= startBereich){
+          co2Zeilen.push({ geraet: g, fuellung: f });
+        }
+      });
     });
+    co2Zeilen.sort(function(a,b){ return new Date(b.fuellung.datum) - new Date(a.fuellung.datum); });
+    var co2GesamtMenge = 0;
+    co2Zeilen.forEach(function(z){ co2GesamtMenge += (z.fuellung.menge || 0); });
+    html += '<div class="statrow">';
+    html += '<div class="stat"><div class="n">' + co2Zeilen.length + '</div><div class="l">Füllungen</div></div>';
+    html += '<div class="stat"><div class="n">' + Math.round(co2GesamtMenge) + ' g</div><div class="l">Gesamtmenge</div></div>';
+    html += '</div>';
+    if(statFilter !== 'tag' && co2Zeilen.length > 0){
+      html += buildZeitChart(co2Zeilen.map(function(z){ return z.fuellung.datum; }), statFilter, jetztDate, monatNamen);
+    }
+    if(co2Zeilen.length === 0){
+      html += '<div class="empty">In diesem Zeitraum keine CO2-Flaschen gefüllt</div>';
+    } else {
+      var co2NachKunde = {};
+      var co2Reihenfolge = [];
+      co2Zeilen.forEach(function(z){
+        var kid = z.geraet.kundeId || 'unbekannt';
+        if(!co2NachKunde[kid]){ co2NachKunde[kid] = []; co2Reihenfolge.push(kid); }
+        co2NachKunde[kid].push(z);
+      });
+      co2Reihenfolge.forEach(function(kid){
+        var zeilen = co2NachKunde[kid];
+        var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+        var summe = 0;
+        zeilen.forEach(function(z){ summe += (z.fuellung.menge || 0); });
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge blau">' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + '</span></div>';
+        html += '<div class="meta">Gesamtmenge: ' + Math.round(summe) + ' g</div>';
+        zeilen.forEach(function(z){
+          html += '<div class="meta">' + fmtDate(z.fuellung.datum) + ' &middot; ' + escapeHtml(z.geraet.typ || 'Flasche') + (z.fuellung.standort ? ' &middot; ' + escapeHtml(z.fuellung.standort) : '') + (z.fuellung.menge ? ' &middot; ' + z.fuellung.menge + ' g' : '') + '</div>';
+        });
+        html += '</div>';
+      });
+    }
   }
+
+  if(subTab === 'portal'){
+    html += '<div class="section-title" style="margin-top:4px;">Kunden mit Portalzugang</div>';
+    var portalKunden = state.kunden.filter(function(k){ return k.freigabe; });
+    if(portalKunden.length === 0){
+      html += '<div class="empty">Noch kein Kunde freigegeben</div>';
+    } else {
+      portalKunden.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); }).forEach(function(k){
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3></div>';
+        html += '<div class="meta">Zugangscode: <b>' + escapeHtml(k.zugangscode || '(keiner erzeugt)') + '</b></div>';
+        html += '</div>';
+      });
+    }
+
+    html += '<div class="section-title" style="margin-top:20px;">Portal-Zugriffe</div>';
+    var zugriffe = (state.portal_zugriffe || []).slice().sort(function(a,b){
+      return new Date(b.zeitpunkt) - new Date(a.zeitpunkt);
+    });
+    if(zugriffe.length === 0){
+      html += '<div class="empty">Noch kein Kunde hat das Portal aufgerufen</div>';
+    } else {
+      zugriffe.slice(0, 50).forEach(function(z){
+        html += '<div class="card">';
+        html += '<div class="row"><h3>' + escapeHtml(z.kundenname || 'Unbekannt') + '</h3>' + (z.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(z.kundennummer) + '</span>' : '') + '</div>';
+        html += '<div class="meta">' + escapeHtml(z.typ || '') + (z.standort ? ' &middot; ' + escapeHtml(z.standort) : '') + '</div>';
+        html += '<div class="meta">' + fmtDate(z.zeitpunkt) + ' um ' + fmtZeit(z.zeitpunkt) + ' Uhr</div>';
+        html += '</div>';
+      });
+      if(zugriffe.length > 50){
+        html += '<div class="meta" style="text-align:center;">... und ' + (zugriffe.length - 50) + ' weitere</div>';
+      }
+    }
+  }
+
   return html;
 }
 
@@ -5047,6 +5101,15 @@ function bindDynamic(){
     };
   });
 
+  document.querySelectorAll('.statEinzelnToggle').forEach(function(el){
+    el.onclick = function(){
+      var kid = el.getAttribute('data-kid');
+      if(!state.statEinzelnAufgeklappt) state.statEinzelnAufgeklappt = {};
+      state.statEinzelnAufgeklappt[kid] = !state.statEinzelnAufgeklappt[kid];
+      render();
+    };
+  });
+
   var back = document.getElementById('backToKunden');
   if(back) back.onclick = function(){ state.tab = 'kunden'; render(); };
 
@@ -5153,12 +5216,24 @@ function bindDynamic(){
         state.geraeteFilter = b.getAttribute('data-geraetefilter');
       } else if(b.hasAttribute('data-statfilter')){
         state.statFilter = b.getAttribute('data-statfilter');
+      } else if(b.hasAttribute('data-statsubtab')){
+        state.statSubTab = b.getAttribute('data-statsubtab');
       } else {
         state.pruefungFilter = b.getAttribute('data-filter');
       }
       render();
     };
   });
+
+  var statKundenSucheInput = document.getElementById('statKundenSuche');
+  if(statKundenSucheInput){
+    statKundenSucheInput.oninput = function(){
+      state.statSuchtext = statKundenSucheInput.value;
+      render();
+      var neuesFeld = document.getElementById('statKundenSuche');
+      if(neuesFeld){ neuesFeld.focus(); neuesFeld.setSelectionRange(neuesFeld.value.length, neuesFeld.value.length); }
+    };
+  }
 
   var exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportAlleDaten;
