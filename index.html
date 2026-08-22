@@ -4541,7 +4541,9 @@ function modalSammelbericht(kundeId){
     var snapshot = [];
 
     function naechstesGeraet(){
+      sbBtn.textContent = 'Speichere Gerät ' + (idx + 1) + ' von ' + geraeteSortiert.length + '...';
       if(idx >= geraeteSortiert.length){
+        sbBtn.textContent = 'Erstelle Bericht(e)...';
         var basisNr = document.getElementById('sbBerichtNr').value.trim();
         var allgemeineBemerkung = document.getElementById('sbBemerkung').value.trim();
         var sigKundeData = sigKunde.toDataURL('image/png');
