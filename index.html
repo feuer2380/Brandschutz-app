@@ -1371,6 +1371,26 @@ function letzteErledigungInnerhalb24h(geraetId){
   return treffer[0];
 }
 
+function nurTerminVerschieben(geraetId, neuesDatum){
+  if(!neuesDatum){ toast('Bitte zuerst ein Datum wählen'); return; }
+  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  if(!g) return;
+  g.naechstePruefung = neuesDatum;
+  dbPut('geraete', g, function(){
+    var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
+    var weiter = function(){
+      loadAll(function(){ render(); toast('Nächster Termin verschoben: ' + fmtDate(neuesDatum)); });
+    };
+    if(offenePruefung){
+      offenePruefung.datum = neuesDatum;
+      dbPut('pruefungen', offenePruefung, weiter);
+    } else {
+      var pNeu = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: neuesDatum, erledigt: false };
+      dbPut('pruefungen', pNeu, weiter);
+    }
+  });
+}
+
 function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
   var vorherige = letzteErledigungInnerhalb24h(geraetId);
   if(vorherige){
@@ -1698,9 +1718,12 @@ function renderKundeDetail(kundeId){
         var istBegehung = g.kategorie === 'Brandschutzbegehung';
         var heuteIsoKurz = new Date().toISOString().substring(0,10);
         var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || heuteIsoKurz;
-        html += '<div style="display:flex; align-items:center; gap:6px; margin-top:8px;">';
-        html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum</label>';
+        html += '<div style="margin-top:8px;">';
+        html += '<div style="display:flex; align-items:center; gap:6px;">';
+        html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum der Prüfung</label>';
         html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + datumWert + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
+        html += '</div>';
+        html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr JETZT eine echte Prüfung eintragt (auch rückwirkend). Wollt ihr nur den nächsten Termin verschieben, ohne dass es als Prüfung zählt: <span class="nurTerminBtn" data-gid="' + g.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">hier klicken</span>.</div>';
         html += '</div>';
         if(istBegehung){
           html += '<div style="display:flex; gap:6px; margin-top:8px;">';
@@ -4570,12 +4593,17 @@ function modalSammelbericht(kundeId){
       var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
       var notiz = (document.getElementById('sbNotiz_' + g.id).value || '').trim();
 
+      var pruefdatumElVorab = document.getElementById('sbPruefdatum_' + g.id);
+      var pruefdatumWertVorab = (ergebnis === 'in_ordnung' && pruefdatumElVorab && pruefdatumElVorab.value) ? pruefdatumElVorab.value : null;
+      var istRueckwirkendSb = pruefdatumWertVorab && pruefdatumWertVorab !== jetztIso.substring(0,10);
+      var erledigtAmWert = istRueckwirkendSb ? (pruefdatumWertVorab + 'T12:00:00') : jetztIso;
+
       var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
       if(!offenePruefung){
-        offenePruefung = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: jetztIso.substring(0,10), erledigt: false };
+        offenePruefung = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: erledigtAmWert.substring(0,10), erledigt: false };
       }
       offenePruefung.erledigt = true;
-      offenePruefung.erledigtAm = jetztIso;
+      offenePruefung.erledigtAm = erledigtAmWert;
       offenePruefung.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
       offenePruefung.bericht = true;
       offenePruefung.ergebnis = ergebnisLabel;
@@ -4612,8 +4640,7 @@ function modalSammelbericht(kundeId){
           g.ausgeschiedenAm = jetztIso;
           dbPut('geraete', g, function(){ weiter(null); });
         } else if(ergebnis === 'in_ordnung'){
-          var pruefdatumEl = document.getElementById('sbPruefdatum_' + g.id);
-          var pruefdatumWert = (pruefdatumEl && pruefdatumEl.value) ? pruefdatumEl.value : jetztIso.substring(0,10);
+          var pruefdatumWert = pruefdatumWertVorab || jetztIso.substring(0,10);
           g.letztePruefung = pruefdatumWert;
           g.naechstePruefung = naechsterTerminNach(pruefdatumWert, g.intervallMonate);
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
@@ -5114,6 +5141,14 @@ function bindDynamic(){
     inp.onchange = function(){
       if(!state.schnellDatumWerte) state.schnellDatumWerte = {};
       state.schnellDatumWerte[inp.getAttribute('data-gid')] = inp.value;
+    };
+  });
+
+  document.querySelectorAll('.nurTerminBtn').forEach(function(el){
+    el.onclick = function(){
+      var gid = el.getAttribute('data-gid');
+      var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
+      nurTerminVerschieben(gid, datumInput ? datumInput.value : null);
     };
   });
 
