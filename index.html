@@ -698,8 +698,14 @@ function kundeIstAktiv(kundeId){
 function renderDashboard(){
   var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
   var jetztFuerMonatslaenge = new Date();
-  var tageDiesenMonat = new Date(jetztFuerMonatslaenge.getFullYear(), jetztFuerMonatslaenge.getMonth() + 1, 0).getDate();
-  var bald = offen.filter(function(p){ return daysUntil(p.datum) >= 0 && daysUntil(p.datum) <= tageDiesenMonat; });
+  var naechsterMonatDatum = new Date(jetztFuerMonatslaenge.getFullYear(), jetztFuerMonatslaenge.getMonth() + 1, 1);
+  var naechsterMonatIndex = naechsterMonatDatum.getMonth();
+  var naechsterMonatJahr = naechsterMonatDatum.getFullYear();
+  var tageNaechsterMonat = new Date(naechsterMonatJahr, naechsterMonatIndex + 1, 0).getDate();
+  var bald = offen.filter(function(p){
+    var d = new Date(p.datum);
+    return d.getMonth() === naechsterMonatIndex && d.getFullYear() === naechsterMonatJahr;
+  });
 
   var geraeteAktiv = state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); });
   var ueberfaelligGeraete = geraeteAktiv.filter(function(g){ return statusForDate(g.naechstePruefung).cls === 'warn'; });
@@ -782,7 +788,7 @@ function renderDashboard(){
     });
   }
 
-  html += '<div class="section-title">Bald fällig (' + tageDiesenMonat + ' Tage, ' + monatNamen[jetztFuerMonatslaenge.getMonth()] + ')</div>';
+  html += '<div class="section-title">Bald fällig (' + tageNaechsterMonat + ' Tage, ' + monatNamen[naechsterMonatIndex] + ')</div>';
   var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
   if(bald.length === 0 && ueberfaelligPruefungen.length === 0){
     html += '<div class="empty"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
