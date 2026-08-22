@@ -2742,9 +2742,16 @@ function nummernNeuOrdnen(kundeId){
                 kontrollHtml += '<div class="meta" style="' + (z.stimmt ? '' : 'color:#a3300d; font-weight:700;') + '">Nr. ' + z.g.nr + ' (erwartet ' + z.erwartet + ') &middot; ' + escapeHtml(z.g.typ || '') + ' &middot; ' + escapeHtml(z.g.standort || '') + '</div>';
               });
               openModal(kontrollHtml);
+              // Angezeigten Stand direkt mit dem bestätigten Server-Stand überschreiben,
+              // damit die App nicht durch einen noch nicht aufgeholten Zwischenspeicher wieder alte Werte zeigt.
+              snap.forEach(function(doc){
+                var frisch = doc.data();
+                var idxLokal = state.geraete.findIndex(function(x){ return x.id === frisch.id; });
+                if(idxLokal !== -1) state.geraete[idxLokal] = frisch;
+              });
               document.getElementById('mClose2').onclick = function(){
                 closeModal();
-                loadAll(function(){ render(); });
+                render();
               };
             }).catch(function(err){
               toast('Server-Kontrolle fehlgeschlagen: ' + (err && err.message ? err.message : err));
