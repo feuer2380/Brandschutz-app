@@ -4524,6 +4524,18 @@ function modalSammelbericht(kundeId){
   });
 
   document.getElementById('sbSpeichern').onclick = function(){
+    var sbBtn = document.getElementById('sbSpeichern');
+    sbBtn.disabled = true;
+    sbBtn.textContent = 'Wird gespeichert...';
+    var fertigMarkiert = false;
+    var wachhund = setTimeout(function(){
+      if(!fertigMarkiert){
+        sbBtn.disabled = false;
+        sbBtn.textContent = 'Sammelbericht erstellen';
+        toast('Das Speichern dauert ungewöhnlich lange oder ist hängen geblieben. Bitte Internetverbindung prüfen und nochmal versuchen.');
+      }
+    }, 20000);
+
     var jetztIso = new Date().toISOString();
     var idx = 0;
     var snapshot = [];
@@ -4568,6 +4580,7 @@ function modalSammelbericht(kundeId){
         var bi = 0;
         function speichereNaechstenBericht(){
           if(bi >= berichteZuSpeichern.length){
+            fertigMarkiert = true;
             loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast(berichteZuSpeichern.length + ' Prüfbericht(e) erstellt'); });
             return;
           }
@@ -4673,7 +4686,15 @@ function modalSammelbericht(kundeId){
         }
       });
     }
-    naechstesGeraet();
+    try {
+      naechstesGeraet();
+    } catch(err){
+      clearTimeout(wachhund);
+      sbBtn.disabled = false;
+      sbBtn.textContent = 'Sammelbericht erstellen';
+      console.error('Sammelbericht-Fehler', err);
+      toast('Fehler beim Erstellen: ' + (err && err.message ? err.message : err));
+    }
   };
 }
 
