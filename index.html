@@ -249,6 +249,7 @@ if('serviceWorker' in navigator){
     <button class="tabbtn" data-tab="pruefungen"><span class="ic">&#128197;</span>Prüfungen</button>
     <button class="tabbtn" data-tab="berichte"><span class="ic">&#128196;</span>Berichte</button>
     <button class="tabbtn" data-tab="statistik"><span class="ic">&#128202;</span>Statistik</button>
+    <button class="tabbtn" data-tab="lager"><span class="ic">&#128230;</span>Lager</button>
   </nav>
 </div>
 
@@ -283,7 +284,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
 var OEFFENTLICH_STORE = 'oeffentlich_geraete';
@@ -454,6 +455,7 @@ var state = {
   begehungsberichte: [],
   dokumente: [],
   portal_zugriffe: [],
+  lagerartikel: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
   pruefungOffenAufgeklappt: {},
@@ -477,7 +479,10 @@ function loadAll(cb){
               state.dokumente = dk;
               dbGetAll('portal_zugriffe', function(pz){
                 state.portal_zugriffe = pz;
-                cb();
+                dbGetAll('lagerartikel', function(la){
+                  state.lagerartikel = la;
+                  cb();
+                });
               });
             });
           });
@@ -641,6 +646,7 @@ function renderInner(){
   else if(state.tab === 'kundeDetail') m.innerHTML = renderKundeDetail(state.activeKundeId);
   else if(state.tab === 'scan') m.innerHTML = renderScan();
   else if(state.tab === 'geraetCheck') m.innerHTML = renderGeraetCheck(state.activeGeraetId);
+  else if(state.tab === 'lager') m.innerHTML = renderLager();
 
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
@@ -892,6 +898,133 @@ function renderDashboard(){
 var scannerInstance = null;
 var scannerLaeuft = false;
 
+// ---------- Lager ----------
+function renderLager(){
+  var html = '';
+  html += '<div class="section-title">Lager</div>';
+  html += '<button class="btn block secondary no-print" id="alleLagerQrDruckenBtn" style="margin-bottom:10px;">Alle QR-Codes drucken</button>';
+  var liste = state.lagerartikel.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  if(liste.length === 0){
+    html += '<div class="empty"><span class="ic">&#128230;</span>Noch keine Lagerartikel angelegt.<br>Tippe unten rechts auf + zum Hinzufügen.</div>';
+  } else {
+    liste.forEach(function(a){
+      var niedrig = (a.mindestbestand != null) && (a.bestand <= a.mindestbestand);
+      html += '<div class="card lager-card" data-id="' + a.id + '">';
+      html += '<div class="row"><h3>' + escapeHtml(a.name) + '</h3><span class="badge ' + (niedrig ? 'warn' : 'ok') + '">' + a.bestand + ' ' + escapeHtml(a.einheit || 'Stk') + '</span></div>';
+      html += '<div class="row" style="gap:8px; margin-top:8px;">';
+      html += '<button type="button" class="btn small secondary" data-lagerminus="' + a.id + '" style="flex:0 0 auto; padding:0 16px;">&minus;</button>';
+      html += '<button type="button" class="btn small secondary" data-lagerplus="' + a.id + '" style="flex:0 0 auto; padding:0 16px;">+</button>';
+      html += '<button type="button" class="btn small secondary qrLagerBtn" data-lagerqr="' + a.id + '" style="flex:1;">QR-Code</button>';
+      html += '</div>';
+      html += '</div>';
+    });
+  }
+  return html;
+}
+
+function lagerBestandAendern(artikelId, delta){
+  var a = state.lagerartikel.filter(function(x){ return x.id === artikelId; })[0];
+  if(!a) return;
+  a.bestand = Math.max(0, (a.bestand || 0) + delta);
+  dbPut('lagerartikel', a, function(){
+    loadAll(function(){ render(); toast(a.name + ': ' + a.bestand + ' ' + (a.einheit || 'Stk')); });
+  });
+}
+
+function modalNeuerLagerartikel(){
+  var html = '';
+  html += '<div class="modal-head"><h3>Neuer Lagerartikel</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>Name</label><input id="fLaName" type="text" placeholder="z.B. Pulverlöscher 6kg">';
+  html += '<label>Einheit (optional)</label><input id="fLaEinheit" type="text" placeholder="z.B. Stk" value="Stk">';
+  html += '<label>Startbestand</label><input id="fLaBestand" type="number" inputmode="numeric" value="0">';
+  html += '<label>Mindestbestand (optional, für Warnung)</label><input id="fLaMindest" type="number" inputmode="numeric" placeholder="z.B. 5">';
+  html += '<button class="btn block" id="fLaSpeichern" style="margin-top:14px;">Anlegen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('fLaSpeichern').onclick = function(){
+    var name = document.getElementById('fLaName').value.trim();
+    if(!name){ toast('Bitte Namen eingeben'); return; }
+    var a = {
+      id: uid(),
+      name: name,
+      einheit: document.getElementById('fLaEinheit').value.trim() || 'Stk',
+      bestand: parseInt(document.getElementById('fLaBestand').value, 10) || 0,
+      mindestbestand: document.getElementById('fLaMindest').value ? parseInt(document.getElementById('fLaMindest').value, 10) : null,
+      erstelltAm: new Date().toISOString()
+    };
+    dbPut('lagerartikel', a, function(){
+      loadAll(function(){ render(); closeModal(); toast('Lagerartikel angelegt'); });
+    });
+  };
+}
+
+function modalLagerArtikelAnpassen(artikelId){
+  var a = state.lagerartikel.filter(function(x){ return x.id === artikelId; })[0];
+  if(!a) return;
+  var html = '';
+  html += '<div class="modal-head"><h3>' + escapeHtml(a.name) + '</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="text-align:center; margin:10px 0;"><span style="font-size:40px; font-family:Georgia,serif; color:var(--ember-dark);">' + a.bestand + '</span><div class="meta">' + escapeHtml(a.einheit || 'Stk') + ' aktuell im Lager</div></div>';
+  html += '<div class="row" style="gap:10px; justify-content:center;">';
+  html += '<button type="button" class="btn" id="laModalMinus" style="flex:0 0 auto; padding:10px 22px; font-size:20px;">&minus;</button>';
+  html += '<button type="button" class="btn" id="laModalPlus" style="flex:0 0 auto; padding:10px 22px; font-size:20px;">+</button>';
+  html += '</div>';
+  html += '<label style="margin-top:16px;">Oder genaue Menge setzen</label>';
+  html += '<div class="row" style="gap:8px;"><input id="laModalMenge" type="number" inputmode="numeric" value="' + a.bestand + '" style="flex:1;"><button type="button" class="btn secondary" id="laModalSetzen" style="flex:0 0 auto;">Setzen</button></div>';
+  html += '<button type="button" class="btn block secondary" id="laModalQr" style="margin-top:16px;">QR-Code anzeigen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('laModalMinus').onclick = function(){ lagerBestandAendern(artikelId, -1); closeModal(); };
+  document.getElementById('laModalPlus').onclick = function(){ lagerBestandAendern(artikelId, 1); closeModal(); };
+  document.getElementById('laModalSetzen').onclick = function(){
+    var neu = parseInt(document.getElementById('laModalMenge').value, 10);
+    if(isNaN(neu) || neu < 0){ toast('Bitte gültige Zahl eingeben'); return; }
+    a.bestand = neu;
+    dbPut('lagerartikel', a, function(){
+      loadAll(function(){ render(); closeModal(); toast(a.name + ': ' + neu + ' ' + (a.einheit || 'Stk')); });
+    });
+  };
+  document.getElementById('laModalQr').onclick = function(){ modalQrLagerartikel(artikelId); };
+}
+
+function modalQrLagerartikel(artikelId){
+  var a = state.lagerartikel.filter(function(x){ return x.id === artikelId; })[0];
+  if(!a) return;
+  var qrText = 'BSV-LAGER:' + a.id;
+  var html = '';
+  html += '<div class="modal-head"><h3>QR-Code Lagerartikel</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + escapeHtml(a.name) + '</div>';
+  html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Ausdrucken und am Regal/Artikel anbringen. Scannen öffnet direkt die Mengen-Anpassung.</div>';
+  html += '<div class="qr-box" id="qrTarget"></div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  try{
+    new QRCode(document.getElementById('qrTarget'), {
+      text: qrText,
+      width: 500,
+      height: 500,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+    qrMitRand('qrTarget');
+  } catch(e){
+    document.getElementById('qrTarget').innerHTML = '<div class="meta">QR-Code konnte nicht geladen werden (offline)</div>';
+  }
+}
+
+function buildAlleLagerQrDruckHtml(){
+  var liste = state.lagerartikel.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  var html = '<div style="padding:16px; font-family:-apple-system,Arial,sans-serif;">';
+  html += '<h2 style="margin-bottom:14px;">Lager-QR-Codes</h2>';
+  html += '<div style="display:flex; flex-wrap:wrap; gap:18px;">';
+  liste.forEach(function(a){
+    html += '<div style="width:180px; text-align:center; border:1px solid #ccc; padding:10px; border-radius:6px; page-break-inside:avoid;">';
+    html += '<div style="font-weight:700; font-size:13px; margin-bottom:6px;">' + escapeHtml(a.name) + '</div>';
+    html += '<div id="druckqr_' + a.id + '"></div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  return { html: html, liste: liste };
+}
+
 function renderScan(){
   var html = '';
   html += '<div class="card" style="text-align:center; padding:10px;">';
@@ -959,6 +1092,16 @@ function verarbeiteScan(text){
   var id = text.trim();
   var portalMatch = id.match(/kunde\.html\?id=([^&\s]+)/i);
   if(portalMatch) id = decodeURIComponent(portalMatch[1]);
+  if(id.indexOf('BSV-LAGER:') === 0){
+    var lid = id.substring('BSV-LAGER:'.length);
+    var lExists = state.lagerartikel.filter(function(x){ return x.id === lid; })[0];
+    if(lExists){
+      modalLagerArtikelAnpassen(lid);
+      return;
+    }
+    toast('Lagerartikel nicht gefunden');
+    return;
+  }
   if(id.indexOf('BSV-GERAET:') === 0) id = id.substring('BSV-GERAET:'.length);
   else if(id.indexOf('BSV-KUNDE:') === 0){
     var kid = id.substring('BSV-KUNDE:'.length);
@@ -4652,6 +4795,37 @@ function bindDynamic(){
     render();
   };
 
+  document.querySelectorAll('.lager-card').forEach(function(c){
+    c.onclick = function(){ modalLagerArtikelAnpassen(c.getAttribute('data-id')); };
+  });
+  document.querySelectorAll('[data-lagerminus]').forEach(function(b){
+    b.onclick = function(e){ e.stopPropagation(); lagerBestandAendern(b.getAttribute('data-lagerminus'), -1); };
+  });
+  document.querySelectorAll('[data-lagerplus]').forEach(function(b){
+    b.onclick = function(e){ e.stopPropagation(); lagerBestandAendern(b.getAttribute('data-lagerplus'), 1); };
+  });
+  document.querySelectorAll('[data-lagerqr]').forEach(function(b){
+    b.onclick = function(e){ e.stopPropagation(); modalQrLagerartikel(b.getAttribute('data-lagerqr')); };
+  });
+  var alleLagerQrBtn = document.getElementById('alleLagerQrDruckenBtn');
+  if(alleLagerQrBtn) alleLagerQrBtn.onclick = function(){
+    var res = buildAlleLagerQrDruckHtml();
+    if(res.liste.length === 0){ toast('Keine Lagerartikel vorhanden'); return; }
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = res.html;
+    res.liste.forEach(function(a){
+      try{
+        new QRCode(document.getElementById('druckqr_' + a.id), {
+          text: 'BSV-LAGER:' + a.id,
+          width: 140,
+          height: 140,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e){}
+    });
+    setTimeout(function(){ window.print(); }, 150);
+  };
+
   document.querySelectorAll('.filter-btn').forEach(function(b){
     b.onclick = function(){
       if(b.hasAttribute('data-geraetefilter')){
@@ -4850,6 +5024,8 @@ document.getElementById('fabBtn').addEventListener('click', function(){
     modalNeuesGeraet(state.activeKundeId);
   } else if(state.tab === 'pruefungen'){
     modalNeuerKunde();
+  } else if(state.tab === 'lager'){
+    modalNeuerLagerartikel();
   } else {
     modalNeuerKunde();
   }
