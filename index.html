@@ -2635,35 +2635,57 @@ function modalPruefungenKorrigieren(kundeId){
         if(cb.checked) ausgewaehlt.push(treffer[parseInt(cb.getAttribute('data-idx'), 10)]);
       });
       if(ausgewaehlt.length === 0){ toast('Nichts ausgewählt'); return; }
+      var korrBtn = document.getElementById('korrAnwendenBtn');
+      korrBtn.disabled = true;
+      korrBtn.textContent = 'Wird korrigiert...';
       var verbleibend = ausgewaehlt.length;
+      var fehlerListe = [];
+      var fertig = function(){
+        verbleibend--;
+        if(verbleibend === 0){
+          if(fehlerListe.length){
+            korrBtn.disabled = false;
+            korrBtn.textContent = 'Korrigieren';
+            toast(fehlerListe.length + ' von ' + ausgewaehlt.length + ' konnten NICHT gespeichert werden. Bitte Internetverbindung prüfen und nochmal versuchen.');
+          } else {
+            loadAll(function(){ render(); closeModal(); toast('Prüfdaten korrigiert (' + ausgewaehlt.length + ')'); });
+          }
+        }
+      };
       ausgewaehlt.forEach(function(p){
         p.datum = richtigesDatum;
         p.erledigtAm = richtigesDatum + 'T12:00:00';
-        dbPut('pruefungen', p, function(){
+        db.collection('pruefungen').doc(p.id).set(p).then(function(){
           var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
-          var weiter = function(){
-            verbleibend--;
-            if(verbleibend === 0){
-              loadAll(function(){ render(); closeModal(); toast('Prüfdaten korrigiert'); });
-            }
-          };
           if(g){
             g.letztePruefung = richtigesDatum;
             var neuerTermin = naechsterTerminNach(richtigesDatum + 'T12:00:00', g.intervallMonate);
             g.naechstePruefung = neuerTermin;
-            dbPut('geraete', g, function(){
+            db.collection('geraete').doc(g.id).set(g).then(function(){
               var offenePruefung = state.pruefungen.filter(function(x){ return x.geraetId === g.id && !x.erledigt && x.id !== p.id; })[0];
               if(offenePruefung){
                 offenePruefung.datum = neuerTermin;
-                dbPut('pruefungen', offenePruefung, weiter);
+                db.collection('pruefungen').doc(offenePruefung.id).set(offenePruefung).then(fertig).catch(function(err){
+                  console.error('Korrigieren-Fehler (offene Prüfung)', p.id, err);
+                  fehlerListe.push(p.id); fertig();
+                });
               } else {
                 var pNeu = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: neuerTermin, erledigt: false };
-                dbPut('pruefungen', pNeu, weiter);
+                db.collection('pruefungen').doc(pNeu.id).set(pNeu).then(fertig).catch(function(err){
+                  console.error('Korrigieren-Fehler (neue Prüfung)', p.id, err);
+                  fehlerListe.push(p.id); fertig();
+                });
               }
+            }).catch(function(err){
+              console.error('Korrigieren-Fehler (Gerät)', p.id, err);
+              fehlerListe.push(p.id); fertig();
             });
           } else {
-            weiter();
+            fertig();
           }
+        }).catch(function(err){
+          console.error('Korrigieren-Fehler (Prüfung)', p.id, err);
+          fehlerListe.push(p.id); fertig();
         });
       });
     };
