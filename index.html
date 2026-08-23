@@ -893,15 +893,38 @@ function renderDashboard(){
     gefiltert.forEach(function(g){
       var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
       var st = statusForDate(g.naechstePruefung);
-      html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
-      html += '<div class="row"><h3>' + escapeHtml(g.typ) + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-      html += '<div class="meta">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
-      html += '<div class="meta">Letzte Prüfung: ' + (g.letztePruefung ? fmtDate(g.letztePruefung) : 'Unbekannt') + '</div>';
+      var katInfo = kategorieVisual(g.kategorie);
+      html += '<div class="card kunde-card geraet-karte" data-id="' + (k ? k.id : '') + '" style="border-left:4px solid ' + katInfo.farbe + ';">';
+      html += '<div class="row" style="align-items:flex-start;">';
+      html += '<div style="flex:1; min-width:0;">';
+      html += '<h3 style="margin-bottom:1px;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
+      html += '<div class="meta" style="font-size:13px;"><span style="font-size:15px;">' + katInfo.icon + '</span> ' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+      html += '</div>';
+      html += '<span class="badge ' + st.cls + '" style="flex-shrink:0;">' + st.label + '</span>';
+      html += '</div>';
+      html += '<div class="meta" style="margin-top:6px;">Letzte Prüfung: ' + (g.letztePruefung ? fmtDate(g.letztePruefung) : 'Unbekannt') + '</div>';
       html += '</div>';
     });
   }
 
   return html;
+}
+
+function kategorieVisual(kategorie){
+  var kat = (kategorie || 'Feuerlöscher').trim();
+  var karte = {
+    'Feuerlöscher': { icon: '&#128680;', farbe: '#c0392b' },
+    'RWA-Anlage': { icon: '&#128168;', farbe: '#7d5ba6' },
+    'Notbeleuchtung': { icon: '&#128161;', farbe: '#d4a017' },
+    'Rauchmelder': { icon: '&#128266;', farbe: '#8e8e8e' },
+    'Brandschutzbegehung': { icon: '&#128203;', farbe: '#2c7a51' },
+    'Brandschutzklappen': { icon: '&#9974;', farbe: '#996633' },
+    'Brandschutztüren': { icon: '&#128682;', farbe: '#1d5fa8' },
+    'Perchtl Zisch': { icon: '&#128167;', farbe: '#0d9488' },
+    'CO2-Flaschen': { icon: '&#9879;', farbe: '#0d9488' },
+    'Sonstiges': { icon: '&#128295;', farbe: '#8e8e8e' }
+  };
+  return karte[kat] || { icon: '&#128295;', farbe: '#8e8e8e' };
 }
 
 // ---------- Scan ----------
