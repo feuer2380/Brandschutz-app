@@ -285,6 +285,7 @@ var FIREBASE_CONFIG = {
 };
 var db = null;
 var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel'];
+var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
 var OEFFENTLICH_STORE = 'oeffentlich_geraete';
@@ -2129,7 +2130,7 @@ function buildStatistikDruckHtml(statFilter){
   } else {
     startBereich = new Date(jetztDate.getFullYear(), 0, 1);
   }
-  var statListe = alleErledigt.filter(function(p){ return new Date(p.erledigtAm) >= startBereich; });
+  var statListe = alleErledigt.filter(function(p){ var pd = new Date(p.erledigtAm); return pd >= startBereich && pd <= jetztDate; });
   statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
   var anzInOrdnung = statListe.filter(function(p){ return p.ergebnis === 'In Ordnung'; }).length;
   var anzReparatur = statListe.filter(function(p){ return p.ergebnis === 'Reparatur nötig'; }).length;
@@ -2348,7 +2349,7 @@ function renderStatistik(){
   } else {
     startBereich = new Date(jetztDate.getFullYear(), 0, 1);
   }
-  var statListe = alleErledigt.filter(function(p){ return new Date(p.erledigtAm) >= startBereich; });
+  var statListe = alleErledigt.filter(function(p){ var pd = new Date(p.erledigtAm); return pd >= startBereich && pd <= jetztDate; });
   statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
 
   if(subTab === 'pruefungen'){
@@ -2379,15 +2380,16 @@ function renderStatistik(){
 
     html += '<div class="section-title" style="margin-top:20px;">Nach Gerätetyp</div>';
     var proKategorieAnz = {};
-    var kategorieReihenfolgeStat = [];
+    ALLE_KATEGORIEN.forEach(function(kat){ proKategorieAnz[kat] = 0; });
     statListe.forEach(function(p){
       var g = geraetFuerPruefung(p);
-      var kat = g ? (g.typ || g.kategorie || 'Feuerlöscher').trim() : (p.typ || 'Unbekannt');
-      if(!proKategorieAnz[kat]){ proKategorieAnz[kat] = 0; kategorieReihenfolgeStat.push(kat); }
+      var kat = g ? (g.kategorie || 'Feuerlöscher').trim() : 'Sonstiges (Gerät gelöscht)';
+      if(!(kat in proKategorieAnz)) proKategorieAnz[kat] = 0;
       proKategorieAnz[kat]++;
     });
+    var kategorieReihenfolgeStat = Object.keys(proKategorieAnz);
     kategorieReihenfolgeStat.sort(function(a,b){ return proKategorieAnz[b] - proKategorieAnz[a]; });
-    if(kategorieReihenfolgeStat.length === 0){
+    if(statListe.length === 0){
       html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
     } else {
       var maxKatWert = proKategorieAnz[kategorieReihenfolgeStat[0]];
@@ -2508,14 +2510,15 @@ function renderStatistik(){
 
     html += '<div class="section-title" style="margin-top:16px;">Nach Kategorie</div>';
     var proKatBestand = {};
-    var katBestandReihenfolge = [];
+    ALLE_KATEGORIEN.forEach(function(kat){ proKatBestand[kat] = 0; });
     geraeteAktivBestand.forEach(function(g){
       var kat = (g.kategorie || 'Feuerlöscher').trim();
-      if(!proKatBestand[kat]){ proKatBestand[kat] = 0; katBestandReihenfolge.push(kat); }
+      if(!(kat in proKatBestand)) proKatBestand[kat] = 0;
       proKatBestand[kat]++;
     });
+    var katBestandReihenfolge = Object.keys(proKatBestand);
     katBestandReihenfolge.sort(function(a,b){ return proKatBestand[b] - proKatBestand[a]; });
-    if(katBestandReihenfolge.length === 0){
+    if(geraeteAktivBestand.length === 0){
       html += '<div class="empty">Noch keine Geräte angelegt</div>';
     } else {
       var maxKatBestandWert = proKatBestand[katBestandReihenfolge[0]];
