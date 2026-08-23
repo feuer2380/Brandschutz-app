@@ -886,6 +886,20 @@ function renderDashboard(){
     if(geraeteFilter === 'ok') return st.cls === 'ok';
     return true;
   });
+  if(state.rolle === 'mitarbeiter'){
+    var heuteFuerSicht = new Date();
+    var sichtMonat = heuteFuerSicht.getMonth();
+    var sichtJahr = heuteFuerSicht.getFullYear();
+    if(heuteFuerSicht.getDate() >= 27){
+      sichtMonat++;
+      if(sichtMonat > 11){ sichtMonat = 0; sichtJahr++; }
+    }
+    var sichtbarBisDatum = new Date(sichtJahr, sichtMonat + 1, 0, 23, 59, 59);
+    gefiltert = gefiltert.filter(function(g){
+      if(!g.naechstePruefung) return true;
+      return new Date(g.naechstePruefung) <= sichtbarBisDatum;
+    });
+  }
   gefiltert.sort(function(a,b){ return geraeteSortierVergleich(b, a); }); // neueste zuerst
 
   if(gefiltert.length === 0){
