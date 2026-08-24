@@ -589,6 +589,13 @@ function statusForDate(iso){
   return {cls:'ok', label:'In Ordnung'};
 }
 
+function statusFuerBaldFaellig(iso){
+  if(!iso) return {cls:'ok', label:'Kein Termin'};
+  var du = daysUntil(iso);
+  if(du < 0) return {cls:'warn', label:'Überfällig'};
+  return {cls:'soon', label: du + ' Tage'};
+}
+
 // ---------- Render Router ----------
 function render(){
   try {
@@ -810,13 +817,13 @@ function renderDashboard(){
       var gr = gruppen[key];
       var schlimmsteCls = 'ok';
       gr.eintraege.forEach(function(p){
-        var c = statusForDate(p.datum).cls;
+        var c = statusFuerBaldFaellig(p.datum).cls;
         if(c === 'warn') schlimmsteCls = 'warn';
         else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
       });
       if(gr.eintraege.length === 1){
         var p = gr.eintraege[0];
-        var st = statusForDate(p.datum);
+        var st = statusFuerBaldFaellig(p.datum);
         html += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
         html += '<div class="row"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
         html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div></div>';
@@ -827,7 +834,7 @@ function renderDashboard(){
         html += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer;"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
         if(aufgeklappt){
           gr.eintraege.forEach(function(p){
-            var st = statusForDate(p.datum);
+            var st = statusFuerBaldFaellig(p.datum);
             html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
           });
         }
