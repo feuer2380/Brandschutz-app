@@ -1542,6 +1542,14 @@ function naechsterTerminBeiAbschluss(g, jetztIso){
   return naechsterTerminNach(jetztIso, g.intervallMonate);
 }
 
+function neuenOffenenTerminAnlegen(g, cb){
+  if(!g || !g.naechstePruefung){ if(cb) cb(); return; }
+  var hatOffene = state.pruefungen.some(function(p){ return p.geraetId === g.id && !p.erledigt; });
+  if(hatOffene){ if(cb) cb(); return; }
+  var pNeu = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: g.naechstePruefung, erledigt: false };
+  dbPut('pruefungen', pNeu, function(){ if(cb) cb(); });
+}
+
 function letzteErledigungInnerhalb24h(geraetId){
   var grenze = new Date();
   grenze.setHours(grenze.getHours() - 24);
@@ -1635,7 +1643,9 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
         g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '' });
       }
       dbPut('geraete', g, function(){
-        loadAll(function(){ render(); toast('Gespeichert: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
+        neuenOffenenTerminAnlegen(g, function(){
+          loadAll(function(){ render(); toast('Gespeichert: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')'); });
+        });
       });
     } else {
       loadAll(function(){ render(); toast('Gespeichert: Reparatur nötig'); });
@@ -1746,7 +1756,9 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
         g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '' });
         }
         dbPut('geraete', g, function(){
-          nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
+          neuenOffenenTerminAnlegen(g, function(){
+            nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
+          });
         });
       } else {
         if(begehungWarGestartet && ergebnis === 'reparatur'){
@@ -4065,7 +4077,9 @@ function modalErledigt(pruefungId){
         gZu.letztePruefung = jetztIso.substring(0,10);
         gZu.naechstePruefung = naechsterTerminBeiAbschluss(gZu, jetztIso);
         dbPut('geraete', gZu, function(){
-          loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(p.id); });
+          neuenOffenenTerminAnlegen(gZu, function(){
+            loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(p.id); });
+          });
         });
       } else {
         loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(p.id); });
@@ -5059,7 +5073,7 @@ function modalSammelbericht(kundeId){
           var pruefdatumWert = pruefdatumWertVorab || jetztIso.substring(0,10);
           g.letztePruefung = pruefdatumWert;
           g.naechstePruefung = naechsterTerminBeiAbschluss(g, pruefdatumWert + 'T12:00:00');
-          dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
+          dbPut('geraete', g, function(){ neuenOffenenTerminAnlegen(g, function(){ weiter(g.naechstePruefung); }); });
         } else if(akkuVal || abfuellVal || maengelEl){
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
         } else {
