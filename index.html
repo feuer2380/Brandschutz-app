@@ -1427,6 +1427,7 @@ function renderGeraetCheck(geraetId){
   }
 
   if(!g.ausgeschieden){
+    var istBegehungCheck = (g.kategorie === 'Brandschutzbegehung');
     html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
     html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
     html += '<canvas class="sig" id="checkSigKunde"></canvas>';
@@ -1434,13 +1435,24 @@ function renderGeraetCheck(geraetId){
     html += '<label style="margin-top:14px;">Unterschrift Techniker</label>';
     html += '<canvas class="sig" id="checkSigTechniker"></canvas>';
     html += '<button class="btn secondary small" id="checkSigClearTechniker" style="margin-top:6px;">Löschen</button>';
-    var vorg = state.vorgewaehltesErgebnis;
-    var hlOk = vorg === 'in_ordnung' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
-    var hlRep = vorg === 'reparatur' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
-    var hlAus = vorg === 'ausscheiden' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
-    html += '<button class="btn block" id="btnOk" style="background:var(--ok); margin-top:16px;' + hlOk + '">&#10003; In Ordnung - Prüfung abschließen</button>';
-    html += '<button class="btn block" id="btnReparatur" style="background:#c98a1c; margin-top:10px;' + hlRep + '">&#9881; Reparatur nötig</button>';
-    html += '<button class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;' + hlAus + '">Gerät ausscheiden (zu alt / defekt)</button>';
+    if(istBegehungCheck){
+      if(g.begehungStart){
+        html += '<div class="card" style="margin-top:16px; background:#fdf2e0;"><div class="meta">Begehung gestartet um <b>' + fmtZeit(g.begehungStart) + ' Uhr</b> (' + fmtDate(g.begehungStart) + ')</div></div>';
+        html += '<button class="btn block" id="btnBegehungBeenden" style="background:var(--ok); margin-top:10px;">&#10003; Begehung beenden - Prüfung abschließen</button>';
+      } else {
+        html += '<button class="btn block" id="btnBegehungStarten" style="background:var(--ok); margin-top:16px;">&#9201; Begehung starten (Uhrzeit erfassen)</button>';
+      }
+      html += '<button class="btn block" id="btnReparatur" style="background:#c98a1c; margin-top:10px;">&#9881; Reparatur / Mangel nötig</button>';
+      html += '<button class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Objekt entfernen</button>';
+    } else {
+      var vorg = state.vorgewaehltesErgebnis;
+      var hlOk = vorg === 'in_ordnung' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
+      var hlRep = vorg === 'reparatur' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
+      var hlAus = vorg === 'ausscheiden' ? ' box-shadow:0 0 0 3px #1a1410;' : '';
+      html += '<button class="btn block" id="btnOk" style="background:var(--ok); margin-top:16px;' + hlOk + '">&#10003; In Ordnung - Prüfung abschließen</button>';
+      html += '<button class="btn block" id="btnReparatur" style="background:#c98a1c; margin-top:10px;' + hlRep + '">&#9881; Reparatur nötig</button>';
+      html += '<button class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;' + hlAus + '">Gerät ausscheiden (zu alt / defekt)</button>';
+    }
   }
 
   return html;
@@ -1644,11 +1656,20 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
     if(ergebnis === 'reparatur') bemerkung = 'Reparatur erforderlich';
     if(ergebnis === 'in_ordnung') bemerkung = '';
   }
+  var begehungWarGestartet = !!g.begehungStart;
+  if((ergebnis === 'reparatur' || ergebnis === 'ausscheiden') && g.begehungStart) g.begehungStart = null;
   var sigKundeCanvas = document.getElementById('checkSigKunde');
   var sigTechnikerCanvas = document.getElementById('checkSigTechniker');
   var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
   var jetztIso = new Date().toISOString();
-  var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
+  var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
+  if(ergebnis === 'begehung' && g.begehungStart){
+    var startZeit = fmtZeit(g.begehungStart) + ' Uhr';
+    var endZeit = fmtZeit(jetztIso) + ' Uhr';
+    var dauerMin = Math.round((new Date(jetztIso) - new Date(g.begehungStart)) / 60000);
+    var dauerText = 'Begehung: ' + startZeit + ' bis ' + endZeit + ' (' + dauerMin + ' Min.)';
+    bemerkung = bemerkung ? (dauerText + ' &middot; ' + bemerkung) : dauerText;
+  }
   if(!offenePruefung){
     offenePruefung = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: jetztIso.substring(0,10), erledigt: false };
   }
@@ -1705,9 +1726,10 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
         };
       });
     } else {
-      if(ergebnis === 'in_ordnung'){
+      if(ergebnis === 'in_ordnung' || ergebnis === 'begehung'){
         g.letztePruefung = jetztIso.substring(0,10);
         g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+        if(ergebnis === 'begehung') g.begehungStart = null;
         if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
           g.abfuelldatum = jetztLokalDatumZeit();
           if(!g.fuellungen) g.fuellungen = [];
@@ -1718,7 +1740,13 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
           nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
         });
       } else {
-        nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel);
+        if(begehungWarGestartet && ergebnis === 'reparatur'){
+          dbPut('geraete', g, function(){
+            nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel);
+          });
+        } else {
+          nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel);
+        }
       }
     }
   });
@@ -5417,6 +5445,21 @@ function bindDynamic(){
   if(btnOk) btnOk.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
   var btnReparatur = document.getElementById('btnReparatur');
   if(btnReparatur) btnReparatur.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'reparatur'); };
+
+  var btnBegehungStarten = document.getElementById('btnBegehungStarten');
+  if(btnBegehungStarten){
+    btnBegehungStarten.onclick = function(){
+      var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
+      if(!g) return;
+      g.begehungStart = new Date().toISOString();
+      dbPut('geraete', g, function(){
+        loadAll(function(){ render(); toast('Begehung gestartet um ' + fmtZeit(g.begehungStart) + ' Uhr'); });
+      });
+    };
+  }
+  var btnBegehungBeenden = document.getElementById('btnBegehungBeenden');
+  if(btnBegehungBeenden) btnBegehungBeenden.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'begehung'); };
+
   var btnAusscheiden = document.getElementById('btnAusscheiden');
   if(btnAusscheiden){
     btnAusscheiden.onclick = function(){
