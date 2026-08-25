@@ -1533,6 +1533,15 @@ function naechsterTerminNach(datumIso, intervallMonate){
   return basis.toISOString().substring(0,10);
 }
 
+function naechsterTerminBeiAbschluss(g, jetztIso){
+  if(g.naechstePruefung){
+    var geplant = new Date(g.naechstePruefung);
+    var abschluss = new Date(jetztIso);
+    if(!isNaN(geplant.getTime()) && geplant > abschluss) return g.naechstePruefung;
+  }
+  return naechsterTerminNach(jetztIso, g.intervallMonate);
+}
+
 function letzteErledigungInnerhalb24h(geraetId){
   var grenze = new Date();
   grenze.setHours(grenze.getHours() - 24);
@@ -1618,7 +1627,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
       });
     } else if(ergebnis === 'in_ordnung' || ergebnis === 'begehung'){
       g.letztePruefung = jetztIso.substring(0,10);
-      g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+      g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
       if(ergebnis === 'in_ordnung' && istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
         g.abfuelldatum = jetztLokalDatumZeit();
         if(!g.fuellungen) g.fuellungen = [];
@@ -1728,7 +1737,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
     } else {
       if(ergebnis === 'in_ordnung' || ergebnis === 'begehung'){
         g.letztePruefung = jetztIso.substring(0,10);
-        g.naechstePruefung = naechsterTerminNach(jetztIso, g.intervallMonate);
+        g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
         if(ergebnis === 'begehung') g.begehungStart = null;
         if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
           g.abfuelldatum = jetztLokalDatumZeit();
@@ -4054,7 +4063,7 @@ function modalErledigt(pruefungId){
         });
       } else if(gZu && ergebnis === 'in_ordnung'){
         gZu.letztePruefung = jetztIso.substring(0,10);
-        gZu.naechstePruefung = naechsterTerminNach(jetztIso, gZu.intervallMonate);
+        gZu.naechstePruefung = naechsterTerminBeiAbschluss(gZu, jetztIso);
         dbPut('geraete', gZu, function(){
           loadAll(function(){ render(); closeModal(); toast('Prüfung abgeschlossen: ' + ergebnisLabel); modalBerichtAnsicht(p.id); });
         });
@@ -5049,7 +5058,7 @@ function modalSammelbericht(kundeId){
         } else if(ergebnis === 'in_ordnung'){
           var pruefdatumWert = pruefdatumWertVorab || jetztIso.substring(0,10);
           g.letztePruefung = pruefdatumWert;
-          g.naechstePruefung = naechsterTerminNach(pruefdatumWert, g.intervallMonate);
+          g.naechstePruefung = naechsterTerminBeiAbschluss(g, pruefdatumWert + 'T12:00:00');
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
         } else if(akkuVal || abfuellVal || maengelEl){
           dbPut('geraete', g, function(){ weiter(g.naechstePruefung); });
