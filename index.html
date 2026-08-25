@@ -813,6 +813,11 @@ function renderDashboard(){
       }
       gruppen[key].eintraege.push(p);
     });
+    reihenfolge.sort(function(a, b){
+      var minA = Math.min.apply(null, gruppen[a].eintraege.map(function(p){ return daysUntil(p.datum); }));
+      var minB = Math.min.apply(null, gruppen[b].eintraege.map(function(p){ return daysUntil(p.datum); }));
+      return minA - minB;
+    });
     reihenfolge.forEach(function(key){
       var gr = gruppen[key];
       var schlimmsteCls = 'ok';
@@ -833,6 +838,7 @@ function renderDashboard(){
         html += '<div class="card">';
         html += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer;"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
         if(aufgeklappt){
+          gr.eintraege.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
           gr.eintraege.forEach(function(p){
             var st = statusFuerBaldFaellig(p.datum);
             html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
