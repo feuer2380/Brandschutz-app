@@ -942,6 +942,7 @@ function renderDashboard(){
         html += '<span class="badge ' + st.cls + '" style="flex-shrink:0;">' + st.label + '</span>';
         html += '</div>';
         html += '<div class="meta" style="margin-top:6px;">Letzte Prüfung: ' + (g.letztePruefung ? fmtDate(g.letztePruefung) : 'Unbekannt') + '</div>';
+        html += '<button class="btn small secondary alleGeraeteDruckBtn" data-kid="' + kid + '" style="margin-top:8px;" onclick="event.stopPropagation();">Liste drucken</button>';
         html += '</div>';
       } else {
         var aufgeklappt = !!(state.alleGeraeteAufgeklappt && state.alleGeraeteAufgeklappt[kid]);
@@ -958,6 +959,7 @@ function renderDashboard(){
             html += '</div>';
             html += '</div>';
           });
+          html += '<button class="btn small secondary alleGeraeteDruckBtn" data-kid="' + kid + '" style="margin-top:10px;">Liste drucken</button>';
         }
         html += '</div>';
       }
@@ -5425,6 +5427,12 @@ function bindDynamic(){
     el.onclick = function(e){
       e.stopPropagation();
       modalGeraetBearbeiten(el.getAttribute('data-gid'));
+    };
+  });
+  document.querySelectorAll('.alleGeraeteDruckBtn').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      modalGeraeteuebersicht(el.getAttribute('data-kid'));
     };
   });
 
