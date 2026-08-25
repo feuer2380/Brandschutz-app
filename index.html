@@ -1534,11 +1534,6 @@ function naechsterTerminNach(datumIso, intervallMonate){
 }
 
 function naechsterTerminBeiAbschluss(g, jetztIso){
-  if(g.naechstePruefung){
-    var geplant = new Date(g.naechstePruefung);
-    var abschluss = new Date(jetztIso);
-    if(!isNaN(geplant.getTime()) && geplant > abschluss) return g.naechstePruefung;
-  }
   return naechsterTerminNach(jetztIso, g.intervallMonate);
 }
 
@@ -1927,7 +1922,7 @@ function renderKundeDetail(kundeId){
         var aktLetzte = letztePruefungFuerGeraet(g.id);
         var istBegehung = g.kategorie === 'Brandschutzbegehung';
         var heuteIsoKurz = new Date().toISOString().substring(0,10);
-        var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || g.letztePruefung || heuteIsoKurz;
+        var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || heuteIsoKurz;
         html += '<div style="margin-top:8px;">';
         html += '<div style="display:flex; align-items:center; gap:6px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum der Prüfung</label>';
