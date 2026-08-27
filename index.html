@@ -4261,6 +4261,30 @@ function modalFuellhistorieListe(kundeId){
     return teile.length ? teile.join(', ') : '0';
   }
 
+  function summeProZeitraum(liste){
+    var heute = new Date(); heute.setHours(0,0,0,0);
+    var jj = heute.getFullYear(), mm = heute.getMonth();
+    var summenTag = {}, summenMonat = {}, summenJahr = {};
+    function addiere(ziel, einheit, menge){
+      if(!ziel[einheit]) ziel[einheit] = 0;
+      if(typeof menge === 'number' && !isNaN(menge)) ziel[einheit] += menge;
+    }
+    liste.forEach(function(e){
+      (e.g.fuellungen || []).forEach(function(f){
+        var info = fuellungLesen(f, e.g.kategorie, e.g.standort);
+        var d = new Date(f.datum);
+        if(isNaN(d.getTime())) return;
+        if(d.getFullYear() === jj){
+          addiere(summenJahr, info.einheit, info.menge);
+          if(d.getMonth() === mm) addiere(summenMonat, info.einheit, info.menge);
+          var dTag = new Date(d); dTag.setHours(0,0,0,0);
+          if(dTag.getTime() === heute.getTime()) addiere(summenTag, info.einheit, info.menge);
+        }
+      });
+    });
+    return { tag: summenTag, monat: summenMonat, jahr: summenJahr };
+  }
+
   function neuZeichnen(suchtext, katFilter){
     var q = (suchtext || '').trim().toLowerCase();
     var alle = alleGeraeteMitKunde();
@@ -4284,10 +4308,14 @@ function modalFuellhistorieListe(kundeId){
     var gesamtFuellungen = 0;
     gefiltert.forEach(function(e){ gesamtFuellungen += (e.g.fuellungen || []).length; });
     var summen = summeProEinheit(gefiltert);
+    var zeitraeume = summeProZeitraum(gefiltert);
     html += '<div class="card" style="margin-top:12px; background:#f3e9da;">';
     html += '<div class="row"><h3>Gesamt' + ((q || katFilter) ? ' (gefiltert)' : '') + '</h3><span class="badge blau">' + gefiltert.length + ' Flasche' + (gefiltert.length === 1 ? '' : 'n') + '</span></div>';
     html += '<div class="meta">' + gesamtFuellungen + ' Füllung' + (gesamtFuellungen === 1 ? '' : 'en') + ' insgesamt</div>';
     html += '<div class="meta">Gesamtmenge: ' + formatiereSummen(summen) + '</div>';
+    html += '<div class="meta" style="margin-top:6px;">Heute abgefüllt: ' + formatiereSummen(zeitraeume.tag) + '</div>';
+    html += '<div class="meta">Diesen Monat abgefüllt: ' + formatiereSummen(zeitraeume.monat) + '</div>';
+    html += '<div class="meta">Dieses Jahr abgefüllt: ' + formatiereSummen(zeitraeume.jahr) + '</div>';
     html += '</div>';
 
     html += '<button type="button" class="btn block" id="fuellDruckenBtn" style="margin-top:14px;">Statistik drucken / als PDF teilen</button>';
@@ -4374,6 +4402,26 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   }
 
   var gesamtSummen = summeProEinheitDruck(fuellzeilen);
+  var zeitraeumeDruck = (function(){
+    var heute = new Date(); heute.setHours(0,0,0,0);
+    var jj = heute.getFullYear(), mm = heute.getMonth();
+    var sT = {}, sM = {}, sJ = {};
+    function addiere(ziel, einheit, menge){
+      if(!ziel[einheit]) ziel[einheit] = 0;
+      if(typeof menge === 'number' && !isNaN(menge)) ziel[einheit] += menge;
+    }
+    fuellzeilen.forEach(function(z){
+      var d = new Date(z.datum);
+      if(isNaN(d.getTime())) return;
+      if(d.getFullYear() === jj){
+        addiere(sJ, z.einheit, z.menge);
+        if(d.getMonth() === mm) addiere(sM, z.einheit, z.menge);
+        var dTag = new Date(d); dTag.setHours(0,0,0,0);
+        if(dTag.getTime() === heute.getTime()) addiere(sT, z.einheit, z.menge);
+      }
+    });
+    return { tag: sT, monat: sM, jahr: sJ };
+  })();
 
   var html = '';
   html += '<div class="bericht-brief">';
@@ -4387,6 +4435,7 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   html += '<div class="pb-kundenbox">';
   html += '<div class="knr">Gesamt</div>';
   html += '<div>' + anzahlFlaschen(fuellzeilen) + ' Flasche' + (anzahlFlaschen(fuellzeilen) === 1 ? '' : 'n') + ' &middot; ' + fuellzeilen.length + ' Füllung' + (fuellzeilen.length === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(gesamtSummen) + ' gesamt</div>';
+  html += '<div style="margin-top:4px;">Heute: ' + formatiereSummenDruck(zeitraeumeDruck.tag) + ' &middot; Diesen Monat: ' + formatiereSummenDruck(zeitraeumeDruck.monat) + ' &middot; Dieses Jahr: ' + formatiereSummenDruck(zeitraeumeDruck.jahr) + '</div>';
   html += '</div>';
 
   reihenfolge.forEach(function(standort){
@@ -4395,9 +4444,9 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     html += '<div class="pb-fuellgruppe">';
     html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(standort) + '</h3>';
     html += '<div class="meta2" style="margin-bottom:6px;">' + anzahlFlaschen(zeilen) + ' Flasche' + (anzahlFlaschen(zeilen) === 1 ? '' : 'n') + ' &middot; ' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(summenStandort) + '</div>';
-    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Serien-Nr.</th><th>Datum/Uhrzeit</th><th>Menge</th></tr></thead><tbody>';
+    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th><th>Datum/Uhrzeit</th><th>Menge</th></tr></thead><tbody>';
     zeilen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); }).forEach(function(z){
-      html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td></tr>';
+      html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.standort || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td></tr>';
     });
     html += '</tbody></table>';
     html += '</div>';
