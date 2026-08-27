@@ -1930,8 +1930,12 @@ function renderKundeDetail(kundeId){
         var aktLetzte = letztePruefungFuerGeraet(g.id);
         var istBegehung = g.kategorie === 'Brandschutzbegehung';
         var heuteIsoKurz = new Date().toISOString().substring(0,10);
-        var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || heuteIsoKurz;
+        var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || g.letztePruefung || heuteIsoKurz;
+        var bereitsHeute = letzteErledigungInnerhalb24h(g.id);
         html += '<div style="margin-top:8px;">';
+        if(bereitsHeute){
+          html += '<div class="meta" style="color:var(--ok); font-weight:600;">&#10003; Heute bereits geprüft um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr (' + escapeHtml(bereitsHeute.ergebnis || '') + ')</div>';
+        }
         html += '<div style="display:flex; align-items:center; gap:6px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum der Prüfung</label>';
         html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + datumWert + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
