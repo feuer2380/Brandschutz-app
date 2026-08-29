@@ -3288,15 +3288,6 @@ function modalNeuerKunde(){
   html += '<button class="btn block" id="fSave">Kunde speichern</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
-  document.getElementById('fVorname').addEventListener('input', autoNameAusVorNachname);
-  document.getElementById('fNachname').addEventListener('input', autoNameAusVorNachname);
-  function autoNameAusVorNachname(){
-    var nameFeld = document.getElementById('fName');
-    if(nameFeld.value.trim()) return;
-    var v = document.getElementById('fVorname').value.trim();
-    var n = document.getElementById('fNachname').value.trim();
-    nameFeld.value = (v + ' ' + n).trim();
-  }
   document.getElementById('fTelefonLeerBtn').onclick = function(){
     var f = document.getElementById('fTelefon');
     var pos = f.selectionStart != null ? f.selectionStart : f.value.length;
@@ -3373,15 +3364,6 @@ function modalKundeBearbeiten(kundeId){
     f.focus();
     try{ f.setSelectionRange(pos+1, pos+1); } catch(e){}
   };
-  document.getElementById('fVorname').addEventListener('input', autoNameAusVorNachnameBearbeiten);
-  document.getElementById('fNachname').addEventListener('input', autoNameAusVorNachnameBearbeiten);
-  function autoNameAusVorNachnameBearbeiten(){
-    var nameFeld = document.getElementById('fName');
-    if(nameFeld.value.trim()) return;
-    var v = document.getElementById('fVorname').value.trim();
-    var n = document.getElementById('fNachname').value.trim();
-    nameFeld.value = (v + ' ' + n).trim();
-  }
   document.getElementById('fCodeNeuBtn').onclick = function(){
     document.getElementById('fZugangscode').value = generiereZugangscode();
   };
