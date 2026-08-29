@@ -3507,7 +3507,8 @@ function modalGeraetBearbeiten(geraetId){
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
   html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269">';
-  html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '">';
+  html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '" list="standortDatalist" autocomplete="off">';
+  html += buildStandortDatalist();
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (g.letztePruefung || '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
   html += '<div style="display:flex; gap:8px; margin:-4px 0 10px 0;">';
@@ -3806,6 +3807,26 @@ function buildTypDatalist(){
   return html;
 }
 
+function standortListeAutocomplete(){
+  var alle = {};
+  state.geraete.forEach(function(g){
+    if(g.standort) alle[g.standort] = true;
+  });
+  var liste = Object.keys(alle);
+  liste.sort(function(a, b){ return a.localeCompare(b); });
+  return liste;
+}
+
+function buildStandortDatalist(){
+  var liste = standortListeAutocomplete();
+  var html = '<datalist id="standortDatalist">';
+  liste.forEach(function(s){
+    html += '<option value="' + escapeHtml(s) + '">';
+  });
+  html += '</datalist>';
+  return html;
+}
+
 function buildTypChips(){
   var alle = typListeAlle();
   var html = '<div style="display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 10px 0;">';
@@ -3907,7 +3928,8 @@ function modalNeuesGeraet(kundeId, vorgabe){
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
   html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" placeholder="z.B. 2269">';
-  html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + (letzte && letzte.standort ? escapeHtml(letzte.standort) : '') + '">';
+  html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + (letzte && letzte.standort ? escapeHtml(letzte.standort) : '') + '" list="standortDatalist" autocomplete="off">';
+  html += buildStandortDatalist();
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (letzte && letzte.letztePruefung ? letzte.letztePruefung : '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (letzte && letzte.naechstePruefung ? letzte.naechstePruefung : '') + '">';
   html += '<label>Prüfintervall</label>';
