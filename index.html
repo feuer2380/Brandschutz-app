@@ -3856,7 +3856,8 @@ function parseAltesSystemText(text){
     'seriennummer': 'seriennummer',
     'baujahr': 'baujahr',
     'ort': 'standort',
-    'neues datum': 'naechstePruefung'
+    'neues datum': 'naechstePruefung',
+    'altes datum': 'letztePruefung'
   };
   var labelSchluessel = Object.keys(labels).sort(function(a, b){ return b.length - a.length; });
   var ergebnis = {};
@@ -3898,8 +3899,6 @@ function bindEinfuegenAltesSystem(){
     if(baujahrFeld && werte.baujahr) baujahrFeld.value = werte.baujahr;
     var standortFeld = document.getElementById('fStandort');
     if(standortFeld && werte.standort) standortFeld.value = werte.standort;
-    var externeIdFeld = document.getElementById('fExterneId');
-    if(externeIdFeld && werte.externeId) externeIdFeld.value = werte.externeId;
     var nrFeld = document.getElementById('fNr');
     if(nrFeld && werte.externeId && /^[0-9]+$/.test(werte.externeId.trim())){
       nrFeld.value = werte.externeId.trim();
@@ -3909,6 +3908,11 @@ function bindEinfuegenAltesSystem(){
     if(naechsteFeld && werte.naechstePruefung){
       var teile = werte.naechstePruefung.split('.');
       if(teile.length === 3) naechsteFeld.value = teile[2] + '-' + teile[1] + '-' + teile[0];
+    }
+    var letzteFeld = document.getElementById('fLetztePruefung');
+    if(letzteFeld && werte.letztePruefung){
+      var teileL = werte.letztePruefung.split('.');
+      if(teileL.length === 3) letzteFeld.value = teileL[2] + '-' + teileL[1] + '-' + teileL[0];
     }
     var anzahl = Object.keys(werte).length;
     toast(anzahl ? (anzahl + ' Feld(er) übernommen - bitte prüfen') : 'Keine bekannten Felder im Text gefunden');
