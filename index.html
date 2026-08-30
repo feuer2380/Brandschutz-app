@@ -1240,7 +1240,7 @@ function zeigeGeraetAuswahl(matches){
   html += '<div class="meta" style="margin-bottom:10px;">Diese Nummer ist bei mehreren Kunden vergeben (altes Aufkleber-System). Bitte auswählen, um wen es sich handelt:</div>';
   matches.forEach(function(g){
     var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-    html += '<button class="btn block secondary auswahlGeraetBtn" data-gid="' + g.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k ? k.name : 'Unbekannter Kunde') + ' &middot; ' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</button>';
+    html += '<button class="btn block secondary auswahlGeraetBtn" data-gid="' + g.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k ? k.name : 'Unbekannter Kunde') + ' &middot; ' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + (g.ausgeschieden ? ' <span class="badge warn" style="margin-left:6px;">ausgeschieden ' + fmtDate(g.ausgeschiedenAm) + '</span>' : ' <span class="badge ok" style="margin-left:6px;">aktiv</span>') + '</button>';
   });
   openModal(html);
   document.getElementById('mClose').onclick = function(){ closeModal(); setTimeout(startScanner, 400); };
@@ -1324,6 +1324,14 @@ function verarbeiteScan(text){
     return;
   }
   if(treffer.length > 1){
+    var aktiveTreffer = treffer.filter(function(x){ return !x.ausgeschieden; });
+    if(aktiveTreffer.length === 1){
+      state.activeGeraetId = aktiveTreffer[0].id;
+      state.checkRueckkehrZuKunde = null;
+      state.tab = 'geraetCheck';
+      render();
+      return;
+    }
     zeigeGeraetAuswahl(treffer);
     return;
   }
@@ -1347,6 +1355,10 @@ function zeigeAusgeschiedenScanDialog(g, gescannterCode){
   openModal(html);
   document.getElementById('ersatzAnlegenScan').onclick = function(){
     closeModal();
+    if(g.externeId === gescannterCode){
+      g.externeId = '';
+      dbPut('geraete', g, function(){});
+    }
     modalNeuesGeraet(g.kundeId, { kategorie: g.kategorie, nr: geraeteNummerWert(g), standort: g.standort, externeId: gescannterCode });
   };
   document.getElementById('trotzdemAnzeigenScan').onclick = function(){
@@ -1660,6 +1672,10 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
         ersatzHtml += '<button class="btn block secondary" id="ersatzNein" style="margin-top:10px;">Nein, fertig</button>';
         openModal(ersatzHtml);
         document.getElementById('ersatzJa').onclick = function(){
+          if(externeIdFuerErsatz){
+            g.externeId = '';
+            dbPut('geraete', g, function(){});
+          }
           loadAll(function(){
             render();
             zeigeErsatzNummerWahl(kid, katFuerErsatz, altNrFuerErsatz, standortFuerErsatz, externeIdFuerErsatz);
@@ -1771,6 +1787,10 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
         ersatzHtml += '<button class="btn block secondary" id="ersatzNein" style="margin-top:10px;">Nein, fertig</button>';
         openModal(ersatzHtml);
         document.getElementById('ersatzJa').onclick = function(){
+          if(externeIdFuerErsatz2){
+            g.externeId = '';
+            dbPut('geraete', g, function(){});
+          }
           loadAll(function(){
             state.activeKundeId = kid;
             state.checkRueckkehrZuKunde = null;
