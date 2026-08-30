@@ -152,7 +152,8 @@ if('serviceWorker' in navigator){
   .ergebnis-zeile:first-child{margin-top:0;}
   .ergebnis-label{width:90px; font-size:12px; color:var(--muted); flex-shrink:0;}
   .ergebnis-bar-bg{flex:1; background:#eee2d3; border-radius:6px; height:16px; overflow:hidden;}
-  .ergebnis-bar{height:100%; border-radius:6px; min-width:2px;}
+  .ergebnis-bar{height:100%; border-radius:6px;}
+  .ergebnis-bar.hatwert{min-width:2px;}
   .ergebnis-zahl{width:28px; text-align:right; font-size:12px; font-weight:700; flex-shrink:0;}
   .zeit-chart{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 10px; margin-bottom:16px;}
   .zeit-balken-bereich{display:flex; align-items:flex-end; gap:4px; height:110px;}
@@ -2378,11 +2379,9 @@ function modalTerminliste(){
 }
 
 // ---------- Berichte ----------
-function buildStatistikDruckHtml(statFilter){
-  var statLabels = {tag:'Heute', woche:'Diese Woche', monat:'Diesen Monat', jahr:'Dieses Jahr'};
+function statZeitraumBerechnen(statFilter){
   var jetztDate = new Date();
-  var alleErledigt = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm; });
-  var startBereich;
+  var startBereich, endeBereich = jetztDate;
   if(statFilter === 'tag'){
     startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate());
   } else if(statFilter === 'woche'){
@@ -2390,10 +2389,25 @@ function buildStatistikDruckHtml(statFilter){
     startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate() - wochentag);
   } else if(statFilter === 'monat'){
     startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), 1);
+  } else if(statFilter === 'benutzerdefiniert'){
+    var vonWert = state.statVon || jetztDate.toISOString().substring(0,10);
+    var bisWert = state.statBis || jetztDate.toISOString().substring(0,10);
+    startBereich = new Date(vonWert + 'T00:00:00');
+    endeBereich = new Date(bisWert + 'T23:59:59');
   } else {
     startBereich = new Date(jetztDate.getFullYear(), 0, 1);
   }
-  var statListe = alleErledigt.filter(function(p){ var pd = new Date(p.erledigtAm); return pd >= startBereich && pd <= jetztDate; });
+  return { start: startBereich, ende: endeBereich };
+}
+
+function buildStatistikDruckHtml(statFilter){
+  var statLabels = {tag:'Heute', woche:'Diese Woche', monat:'Diesen Monat', jahr:'Dieses Jahr', benutzerdefiniert:'Zeitraum ' + fmtDate(state.statVon) + ' - ' + fmtDate(state.statBis)};
+  var jetztDate = new Date();
+  var alleErledigt = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm; });
+  var zr = statZeitraumBerechnen(statFilter);
+  var startBereich = zr.start;
+  var endeBereich = zr.ende;
+  var statListe = alleErledigt.filter(function(p){ var pd = new Date(p.erledigtAm); return pd >= startBereich && pd <= endeBereich; });
   statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
   var geraeteById = {};
   state.geraete.forEach(function(g){ geraeteById[g.id] = g; });
@@ -2447,13 +2461,30 @@ function buildStatistikDruckHtml(statFilter){
   if(statListe.length === 0){
     html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
   } else {
-    html += '<table class="pb-tabelle" style="margin-top:16px;"><thead><tr><th>Kunde</th><th>Ergebnis</th><th>Gerät/Prüfung</th><th>Geprüft von</th><th>Datum</th></tr></thead><tbody>';
+    var gruppenKunde = {};
+    var kundenReihenfolgeDruck = [];
     statListe.forEach(function(p){
       var k = kundeFuerPruefungSchnell(p);
-      var ei = ergebnisInfo(p.ergebnis);
-      html += '<tr><td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td><td>' + escapeHtml(ei.label) + '</td><td>' + pruefungAnzeigeTextSchnell(p) + '</td><td>' + escapeHtml(p.erledigtVon || '-') + '</td><td>' + fmtDate(p.erledigtAm) + ' ' + fmtZeit(p.erledigtAm) + '</td></tr>';
+      var kid = k ? k.id : 'unbekannt';
+      if(!gruppenKunde[kid]){ gruppenKunde[kid] = { kunde: k, eintraege: [] }; kundenReihenfolgeDruck.push(kid); }
+      gruppenKunde[kid].eintraege.push(p);
     });
-    html += '</tbody></table>';
+    kundenReihenfolgeDruck.sort(function(a, b){
+      var na = gruppenKunde[a].kunde ? gruppenKunde[a].kunde.name : 'Unbekannt';
+      var nb = gruppenKunde[b].kunde ? gruppenKunde[b].kunde.name : 'Unbekannt';
+      return na.localeCompare(nb);
+    });
+    kundenReihenfolgeDruck.forEach(function(kid){
+      var gruppe = gruppenKunde[kid];
+      html += '<h3 style="margin:18px 0 6px 0; font-size:14.5px; page-break-after:avoid;">' + escapeHtml(gruppe.kunde ? gruppe.kunde.name : 'Unbekannt') + ' <span style="font-weight:400; color:var(--muted); font-size:12px;">(' + gruppe.eintraege.length + ' Prüfung' + (gruppe.eintraege.length === 1 ? '' : 'en') + ')</span></h3>';
+      html += '<table class="pb-tabelle" style="margin-bottom:16px;"><thead><tr><th>Ergebnis</th><th>Gerät/Prüfung</th><th>Geprüft von</th><th>Datum</th></tr></thead><tbody>';
+      gruppe.eintraege.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
+      gruppe.eintraege.forEach(function(p){
+        var ei = ergebnisInfo(p.ergebnis);
+        html += '<tr><td>' + escapeHtml(ei.label) + '</td><td>' + pruefungAnzeigeTextSchnell(p) + '</td><td>' + escapeHtml(p.erledigtVon || '-') + '</td><td>' + fmtDate(p.erledigtAm) + ' ' + fmtZeit(p.erledigtAm) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    });
   }
   html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; www.brandschutztechnik-janiba.at</div>';
   html += '</div>';
@@ -2472,7 +2503,7 @@ function buildErgebnisChart(anzOk, anzRep, anzAus){
     var proz = gesamt > 0 ? Math.round((z.wert / gesamt) * 100) : 0;
     html += '<div class="ergebnis-zeile">';
     html += '<div class="ergebnis-label">' + z.label + '</div>';
-    html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar" style="width:' + proz + '%; background:' + z.farbe + ';"></div></div>';
+    html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar' + (z.wert > 0 ? ' hatwert' : '') + '" style="width:' + proz + '%; background:' + z.farbe + ';"></div></div>';
     html += '<div class="ergebnis-zahl">' + z.wert + '</div>';
     html += '</div>';
   });
@@ -2548,13 +2579,21 @@ function renderStatistik(){
     {key:'tag', label:'Heute'},
     {key:'woche', label:'Diese Woche'},
     {key:'monat', label:'Diesen Monat'},
-    {key:'jahr', label:'Dieses Jahr'}
+    {key:'jahr', label:'Dieses Jahr'},
+    {key:'benutzerdefiniert', label:'Zeitraum wählen'}
   ];
   html += '<div class="filter-bar">';
   statOptionen.forEach(function(f){
     html += '<button class="filter-btn' + (statFilter === f.key ? ' active' : '') + '" data-statfilter="' + f.key + '">' + f.label + '</button>';
   });
   html += '</div>';
+  if(statFilter === 'benutzerdefiniert'){
+    var heuteKurz = new Date().toISOString().substring(0,10);
+    html += '<div class="row" style="gap:8px; margin-bottom:10px;">';
+    html += '<div style="flex:1;"><label style="margin-top:0;">Von</label><input type="date" id="statVonInput" value="' + (state.statVon || heuteKurz) + '"></div>';
+    html += '<div style="flex:1;"><label style="margin-top:0;">Bis</label><input type="date" id="statBisInput" value="' + (state.statBis || heuteKurz) + '"></div>';
+    html += '</div>';
+  }
   html += '<button class="btn block secondary no-print" id="druckBtnStat" style="margin-bottom:14px;">Drucken / Als PDF teilen</button>';
 
   var subTab = state.statSubTab || 'pruefungen';
@@ -2630,18 +2669,10 @@ function renderStatistik(){
 
   var jetztDate = new Date();
   var alleErledigt = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm; });
-  var startBereich;
-  if(statFilter === 'tag'){
-    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate());
-  } else if(statFilter === 'woche'){
-    var wochentag = (jetztDate.getDay() + 6) % 7;
-    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), jetztDate.getDate() - wochentag);
-  } else if(statFilter === 'monat'){
-    startBereich = new Date(jetztDate.getFullYear(), jetztDate.getMonth(), 1);
-  } else {
-    startBereich = new Date(jetztDate.getFullYear(), 0, 1);
-  }
-  var statListe = alleErledigt.filter(function(p){ var pd = new Date(p.erledigtAm); return pd >= startBereich && pd <= jetztDate; });
+  var zrAnzeige = statZeitraumBerechnen(statFilter);
+  var startBereich = zrAnzeige.start;
+  var endeBereich = zrAnzeige.ende;
+  var statListe = alleErledigt.filter(function(p){ var pd = new Date(p.erledigtAm); return pd >= startBereich && pd <= endeBereich; });
   statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
 
   if(subTab === 'pruefungen'){
@@ -2666,7 +2697,7 @@ function renderStatistik(){
     html += '</div>';
 
     html += buildErgebnisChart(anzInOrdnung, anzReparatur, anzAusgeschieden);
-    if(statFilter !== 'tag'){
+    if(statFilter !== 'tag' && statFilter !== 'benutzerdefiniert'){
       html += buildZeitChart(statListe.map(function(p){ return p.erledigtAm; }), statFilter, jetztDate, monatNamen);
     }
 
@@ -2691,7 +2722,7 @@ function renderStatistik(){
         var proz = maxKatWert > 0 ? Math.round((wert / maxKatWert) * 100) : 0;
         html += '<div class="ergebnis-zeile">';
         html += '<div class="ergebnis-label" style="width:130px;">' + escapeHtml(kat) + '</div>';
-        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar" style="width:' + proz + '%; background:#1d5fa8;"></div></div>';
+        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar' + (wert > 0 ? ' hatwert' : '') + '" style="width:' + proz + '%; background:#1d5fa8;"></div></div>';
         html += '<div class="ergebnis-zahl">' + wert + '</div>';
         html += '</div>';
       });
@@ -2795,8 +2826,15 @@ function renderStatistik(){
 
   if(subTab === 'bestand'){
     var geraeteAktivBestand = state.geraete.filter(function(g){ return !g.ausgeschieden; });
+    var vor30TagenBestand = new Date(); vor30TagenBestand.setDate(vor30TagenBestand.getDate() - 30);
+    var bestandVor30Tagen = state.geraete.filter(function(g){
+      if(g.ausgeschieden && g.ausgeschiedenAm && new Date(g.ausgeschiedenAm) <= vor30TagenBestand) return false;
+      if(g.erstelltAm && new Date(g.erstelltAm) > vor30TagenBestand) return false;
+      return true;
+    }).length;
+    var trendBestand = geraeteAktivBestand.length - bestandVor30Tagen;
     html += '<div class="statrow">';
-    html += '<div class="stat"><div class="n">' + geraeteAktivBestand.length + '</div><div class="l">Geräte gesamt</div></div>';
+    html += '<div class="stat"><div class="n">' + geraeteAktivBestand.length + '</div><div class="l">Geräte gesamt</div>' + (trendBestand !== 0 ? '<div class="meta" style="margin-top:2px; color:' + (trendBestand > 0 ? 'var(--ok)' : 'var(--warn)') + ';">' + (trendBestand > 0 ? '+' : '') + trendBestand + ' seit letztem Monat</div>' : '') + '</div>';
     html += '<div class="stat"><div class="n">' + state.kunden.filter(function(k){ return !k.geloescht; }).length + '</div><div class="l">Kunden</div></div>';
     html += '</div>';
 
@@ -2818,10 +2856,11 @@ function renderStatistik(){
       katBestandReihenfolge.forEach(function(kat){
         var wert = proKatBestand[kat];
         var proz = maxKatBestandWert > 0 ? Math.round((wert / maxKatBestandWert) * 100) : 0;
+        var anteilGesamt = geraeteAktivBestand.length > 0 ? Math.round((wert / geraeteAktivBestand.length) * 100) : 0;
         html += '<div class="ergebnis-zeile">';
         html += '<div class="ergebnis-label" style="width:130px;">' + escapeHtml(kat) + '</div>';
-        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar" style="width:' + proz + '%; background:#1d5fa8;"></div></div>';
-        html += '<div class="ergebnis-zahl">' + wert + '</div>';
+        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar' + (wert > 0 ? ' hatwert' : '') + '" style="width:' + proz + '%; background:#1d5fa8;"></div></div>';
+        html += '<div class="ergebnis-zahl" style="width:70px;">' + wert + ' (' + anteilGesamt + '%)</div>';
         html += '</div>';
       });
       html += '</div>';
@@ -2846,7 +2885,7 @@ function renderStatistik(){
         var proz = maxTypBestandWert > 0 ? Math.round((wert / maxTypBestandWert) * 100) : 0;
         html += '<div class="ergebnis-zeile">';
         html += '<div class="ergebnis-label" style="width:130px;">' + escapeHtml(typ) + '</div>';
-        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar" style="width:' + proz + '%; background:var(--ok);"></div></div>';
+        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar' + (wert > 0 ? ' hatwert' : '') + '" style="width:' + proz + '%; background:var(--ok);"></div></div>';
         html += '<div class="ergebnis-zahl">' + wert + '</div>';
         html += '</div>';
       });
@@ -5896,6 +5935,11 @@ function bindDynamic(){
       render();
     };
   });
+
+  var statVonInput = document.getElementById('statVonInput');
+  if(statVonInput) statVonInput.onchange = function(){ state.statVon = statVonInput.value; render(); };
+  var statBisInput = document.getElementById('statBisInput');
+  if(statBisInput) statBisInput.onchange = function(){ state.statBis = statBisInput.value; render(); };
 
   var statKundenSucheInput = document.getElementById('statKundenSuche');
   if(statKundenSucheInput){
