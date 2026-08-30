@@ -1431,6 +1431,7 @@ function renderGeraetCheck(geraetId){
   }
   if(g.baujahr) html += '<div class="meta">Baujahr: ' + g.baujahr + '</div>';
   if(g.seriennummer) html += '<div class="meta">Seriennummer: ' + escapeHtml(g.seriennummer) + '</div>';
+  if(g.externeId) html += '<div class="meta">Externe ID: ' + escapeHtml(g.externeId) + '</div>';
   if(bj) html += '<div style="margin-top:6px;"><span class="badge ' + bj.cls + '">' + bj.label + '</span></div>';
   if(g.letzteInnenrevision) html += '<div class="meta" style="margin-top:4px;">Innenrevision zuletzt: ' + fmtDate(g.letzteInnenrevision) + '</div>';
   if(g.ausgeschieden) html += '<div style="margin-top:6px;"><span class="badge warn">Bereits ausgeschieden am ' + fmtDate(g.ausgeschiedenAm) + '</span></div>';
