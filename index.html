@@ -3840,6 +3840,69 @@ function buildTypChips(){
   return html;
 }
 
+function parseAltesSystemText(text){
+  var zeilen = text.split('\n').map(function(z){ return z.trim(); }).filter(function(z){ return z.length > 0; });
+  var labels = {
+    'feuerlöscher': 'typ',
+    'feuerlöscher nr': 'externeId',
+    'feuerlöscher nr.': 'externeId',
+    'beschreibung': 'beschreibung',
+    'seriennummer': 'seriennummer',
+    'baujahr': 'baujahr',
+    'ort': 'standort',
+    'neues datum': 'naechstePruefung'
+  };
+  var ergebnis = {};
+  for(var i = 0; i < zeilen.length; i++){
+    var zeile = zeilen[i];
+    var teil = zeile.split(':');
+    var labelRoh = teil[0].toLowerCase().trim().replace(/\.$/, '');
+    var feld = labels[labelRoh];
+    if(!feld) continue;
+    var wert = '';
+    if(teil.length > 1){
+      wert = teil.slice(1).join(':').trim();
+    }
+    if(!wert && zeilen[i+1] && !labels[zeilen[i+1].toLowerCase().trim().replace(/\.$/, '').split(':')[0]]){
+      wert = zeilen[i+1];
+      i++;
+    }
+    if(wert) ergebnis[feld] = wert;
+  }
+  return ergebnis;
+}
+
+function bindEinfuegenAltesSystem(){
+  var btn = document.getElementById('btnEinfuegenUebernehmen');
+  if(!btn) return;
+  btn.onclick = function(){
+    var text = document.getElementById('fEinfuegeText').value;
+    if(!text || !text.trim()){ toast('Bitte zuerst Text einfügen'); return; }
+    var werte = parseAltesSystemText(text);
+    var typFeld = document.getElementById('fTyp');
+    if(typFeld && werte.typ){
+      typFeld.value = werte.beschreibung ? (werte.typ + ' (' + werte.beschreibung + ')') : werte.typ;
+    } else if(typFeld && werte.beschreibung && !werte.typ){
+      typFeld.value = werte.beschreibung;
+    }
+    var seriennrFeld = document.getElementById('fSeriennr');
+    if(seriennrFeld && werte.seriennummer) seriennrFeld.value = werte.seriennummer;
+    var baujahrFeld = document.getElementById('fBaujahr');
+    if(baujahrFeld && werte.baujahr) baujahrFeld.value = werte.baujahr;
+    var standortFeld = document.getElementById('fStandort');
+    if(standortFeld && werte.standort) standortFeld.value = werte.standort;
+    var externeIdFeld = document.getElementById('fExterneId');
+    if(externeIdFeld && werte.externeId) externeIdFeld.value = werte.externeId;
+    var naechsteFeld = document.getElementById('fDatum');
+    if(naechsteFeld && werte.naechstePruefung){
+      var teile = werte.naechstePruefung.split('.');
+      if(teile.length === 3) naechsteFeld.value = teile[2] + '-' + teile[1] + '-' + teile[0];
+    }
+    var anzahl = Object.keys(werte).length;
+    toast(anzahl ? (anzahl + ' Feld(er) übernommen - bitte prüfen') : 'Keine bekannten Felder im Text gefunden');
+  };
+}
+
 function bindKategorieToggle(kundeIdFuerReserve){
   var sel = document.getElementById('fKategorie');
   var block = document.getElementById('fjBlockBaujahr');
@@ -3907,6 +3970,11 @@ function modalNeuesGeraet(kundeId, vorgabe){
   var vorKategorie = vorgabe.kategorie || (letzte ? letzte.kategorie : 'Feuerlöscher');
   var html = '';
   html += '<div class="modal-head"><h3>Neues Gerät</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="card" style="background:#f3e9da; margin-bottom:12px;">';
+  html += '<label style="margin-top:0;">Text aus altem System einfügen (optional)</label>';
+  html += '<textarea id="fEinfuegeText" rows="4" placeholder="Text von der alten Seite hier reinkopieren..."></textarea>';
+  html += '<button type="button" class="btn secondary small" id="btnEinfuegenUebernehmen" style="margin-top:8px;">Übernehmen &amp; Felder ausfüllen</button>';
+  html += '</div>';
   html += '<label>Kategorie</label><select id="fKategorie">';
   kategorien.forEach(function(kat){
     html += '<option' + (kat === vorKategorie ? ' selected' : '') + '>' + kat + '</option>';
@@ -4010,6 +4078,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
   try { bindKategorieToggle(kundeId); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
+  try { bindEinfuegenAltesSystem(); } catch(err){ console.error('bindEinfuegenAltesSystem Fehler', err); }
 
   try {
     function aktualisiereNaechstePruefungAusPruefdatum(){
