@@ -3852,22 +3852,43 @@ function parseAltesSystemText(text){
     'ort': 'standort',
     'neues datum': 'naechstePruefung'
   };
+  function labelSchluessel(text){
+    return text.toLowerCase().trim().replace(/\.$/, '').replace(/:$/, '').trim();
+  }
   var ergebnis = {};
   for(var i = 0; i < zeilen.length; i++){
     var zeile = zeilen[i];
-    var teil = zeile.split(':');
-    var labelRoh = teil[0].toLowerCase().trim().replace(/\.$/, '');
-    var feld = labels[labelRoh];
-    if(!feld) continue;
-    var wert = '';
-    if(teil.length > 1){
-      wert = teil.slice(1).join(':').trim();
+    var feld = null, wert = '';
+    // Fall 1: "Label: Wert" oder "Label:Wert"
+    var colonIdx = zeile.indexOf(':');
+    if(colonIdx > -1){
+      var labelTeil = labelSchluessel(zeile.substring(0, colonIdx));
+      if(labels[labelTeil]){
+        feld = labels[labelTeil];
+        wert = zeile.substring(colonIdx + 1).trim();
+      }
     }
-    if(!wert && zeilen[i+1] && !labels[zeilen[i+1].toLowerCase().trim().replace(/\.$/, '').split(':')[0]]){
-      wert = zeilen[i+1];
-      i++;
+    // Fall 2: "Label   Wert" (mehrere Leerzeichen/Tab getrennt, kein Doppelpunkt)
+    if(!feld){
+      var mehrfachSplit = zeile.split(/\s{2,}|\t+/);
+      if(mehrfachSplit.length > 1){
+        var labelTeil2 = labelSchluessel(mehrfachSplit[0]);
+        if(labels[labelTeil2]){
+          feld = labels[labelTeil2];
+          wert = mehrfachSplit.slice(1).join(' ').trim();
+        }
+      }
     }
-    if(wert) ergebnis[feld] = wert;
+    // Fall 3: Label allein auf der Zeile, Wert auf der nächsten Zeile
+    if(!feld){
+      var labelTeil3 = labelSchluessel(zeile);
+      if(labels[labelTeil3] && zeilen[i+1] && !labels[labelSchluessel(zeilen[i+1].split(/\s{2,}|\t+|:/)[0])]){
+        feld = labels[labelTeil3];
+        wert = zeilen[i+1];
+        i++;
+      }
+    }
+    if(feld && wert) ergebnis[feld] = wert;
   }
   return ergebnis;
 }
