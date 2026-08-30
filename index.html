@@ -198,6 +198,13 @@ if('serviceWorker' in navigator){
   .pb-tabelle tbody tr:nth-child(even){background:#faf6f0;}
   .pb-tabelle tbody tr:last-child td{border-bottom:2px solid var(--ink);}
   .pb-pos{background:#f0e2d4; font-weight:700; color:var(--ember-dark); text-align:center;}
+  .al-karte{border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:10px; page-break-inside:avoid; break-inside:avoid;}
+  .al-karte .al-titel{font-weight:700; font-size:14px;}
+  .al-karte .al-meta{font-size:12.5px; color:var(--muted); margin-top:2px;}
+  .al-karte .badge{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; margin-top:6px;}
+  .al-karte .badge.ok{background:#dcefdf; color:#1e6b3a;}
+  .al-karte .badge.warn{background:#fbdcd2; color:#8a2a10;}
+  .al-karte .badge.soon{background:#fde8c8; color:#8a5a10;}
   .pb-ok{display:inline-block; background:#e4f2e8; color:var(--ok); font-weight:700; font-size:11px; padding:4px 10px; border-radius:20px;}
   .pb-blau{display:inline-block; background:#dbe9fb; color:#1d5fa8; font-weight:700; font-size:11px; padding:4px 10px; border-radius:20px;}
   .pb-rot{display:inline-block; background:#fbe6dc; color:var(--warn); font-weight:700; font-size:11px; padding:4px 10px; border-radius:20px;}
@@ -2261,6 +2268,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istBegehung = (kat === 'Brandschutzbegehung');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
       html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>')) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
         var statusSpalte = (!istPZ && !istBegehung) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
@@ -2268,7 +2276,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
         var zeilenStil = '';
         if(bjStatus && bjStatus.cls === 'warn') zeilenStil = ' style="background:#fbdcd2; color:#8a2a10;"';
         else if(bjStatus && bjStatus.cls === 'soon') zeilenStil = ' style="background:#fde8c8; color:#8a5a10;"';
-        html += '<tr' + zeilenStil + '><td class="pb-pos">' + (i+1) + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.standort||'-') + '</td>' + (istBegehung ? '' : ('<td>' + escapeHtml(g.seriennummer||'-') + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
+        html += '<tr' + zeilenStil + '><td class="pb-pos">' + geraeteNummerWert(g) + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.standort||'-') + '</td>' + (istBegehung ? '' : ('<td>' + escapeHtml(g.seriennummer||'-') + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
       });
       html += '</tbody></table>';
     });
@@ -3549,6 +3557,53 @@ function modalQrGeraet(geraetId){
   }
 }
 
+function modalGeraetVerschieben(geraetId){
+  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  if(!g) return;
+  var aktKunde = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+  function neuZeichnen(suchtext){
+    var q = (suchtext || '').toLowerCase().trim();
+    var treffer = state.kunden.filter(function(k){
+      if(k.id === g.kundeId) return false;
+      if(!q) return true;
+      return (k.name || '').toLowerCase().indexOf(q) > -1 ||
+        (k.kundennummer || '').toLowerCase().indexOf(q) > -1 ||
+        (k.objekt || '').toLowerCase().indexOf(q) > -1;
+    }).slice(0, 30);
+    var html = '';
+    html += '<div class="modal-head"><h3>Gerät verschieben</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<div class="meta" style="margin-bottom:10px;">"' + escapeHtml(g.typ || '') + '" (aktuell: ' + escapeHtml(aktKunde ? aktKunde.name + (aktKunde.objekt ? ' - ' + aktKunde.objekt : '') : 'unbekannt') + ') zu welchem Kunden/Objekt verschieben?</div>';
+    html += '<input id="verschiebenSuche" type="text" placeholder="Suche nach Name, Kundennummer oder Objekt..." value="' + escapeHtml(suchtext || '') + '" style="margin-bottom:10px;">';
+    if(treffer.length === 0){
+      html += '<div class="empty">Keine Treffer</div>';
+    } else {
+      treffer.forEach(function(k){
+        html += '<button class="btn block secondary verschiebenZielBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k.name) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + (k.kundennummer ? ' <span class="badge blau" style="margin-left:6px;">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</button>';
+      });
+    }
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+    var sucheEl = document.getElementById('verschiebenSuche');
+    sucheEl.focus();
+    sucheEl.setSelectionRange(sucheEl.value.length, sucheEl.value.length);
+    sucheEl.oninput = function(){ neuZeichnen(sucheEl.value); };
+    document.querySelectorAll('.verschiebenZielBtn').forEach(function(b){
+      b.onclick = function(){
+        var zielKundeId = b.getAttribute('data-kid');
+        var zielKunde = state.kunden.filter(function(x){ return x.id === zielKundeId; })[0];
+        customConfirm('Gerät "' + escapeHtml(g.typ || '') + '" wirklich zu "' + escapeHtml(zielKunde ? zielKunde.name : '') + (zielKunde && zielKunde.objekt ? ' - ' + escapeHtml(zielKunde.objekt) : '') + '" verschieben?', function(){
+          g.kundeId = zielKundeId;
+          dbPut('geraete', g, function(){
+            state.pruefungen.filter(function(p){ return p.geraetId === g.id; }).forEach(function(p){ p.kundeId = zielKundeId; dbPut('pruefungen', p, function(){}); });
+            loadAll(function(){ closeModal(); render(); toast('Gerät verschoben'); });
+          });
+        });
+      };
+    });
+  }
+  neuZeichnen('');
+}
+
 function modalGeraetBearbeiten(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
@@ -3613,6 +3668,7 @@ function modalGeraetBearbeiten(geraetId){
   }
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
   html += '<button class="btn block secondary" id="qrGeraetBtn" style="margin-top:10px;">QR-Code anzeigen</button>';
+  html += '<button class="btn block secondary" id="btnGeraetVerschieben" style="margin-top:10px;">Zu anderem Kunden/Objekt verschieben</button>';
   if(!g.ausgeschieden){
     html += '<button class="btn block secondary" id="fAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Gerät ausscheiden (zu alt / defekt)</button>';
   } else {
@@ -3727,6 +3783,9 @@ function modalGeraetBearbeiten(geraetId){
   };
   document.getElementById('qrGeraetBtn').onclick = function(){
     modalQrGeraet(geraetId);
+  };
+  document.getElementById('btnGeraetVerschieben').onclick = function(){
+    modalGeraetVerschieben(geraetId);
   };
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
