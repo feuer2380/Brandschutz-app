@@ -1335,6 +1335,10 @@ function verarbeiteScan(text){
 }
 
 function geraeteSortierVergleich(a, b){
+  var an = a.nr, bn = b.nr;
+  if(an && bn && an !== bn) return an - bn;
+  if(an && !bn) return -1;
+  if(!an && bn) return 1;
   var av = a.erstelltAm || '';
   var bv = b.erstelltAm || '';
   if(av < bv) return -1;
@@ -3492,6 +3496,7 @@ function modalGeraetBearbeiten(geraetId){
     html += '<option' + (kat === aktKategorie ? ' selected' : '') + '>' + kat + '</option>';
   });
   html += '</select>';
+  html += '<label>Nr. (bei Bedarf änderbar)</label><input id="fNr" type="number" inputmode="numeric" value="' + (geraeteNummerWert(g) || '') + '">';
   html += '<label id="fTypLabel">Typ</label><input id="fTyp" type="text" value="' + escapeHtml(g.typ || '') + '" placeholder="z.B. Pulverlöscher 6kg" list="typDatalist" autocomplete="off">';
   html += buildTypDatalist();
   html += buildTypChips();
@@ -3563,6 +3568,8 @@ function modalGeraetBearbeiten(geraetId){
     var speichernFortsetzen = function(){
     g.typ = typ;
     g.kategorie = document.getElementById('fKategorie').value;
+    var neueNr = parseInt(document.getElementById('fNr').value, 10);
+    g.nr = isNaN(neueNr) ? null : neueNr;
     g.baujahr = baujahrVal ? parseInt(baujahrVal, 10) : null;
     g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
