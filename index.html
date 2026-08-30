@@ -3893,6 +3893,11 @@ function bindEinfuegenAltesSystem(){
     if(standortFeld && werte.standort) standortFeld.value = werte.standort;
     var externeIdFeld = document.getElementById('fExterneId');
     if(externeIdFeld && werte.externeId) externeIdFeld.value = werte.externeId;
+    var nrFeld = document.getElementById('fNr');
+    if(nrFeld && werte.externeId && /^[0-9]+$/.test(werte.externeId.trim())){
+      nrFeld.value = werte.externeId.trim();
+      nrFeld.setAttribute('data-manuell', '1');
+    }
     var naechsteFeld = document.getElementById('fDatum');
     if(naechsteFeld && werte.naechstePruefung){
       var teile = werte.naechstePruefung.split('.');
