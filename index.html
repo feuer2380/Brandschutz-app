@@ -945,40 +945,23 @@ function renderDashboard(){
       var liste = geraeteProKunde[kid];
       var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
       var kName = k ? k.name : 'Unbekannt';
-      if(liste.length === 1){
-        var g = liste[0];
-        var st = statusForDate(g.naechstePruefung);
-        var katInfo = kategorieVisual(g.kategorie);
-        html += '<div class="card kunde-card geraet-karte" data-id="' + kid + '" style="border-left:4px solid ' + katInfo.farbe + ';">';
-        html += '<div class="row" style="align-items:flex-start;">';
-        html += '<div style="flex:1; min-width:0;">';
-        html += '<h3 style="margin-bottom:1px;">' + escapeHtml(kName) + '</h3>';
-        html += '<div class="meta" style="font-size:13px;"><span style="font-size:15px;">' + katInfo.icon + '</span> ' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
-        html += '</div>';
-        html += '<span class="badge ' + st.cls + '" style="flex-shrink:0;">' + st.label + '</span>';
-        html += '</div>';
-        html += '<div class="meta" style="margin-top:6px;">Letzte Prüfung: ' + (g.letztePruefung ? fmtDate(g.letztePruefung) : 'Unbekannt') + '</div>';
-        html += '<button class="btn small secondary alleGeraeteDruckBtn" data-kid="' + kid + '" style="margin-top:8px;" onclick="event.stopPropagation();">Liste drucken</button>';
-        html += '</div>';
-      } else {
-        var aufgeklappt = !!(state.alleGeraeteAufgeklappt && state.alleGeraeteAufgeklappt[kid]);
-        html += '<div class="card" style="border-left:4px solid #8e8e8e;">';
-        html += '<div class="row alleGeraeteToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + escapeHtml(kName) + '</h3><span class="badge ok">' + liste.length + ' Geräte ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
-        if(aufgeklappt){
-          liste.forEach(function(g, idx){
-            var st = statusForDate(g.naechstePruefung);
-            var katInfo = kategorieVisual(g.kategorie);
-            html += '<div class="geraet-karte-zeile" data-gid="' + g.id + '" style="cursor:pointer; ' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
-            html += '<div class="row" style="align-items:flex-start;">';
-            html += '<div style="flex:1; min-width:0;"><span class="meta" style="font-size:15px;">' + katInfo.icon + '</span> <span class="meta" style="font-size:13px;">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</span></div>';
-            html += '<span class="badge ' + st.cls + '" style="flex-shrink:0;">' + st.label + '</span>';
-            html += '</div>';
-            html += '</div>';
-          });
-          html += '<button class="btn small secondary alleGeraeteDruckBtn" data-kid="' + kid + '" style="margin-top:10px;">Liste drucken</button>';
-        }
-        html += '</div>';
+      var aufgeklappt = !!(state.alleGeraeteAufgeklappt && state.alleGeraeteAufgeklappt[kid]);
+      html += '<div class="card" style="border-left:4px solid #8e8e8e;">';
+      html += '<div class="row alleGeraeteToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + escapeHtml(kName) + '</h3><span class="badge ok">' + liste.length + ' Gerät' + (liste.length === 1 ? '' : 'e') + ' ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+      if(aufgeklappt){
+        liste.forEach(function(g, idx){
+          var st = statusForDate(g.naechstePruefung);
+          var katInfo = kategorieVisual(g.kategorie);
+          html += '<div class="geraet-karte-zeile" data-gid="' + g.id + '" style="cursor:pointer; ' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
+          html += '<div class="row" style="align-items:flex-start;">';
+          html += '<div style="flex:1; min-width:0;"><span class="meta" style="font-size:15px;">' + katInfo.icon + '</span> <span class="meta" style="font-size:13px;">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</span></div>';
+          html += '<span class="badge ' + st.cls + '" style="flex-shrink:0;">' + st.label + '</span>';
+          html += '</div>';
+          html += '</div>';
+        });
+        html += '<button class="btn small secondary alleGeraeteDruckBtn" data-kid="' + kid + '" style="margin-top:10px;">Liste drucken</button>';
       }
+      html += '</div>';
     });
   }
 
