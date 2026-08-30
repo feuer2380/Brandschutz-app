@@ -1409,6 +1409,9 @@ function renderGeraetCheck(geraetId){
   if(bj && !g.ausgeschieden){
     html += '<button type="button" class="btn secondary small" id="checkInnenrevErledigt" style="margin-top:10px;">Innenrevision jetzt als durchgeführt markieren</button>';
   }
+  if(!g.ausgeschieden && g.kategorie !== 'Brandschutzbegehung'){
+    html += '<button type="button" class="btn block" id="btnSchnellOk" style="background:var(--ok); margin-top:12px;">&#10003; Schnell bestätigen (In Ordnung, ohne Unterschrift)</button>';
+  }
   html += '</div>';
 
   var historie = state.pruefungen.filter(function(p){ return p.geraetId === geraetId && p.erledigt && p.erledigtAm; });
@@ -5545,6 +5548,8 @@ function bindDynamic(){
 
   var btnOk = document.getElementById('btnOk');
   if(btnOk) btnOk.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
+  var btnSchnellOk = document.getElementById('btnSchnellOk');
+  if(btnSchnellOk) btnSchnellOk.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
   var btnReparatur = document.getElementById('btnReparatur');
   if(btnReparatur) btnReparatur.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'reparatur'); };
 
