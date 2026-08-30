@@ -2395,12 +2395,41 @@ function buildStatistikDruckHtml(statFilter){
   }
   var statListe = alleErledigt.filter(function(p){ var pd = new Date(p.erledigtAm); return pd >= startBereich && pd <= jetztDate; });
   statListe.sort(function(a,b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
+  var geraeteById = {};
+  state.geraete.forEach(function(g){ geraeteById[g.id] = g; });
+  var kundenById = {};
+  state.kunden.forEach(function(k){ kundenById[k.id] = k; });
+  function kundeFuerPruefungSchnell(p){
+    if(p.geraetId){
+      var g = geraeteById[p.geraetId];
+      if(g && kundenById[g.kundeId]) return kundenById[g.kundeId];
+    }
+    return kundenById[p.kundeId];
+  }
+  function pruefungAnzeigeTextSchnell(p){
+    var g = p.geraetId ? geraeteById[p.geraetId] : null;
+    if(g){
+      var kat = (g.kategorie || 'Feuerlöscher').trim();
+      var text = escapeHtml(kat) + (g.typ ? (' &middot; ' + escapeHtml(g.typ)) : '');
+      if(kat === 'Brandschutzbegehung'){
+        var kBeg = kundeFuerPruefungSchnell(p);
+        if(kBeg && kBeg.objekt) text += ' &middot; ' + escapeHtml(kBeg.objekt);
+        else if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
+      } else {
+        var nrAnzeige = geraeteNummerAnzeige(g);
+        if(nrAnzeige) text += ' &middot; ' + nrAnzeige;
+        if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
+      }
+      return text;
+    }
+    return escapeHtml(p.typ || 'Prüfung');
+  }
   var anzInOrdnung = statListe.filter(function(p){ return p.ergebnis === 'In Ordnung'; }).length;
   var anzReparatur = statListe.filter(function(p){ return p.ergebnis === 'Reparatur nötig'; }).length;
   var anzAusgeschieden = statListe.filter(function(p){ return p.ergebnis === 'Ausgeschieden'; }).length;
   var kundenSet = {};
   statListe.forEach(function(p){
-    var k = kundeFuerPruefung(p);
+    var k = kundeFuerPruefungSchnell(p);
     if(k) kundenSet[k.id] = true;
   });
   var anzKunden = Object.keys(kundenSet).length;
@@ -2418,11 +2447,11 @@ function buildStatistikDruckHtml(statFilter){
   if(statListe.length === 0){
     html += '<div class="empty">In diesem Zeitraum wurde nichts überprüft</div>';
   } else {
-    html += '<table class="pb-tabelle" style="margin-top:16px;"><thead><tr><th>Kunde</th><th>Ergebnis</th><th>Gerät/Prüfung</th><th>Datum</th></tr></thead><tbody>';
+    html += '<table class="pb-tabelle" style="margin-top:16px;"><thead><tr><th>Kunde</th><th>Ergebnis</th><th>Gerät/Prüfung</th><th>Geprüft von</th><th>Datum</th></tr></thead><tbody>';
     statListe.forEach(function(p){
-      var k = kundeFuerPruefung(p);
+      var k = kundeFuerPruefungSchnell(p);
       var ei = ergebnisInfo(p.ergebnis);
-      html += '<tr><td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td><td>' + escapeHtml(ei.label) + '</td><td>' + pruefungAnzeigeText(p) + '</td><td>' + fmtDate(p.erledigtAm) + ' ' + fmtZeit(p.erledigtAm) + '</td></tr>';
+      html += '<tr><td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td><td>' + escapeHtml(ei.label) + '</td><td>' + pruefungAnzeigeTextSchnell(p) + '</td><td>' + escapeHtml(p.erledigtVon || '-') + '</td><td>' + fmtDate(p.erledigtAm) + ' ' + fmtZeit(p.erledigtAm) + '</td></tr>';
     });
     html += '</tbody></table>';
   }
