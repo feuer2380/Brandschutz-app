@@ -3843,52 +3843,31 @@ function buildTypChips(){
 function parseAltesSystemText(text){
   var zeilen = text.split('\n').map(function(z){ return z.trim(); }).filter(function(z){ return z.length > 0; });
   var labels = {
-    'feuerlöscher': 'typ',
     'feuerlöscher nr': 'externeId',
-    'feuerlöscher nr.': 'externeId',
+    'feuerlöscher': 'typ',
     'beschreibung': 'beschreibung',
     'seriennummer': 'seriennummer',
     'baujahr': 'baujahr',
     'ort': 'standort',
     'neues datum': 'naechstePruefung'
   };
-  function labelSchluessel(text){
-    return text.toLowerCase().trim().replace(/\.$/, '').replace(/:$/, '').trim();
-  }
+  var labelSchluessel = Object.keys(labels).sort(function(a, b){ return b.length - a.length; });
   var ergebnis = {};
   for(var i = 0; i < zeilen.length; i++){
     var zeile = zeilen[i];
-    var feld = null, wert = '';
-    // Fall 1: "Label: Wert" oder "Label:Wert"
-    var colonIdx = zeile.indexOf(':');
-    if(colonIdx > -1){
-      var labelTeil = labelSchluessel(zeile.substring(0, colonIdx));
-      if(labels[labelTeil]){
-        feld = labels[labelTeil];
-        wert = zeile.substring(colonIdx + 1).trim();
-      }
-    }
-    // Fall 2: "Label   Wert" (mehrere Leerzeichen/Tab getrennt, kein Doppelpunkt)
-    if(!feld){
-      var mehrfachSplit = zeile.split(/\s{2,}|\t+/);
-      if(mehrfachSplit.length > 1){
-        var labelTeil2 = labelSchluessel(mehrfachSplit[0]);
-        if(labels[labelTeil2]){
-          feld = labels[labelTeil2];
-          wert = mehrfachSplit.slice(1).join(' ').trim();
-        }
-      }
-    }
-    // Fall 3: Label allein auf der Zeile, Wert auf der nächsten Zeile
-    if(!feld){
-      var labelTeil3 = labelSchluessel(zeile);
-      if(labels[labelTeil3] && zeilen[i+1] && !labels[labelSchluessel(zeilen[i+1].split(/\s{2,}|\t+|:/)[0])]){
-        feld = labels[labelTeil3];
-        wert = zeilen[i+1];
+    var zeileLower = zeile.toLowerCase();
+    for(var j = 0; j < labelSchluessel.length; j++){
+      var lbl = labelSchluessel[j];
+      if(zeileLower.indexOf(lbl) !== 0) continue;
+      var rest = zeile.substring(lbl.length).replace(/^[\s:.\-]+/, '').trim();
+      var feld = labels[lbl];
+      if(!rest && zeilen[i+1]){
+        rest = zeilen[i+1];
         i++;
       }
+      if(rest) ergebnis[feld] = rest;
+      break;
     }
-    if(feld && wert) ergebnis[feld] = wert;
   }
   return ergebnis;
 }
