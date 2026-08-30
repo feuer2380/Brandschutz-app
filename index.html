@@ -59,7 +59,7 @@ if('serviceWorker' in navigator){
   }
   header.top h1{font-size:19px; color:#fff;}
   header.top .sub{font-size:11px; color:var(--amber); text-transform:uppercase; letter-spacing:.08em;}
-  main{flex:1; overflow-y:auto; padding:16px; padding-bottom:90px;}
+  main{flex:1; overflow-y:auto; padding:16px; padding-bottom:150px;}
   nav.tabs{
     position:fixed; bottom:0; left:0; right:0;
     display:flex; background:var(--ink);
@@ -78,8 +78,8 @@ if('serviceWorker' in navigator){
     background:var(--card); border:1px solid var(--line); border-radius:10px;
     padding:14px 16px; margin-bottom:12px;
   }
-  .card h3{font-size:15px;}
-  .card .meta{font-size:12px; color:var(--muted); margin-top:2px;}
+  .card h3{font-size:15px; line-height:1.3;}
+  .card .meta{font-size:12px; color:var(--muted); margin-top:2px; line-height:1.35;}
   .row{display:flex; justify-content:space-between; align-items:center; gap:10px;}
   .badge{
     font-size:11px; padding:3px 9px; border-radius:20px; font-weight:600;
@@ -114,6 +114,8 @@ if('serviceWorker' in navigator){
   }
   .empty{text-align:center; padding:40px 20px; color:var(--muted);}
   .empty .ic{font-size:34px; display:block; margin-bottom:8px;}
+  .empty.kompakt{text-align:left; padding:8px 2px; display:flex; align-items:center; gap:8px;}
+  .empty.kompakt .ic{font-size:16px; display:inline; margin-bottom:0;}
   .modal-bg{
     position:fixed; inset:0; background:rgba(26,20,16,.5); z-index:100;
     display:flex; align-items:flex-end;
@@ -759,7 +761,7 @@ function renderDashboard(){
 
   html += '<div class="section-title">Diesen Monat zu prüfen (' + monatNamen[jetzt.getMonth()] + ')</div>';
   if(diesenMonat.length === 0){
-    html += '<div class="empty"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
+    html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
   } else {
     var dmGruppen = {};
     var dmReihenfolge = [];
@@ -782,7 +784,7 @@ function renderDashboard(){
         var st = statusForDate(p.datum);
         html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
         html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-        html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div>';
+        html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div>';
         if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
         html += '</div>';
       } else {
@@ -794,7 +796,7 @@ function renderDashboard(){
           eintraege.forEach(function(p, idx){
             var st = statusForDate(p.datum);
             html += '<div class="baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="cursor:pointer; ' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
-            html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+            html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
             html += '</div>';
           });
           if(k && k.adresse) html += '<div class="meta" style="margin-top:8px;">' + escapeHtml(k.adresse) + '</div>';
@@ -807,7 +809,7 @@ function renderDashboard(){
   html += '<div class="section-title">Bald fällig (' + tageNaechsterMonat + ' Tage, ' + monatNamen[naechsterMonatIndex] + ')</div>';
   var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
   if(bald.length === 0 && ueberfaelligPruefungen.length === 0){
-    html += '<div class="empty"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
+    html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
   } else {
     var list = ueberfaelligPruefungen.concat(bald);
     var gruppen = {};
@@ -839,7 +841,7 @@ function renderDashboard(){
         var st = statusFuerBaldFaellig(p.datum);
         html += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
         html += '<div class="row"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-        html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div></div>';
+        html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div></div>';
         html += '</div>';
       } else {
         var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['bf_' + key]);
@@ -849,7 +851,7 @@ function renderDashboard(){
           gr.eintraege.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
           gr.eintraege.forEach(function(p){
             var st = statusFuerBaldFaellig(p.datum);
-            html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:6px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; fällig ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+            html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
           });
         }
         html += '</div>';
@@ -866,7 +868,7 @@ function renderDashboard(){
     }
   });
   if(innenrevListe.length === 0){
-    html += '<div class="empty"><span class="ic">&#10003;</span>Keine Innenrevisionen fällig</div>';
+    html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Keine Innenrevisionen fällig</div>';
   } else {
     var innenrevGruppen = {};
     var innenrevReihenfolge = [];
@@ -891,7 +893,10 @@ function renderDashboard(){
     });
   }
 
-  html += '<div class="section-title">Alle Geräte</div>';
+  html += '<div class="section-title">Alle Geräte' + (state.alleGeraeteKategorieFilter ? (' – ' + escapeHtml(state.alleGeraeteKategorieFilter)) : '') + '</div>';
+  if(state.alleGeraeteKategorieFilter){
+    html += '<button class="btn small secondary" id="kategorieFilterLoeschen" style="margin-bottom:8px;">Filter "' + escapeHtml(state.alleGeraeteKategorieFilter) + '" entfernen &times;</button>';
+  }
   var geraeteFilter = state.geraeteFilter || 'alle';
   html += '<div class="filter-bar">';
   html += '<button class="filter-btn' + (geraeteFilter === 'alle' ? ' active' : '') + '" data-geraetefilter="alle">Alle Geräte</button>';
@@ -900,6 +905,9 @@ function renderDashboard(){
   html += '</div>';
 
   var alleGeraete = state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); });
+  if(state.alleGeraeteKategorieFilter){
+    alleGeraete = alleGeraete.filter(function(g){ return (g.kategorie || 'Feuerlöscher').trim() === state.alleGeraeteKategorieFilter; });
+  }
   var gefiltert = alleGeraete.filter(function(g){
     var st = statusForDate(g.naechstePruefung);
     if(geraeteFilter === 'alle') return true;
@@ -2826,6 +2834,7 @@ function renderStatistik(){
 
   if(subTab === 'bestand'){
     var geraeteAktivBestand = state.geraete.filter(function(g){ return !g.ausgeschieden; });
+    html += '<div class="meta" style="margin-bottom:10px;">Zeigt den aktuellen Gesamtbestand (unabhängig vom Zeitfilter oben) &mdash; der Zeitfilter wirkt sich nur auf "Prüfungen" und "Füllungen" aus.</div>';
     var vor30TagenBestand = new Date(); vor30TagenBestand.setDate(vor30TagenBestand.getDate() - 30);
     var bestandVor30Tagen = state.geraete.filter(function(g){
       if(g.ausgeschieden && g.ausgeschiedenAm && new Date(g.ausgeschiedenAm) <= vor30TagenBestand) return false;
@@ -2857,9 +2866,9 @@ function renderStatistik(){
         var wert = proKatBestand[kat];
         var proz = maxKatBestandWert > 0 ? Math.round((wert / maxKatBestandWert) * 100) : 0;
         var anteilGesamt = geraeteAktivBestand.length > 0 ? Math.round((wert / geraeteAktivBestand.length) * 100) : 0;
-        html += '<div class="ergebnis-zeile">';
+        html += '<div class="ergebnis-zeile kategorieZeileKlick" data-katklick="' + escapeHtml(kat) + '" style="cursor:pointer;">';
         html += '<div class="ergebnis-label" style="width:130px;">' + escapeHtml(kat) + '</div>';
-        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar' + (wert > 0 ? ' hatwert' : '') + '" style="width:' + proz + '%; background:#1d5fa8;"></div></div>';
+        html += '<div class="ergebnis-bar-bg"><div class="ergebnis-bar' + (wert > 0 ? ' hatwert' : '') + '" style="width:' + proz + '%; background:' + kategorieFarbe(kat) + ';"></div></div>';
         html += '<div class="ergebnis-zahl" style="width:70px;">' + wert + ' (' + anteilGesamt + '%)</div>';
         html += '</div>';
       });
@@ -3960,6 +3969,22 @@ function customConfirm(nachricht, aufJa){
   openModal(html);
   document.getElementById('cYes').onclick = function(){ closeModal(); aufJa(); };
   document.getElementById('cNo').onclick = closeModal;
+}
+
+function kategorieFarbe(kat){
+  var farben = {
+    'Feuerlöscher': '#d9531e',
+    'Brandschutztüren': '#1d5fa8',
+    'Brandschutzbegehung': '#1e8449',
+    'Perchtl Zisch': '#8e44ad',
+    'CO2-Flaschen': '#8e44ad',
+    'RWA-Anlage': '#c0392b',
+    'Notbeleuchtung': '#d4a017',
+    'Brandschutzklappen': '#16a085',
+    'Rauchmelder': '#e67e22',
+    'Sonstiges': '#7f8c8d'
+  };
+  return farben[kat] || '#1d5fa8';
 }
 
 function baujahrStatus(baujahr, letzteInnenrevision){
@@ -5940,6 +5965,20 @@ function bindDynamic(){
   if(statVonInput) statVonInput.onchange = function(){ state.statVon = statVonInput.value; render(); };
   var statBisInput = document.getElementById('statBisInput');
   if(statBisInput) statBisInput.onchange = function(){ state.statBis = statBisInput.value; render(); };
+
+  document.querySelectorAll('.kategorieZeileKlick').forEach(function(el){
+    el.onclick = function(){
+      state.alleGeraeteKategorieFilter = el.getAttribute('data-katklick');
+      state.geraeteFilter = 'alle';
+      state.tab = 'dashboard';
+      render();
+    };
+  });
+  var kategorieFilterLoeschenBtn = document.getElementById('kategorieFilterLoeschen');
+  if(kategorieFilterLoeschenBtn) kategorieFilterLoeschenBtn.onclick = function(){
+    state.alleGeraeteKategorieFilter = null;
+    render();
+  };
 
   var statKundenSucheInput = document.getElementById('statKundenSuche');
   if(statKundenSucheInput){
