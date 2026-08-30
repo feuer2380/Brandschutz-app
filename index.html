@@ -1328,10 +1328,34 @@ function verarbeiteScan(text){
     return;
   }
   var g = treffer[0];
+  if(g.ausgeschieden){
+    zeigeAusgeschiedenScanDialog(g, id);
+    return;
+  }
   state.activeGeraetId = g.id;
   state.checkRueckkehrZuKunde = null;
   state.tab = 'geraetCheck';
   render();
+}
+
+function zeigeAusgeschiedenScanDialog(g, gescannterCode){
+  var html = '';
+  html += '<div class="modal-head"><h3>Gerät ist ausgeschieden</h3></div>';
+  html += '<div style="font-size:14px; margin-bottom:16px;">Das gescannte Gerät ("' + escapeHtml(g.typ || '') + '", Nr. ' + geraeteNummerWert(g) + ', ' + escapeHtml(g.standort || '') + ') ist bereits am ' + fmtDate(g.ausgeschiedenAm) + ' als ausgeschieden markiert.</div>';
+  html += '<button class="btn block" id="ersatzAnlegenScan">Ersatzgerät anlegen &amp; mit diesem Code verknüpfen</button>';
+  html += '<button class="btn block secondary" id="trotzdemAnzeigenScan" style="margin-top:10px;">Trotzdem anzeigen (nur zur Info)</button>';
+  openModal(html);
+  document.getElementById('ersatzAnlegenScan').onclick = function(){
+    closeModal();
+    modalNeuesGeraet(g.kundeId, { kategorie: g.kategorie, nr: geraeteNummerWert(g), standort: g.standort, externeId: gescannterCode });
+  };
+  document.getElementById('trotzdemAnzeigenScan').onclick = function(){
+    closeModal();
+    state.activeGeraetId = g.id;
+    state.checkRueckkehrZuKunde = null;
+    state.tab = 'geraetCheck';
+    render();
+  };
 }
 
 function geraeteSortierVergleich(a, b){
@@ -1622,6 +1646,8 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
     if(ergebnis === 'ausscheiden'){
       var altNrFuerErsatz = geraeteNummerWert(g);
       var katFuerErsatz = g.kategorie;
+      var standortFuerErsatz = g.standort;
+      var externeIdFuerErsatz = g.externeId;
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
       dbPut('geraete', g, function(){
@@ -1635,7 +1661,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
         document.getElementById('ersatzJa').onclick = function(){
           loadAll(function(){
             render();
-            zeigeErsatzNummerWahl(kid, katFuerErsatz, altNrFuerErsatz);
+            zeigeErsatzNummerWahl(kid, katFuerErsatz, altNrFuerErsatz, standortFuerErsatz, externeIdFuerErsatz);
           });
         };
         document.getElementById('ersatzNein').onclick = function(){
@@ -1731,6 +1757,8 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
     if(ergebnis === 'ausscheiden'){
       var altNrFuerErsatz2 = geraeteNummerWert(g);
       var katFuerErsatz2 = g.kategorie;
+      var standortFuerErsatz2 = g.standort;
+      var externeIdFuerErsatz2 = g.externeId;
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
       dbPut('geraete', g, function(){
@@ -1747,7 +1775,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
             state.checkRueckkehrZuKunde = null;
             state.tab = 'kundeDetail';
             render();
-            zeigeErsatzNummerWahl(kid, katFuerErsatz2, altNrFuerErsatz2);
+            zeigeErsatzNummerWahl(kid, katFuerErsatz2, altNrFuerErsatz2, standortFuerErsatz2, externeIdFuerErsatz2);
           });
         };
         document.getElementById('ersatzNein').onclick = function(){
@@ -3757,7 +3785,7 @@ function modalGeraetBearbeiten(geraetId){
 
 function findeDuplikatExterneId(externeId, eigeneGeraetId){
   if(!externeId) return null;
-  var treffer = state.geraete.filter(function(x){ return x.externeId === externeId && x.id !== eigeneGeraetId; })[0];
+  var treffer = state.geraete.filter(function(x){ return x.externeId === externeId && x.id !== eigeneGeraetId && !x.ausgeschieden; })[0];
   if(!treffer) return null;
   var k = state.kunden.filter(function(x){ return x.id === treffer.kundeId; })[0];
   return { geraet: treffer, kunde: k };
@@ -3984,9 +4012,9 @@ function bindTypChips(){
   });
 }
 
-function zeigeErsatzNummerWahl(kundeId, kategorie, alteNr){
+function zeigeErsatzNummerWahl(kundeId, kategorie, alteNr, standort, externeId){
   if(!alteNr){
-    modalNeuesGeraet(kundeId, { kategorie: kategorie });
+    modalNeuesGeraet(kundeId, { kategorie: kategorie, standort: standort, externeId: externeId });
     return;
   }
   var neueNr = naechsteGeraeteNummer(kundeId, kategorie);
@@ -3996,8 +4024,8 @@ function zeigeErsatzNummerWahl(kundeId, kategorie, alteNr){
   html += '<button class="btn block" id="ersatzAlteNr">Alte Nummer (Nr. ' + alteNr + ')</button>';
   html += '<button class="btn block secondary" id="ersatzNeueNr" style="margin-top:10px;">Neue Nummer (Nr. ' + neueNr + ')</button>';
   openModal(html);
-  document.getElementById('ersatzAlteNr').onclick = function(){ modalNeuesGeraet(kundeId, { kategorie: kategorie, nr: alteNr }); };
-  document.getElementById('ersatzNeueNr').onclick = function(){ modalNeuesGeraet(kundeId, { kategorie: kategorie, nr: neueNr }); };
+  document.getElementById('ersatzAlteNr').onclick = function(){ modalNeuesGeraet(kundeId, { kategorie: kategorie, nr: alteNr, standort: standort, externeId: externeId }); };
+  document.getElementById('ersatzNeueNr').onclick = function(){ modalNeuesGeraet(kundeId, { kategorie: kategorie, nr: neueNr, standort: standort, externeId: externeId }); };
 }
 
 function modalNeuesGeraet(kundeId, vorgabe){
@@ -4035,8 +4063,8 @@ function modalNeuesGeraet(kundeId, vorgabe){
   html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
   html += '</div>';
-  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" placeholder="z.B. 2269">';
-  html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + (letzte && letzte.standort ? escapeHtml(letzte.standort) : '') + '" list="standortDatalist" autocomplete="off">';
+  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" value="' + escapeHtml(vorgabe.externeId || '') + '" placeholder="z.B. 2269">';
+  html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + escapeHtml(vorgabe.standort || (letzte && letzte.standort ? letzte.standort : '')) + '" list="standortDatalist" autocomplete="off">';
   html += buildStandortDatalist();
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (letzte && letzte.letztePruefung ? letzte.letztePruefung : '') + '">';
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (letzte && letzte.naechstePruefung ? letzte.naechstePruefung : '') + '">';
