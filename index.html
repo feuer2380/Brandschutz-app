@@ -1887,6 +1887,10 @@ function renderKundeDetail(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return '<div class="empty">Kunde nicht gefunden</div>';
   var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
+  if(state.kundeGeraeteKatFilterKundeId !== kundeId){
+    state.kundeGeraeteKatFilter = null;
+    state.kundeGeraeteKatFilterKundeId = kundeId;
+  }
 
   var html = '';
   html += '<button class="btn secondary small" id="backToKunden">&larr; Zurück</button>';
@@ -1922,7 +1926,19 @@ function renderKundeDetail(kundeId){
   if(geraete.length === 0){
     html += '<div class="empty">Keine Geräte erfasst</div>';
   } else {
-    var geraeteSortiert = geraete.slice().sort(function(a,b){
+    var alleKategorienImKunde = {};
+    geraete.forEach(function(g){ alleKategorienImKunde[(g.kategorie || 'Feuerlöscher').trim()] = true; });
+    var kategorienListe = Object.keys(alleKategorienImKunde).sort();
+    if(kategorienListe.length > 1){
+      html += '<select id="geraeteKatFilter" style="margin-top:8px;"><option value="">Alle Kategorien (' + geraete.length + ')</option>';
+      kategorienListe.forEach(function(kat){
+        var anzahlKat = geraete.filter(function(g){ return (g.kategorie || 'Feuerlöscher').trim() === kat; }).length;
+        html += '<option value="' + escapeHtml(kat) + '"' + (state.kundeGeraeteKatFilter === kat ? ' selected' : '') + '>' + escapeHtml(kat) + ' (' + anzahlKat + ')</option>';
+      });
+      html += '</select>';
+    }
+    var geraeteGefiltert = state.kundeGeraeteKatFilter ? geraete.filter(function(g){ return (g.kategorie || 'Feuerlöscher').trim() === state.kundeGeraeteKatFilter; }) : geraete;
+    var geraeteSortiert = geraeteGefiltert.slice().sort(function(a,b){
       return geraeteSortierVergleich(a, b);
     });
     var katZaehler1 = {};
@@ -3914,6 +3930,11 @@ function bindEinfuegenAltesSystem(){
       var teileL = werte.letztePruefung.split('.');
       if(teileL.length === 3) letzteFeld.value = teileL[2] + '-' + teileL[1] + '-' + teileL[0];
     }
+    if(naechsteFeld && !werte.naechstePruefung && letzteFeld && letzteFeld.value){
+      var intervallFeld = document.getElementById('fIntervall');
+      var intervallWert = intervallFeld ? (parseInt(intervallFeld.value, 10) || 24) : 24;
+      naechsteFeld.value = naechsterTerminNach(letzteFeld.value, intervallWert);
+    }
     var anzahl = Object.keys(werte).length;
     toast(anzahl ? (anzahl + ' Feld(er) übernommen - bitte prüfen') : 'Keine bekannten Felder im Text gefunden');
   };
@@ -5666,6 +5687,12 @@ function bindDynamic(){
 
   var addGeraet = document.getElementById('addGeraetBtn');
   if(addGeraet) addGeraet.onclick = function(){ modalNeuesGeraet(state.activeKundeId); };
+
+  var geraeteKatFilterEl = document.getElementById('geraeteKatFilter');
+  if(geraeteKatFilterEl) geraeteKatFilterEl.onchange = function(){
+    state.kundeGeraeteKatFilter = geraeteKatFilterEl.value || null;
+    render();
+  };
 
   var druckBtnStat = document.getElementById('druckBtnStat');
   if(druckBtnStat) druckBtnStat.onclick = function(){
