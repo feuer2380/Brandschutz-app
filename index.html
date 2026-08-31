@@ -1204,18 +1204,30 @@ function renderScan(){
 var miniScannerInstance = null;
 function stopMiniScanner(){
   if(miniScannerInstance){
-    try { miniScannerInstance.clear(); } catch(e){}
-    miniScannerInstance = null;
+    try {
+      var inst = miniScannerInstance;
+      miniScannerInstance = null;
+      inst.clear().catch(function(){});
+    } catch(e){}
   }
 }
 
 function modalCodeScannen(zielFeldId){
-  var html = '';
-  html += '<div class="modal-head"><h3>Code scannen</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:8px;">Alten QR-Aufkleber vor die Kamera halten.</div>';
-  html += '<div id="readerMini"></div>';
-  openModal(html);
-  document.getElementById('mClose').onclick = function(){ stopMiniScanner(); closeModal(); };
+  var alt = document.getElementById('miniScanOverlay');
+  if(alt) alt.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'miniScanOverlay';
+  overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:#fff; z-index:9999; padding:16px; overflow-y:auto;';
+  overlay.innerHTML = '<div class="modal-head"><h3>Code scannen</h3><button class="close" id="miniScanClose">&times;</button></div><div class="meta" style="margin-bottom:8px;">Alten QR-Aufkleber vor die Kamera halten.</div><div id="readerMini"></div>';
+  document.body.appendChild(overlay);
+
+  function schliessenOhneUebernahme(){
+    stopMiniScanner();
+    var o = document.getElementById('miniScanOverlay');
+    if(o) o.remove();
+  }
+  document.getElementById('miniScanClose').onclick = schliessenOhneUebernahme;
+
   var readerDiv = document.getElementById('readerMini');
   if(!readerDiv || typeof Html5QrcodeScanner === 'undefined'){
     if(readerDiv) readerDiv.innerHTML = '<div class="meta">Kamera in dieser Umgebung nicht verfügbar.</div>';
@@ -1230,11 +1242,19 @@ function modalCodeScannen(zielFeldId){
   miniScannerInstance.render(function(decodedText){
     if(schonVerarbeitet) return;
     schonVerarbeitet = true;
-    stopMiniScanner();
-    closeModal();
-    var zielFeld = document.getElementById(zielFeldId);
-    if(zielFeld) zielFeld.value = decodedText.trim();
-    toast('Code übernommen: ' + decodedText.trim());
+    var code = decodedText.trim();
+    var inst = miniScannerInstance;
+    miniScannerInstance = null;
+    inst.clear().catch(function(){}).then(function(){
+      var o = document.getElementById('miniScanOverlay');
+      if(o) o.remove();
+      var zielFeld = document.getElementById(zielFeldId);
+      if(zielFeld){
+        zielFeld.value = code;
+        zielFeld.dispatchEvent(new Event('input'));
+      }
+      toast('Code übernommen: ' + code);
+    });
   }, function(){ /* noch nicht erkannt, ignorieren */ });
 }
 
