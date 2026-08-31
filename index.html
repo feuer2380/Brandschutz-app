@@ -1201,6 +1201,43 @@ function renderScan(){
   return html;
 }
 
+var miniScannerInstance = null;
+function stopMiniScanner(){
+  if(miniScannerInstance){
+    try { miniScannerInstance.clear(); } catch(e){}
+    miniScannerInstance = null;
+  }
+}
+
+function modalCodeScannen(zielFeldId){
+  var html = '';
+  html += '<div class="modal-head"><h3>Code scannen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;">Alten QR-Aufkleber vor die Kamera halten.</div>';
+  html += '<div id="readerMini"></div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ stopMiniScanner(); closeModal(); };
+  var readerDiv = document.getElementById('readerMini');
+  if(!readerDiv || typeof Html5QrcodeScanner === 'undefined'){
+    if(readerDiv) readerDiv.innerHTML = '<div class="meta">Kamera in dieser Umgebung nicht verfügbar.</div>';
+    return;
+  }
+  miniScannerInstance = new Html5QrcodeScanner(
+    'readerMini',
+    { fps: 10, qrbox: { width: 250, height: 250 }, rememberLastUsedCamera: true, supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA] },
+    false
+  );
+  var schonVerarbeitet = false;
+  miniScannerInstance.render(function(decodedText){
+    if(schonVerarbeitet) return;
+    schonVerarbeitet = true;
+    stopMiniScanner();
+    closeModal();
+    var zielFeld = document.getElementById(zielFeldId);
+    if(zielFeld) zielFeld.value = decodedText.trim();
+    toast('Code übernommen: ' + decodedText.trim());
+  }, function(){ /* noch nicht erkannt, ignorieren */ });
+}
+
 function stopScanner(){
   if(scannerInstance && scannerLaeuft){
     scannerLaeuft = false;
@@ -3752,7 +3789,7 @@ function modalGeraetBearbeiten(geraetId){
   html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
   html += '</div>';
-  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269">';
+  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><div class="row" style="gap:8px;"><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269" style="flex:1;"><button type="button" class="btn secondary" id="fExterneIdScanBtn" style="flex:0 0 auto; padding:0 14px;">&#128247;</button></div>';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '" list="standortDatalist" autocomplete="off">';
   html += buildStandortDatalist();
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (g.letztePruefung || '') + '">';
@@ -3905,6 +3942,8 @@ function modalGeraetBearbeiten(geraetId){
   document.getElementById('btnGeraetVerschieben').onclick = function(){
     modalGeraetVerschieben(geraetId);
   };
+  var fExterneIdScanBtn = document.getElementById('fExterneIdScanBtn');
+  if(fExterneIdScanBtn) fExterneIdScanBtn.onclick = function(){ modalCodeScannen('fExterneId'); };
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
   try { bindKategorieToggle(); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
@@ -4277,7 +4316,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
   html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
   html += '</div>';
-  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><input id="fExterneId" type="text" value="' + escapeHtml(vorgabe.externeId || '') + '" placeholder="z.B. 2269">';
+  html += '<label>Externe ID (altes QR-Aufkleber-System)</label><div class="row" style="gap:8px;"><input id="fExterneId" type="text" value="' + escapeHtml(vorgabe.externeId || '') + '" placeholder="z.B. 2269" style="flex:1;"><button type="button" class="btn secondary" id="fExterneIdScanBtn" style="flex:0 0 auto; padding:0 14px;">&#128247;</button></div>';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + escapeHtml(vorgabe.standort || (letzte && letzte.standort ? letzte.standort : '')) + '" list="standortDatalist" autocomplete="off">';
   html += buildStandortDatalist();
   html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (letzte && letzte.letztePruefung ? letzte.letztePruefung : '') + '">';
@@ -4358,6 +4397,8 @@ function modalNeuesGeraet(kundeId, vorgabe){
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
   try { bindKategorieToggle(kundeId); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
   try { bindEinfuegenAltesSystem(); } catch(err){ console.error('bindEinfuegenAltesSystem Fehler', err); }
+  var fExterneIdScanBtnNeu = document.getElementById('fExterneIdScanBtn');
+  if(fExterneIdScanBtnNeu) fExterneIdScanBtnNeu.onclick = function(){ modalCodeScannen('fExterneId'); };
 
   try {
     function aktualisiereNaechstePruefungAusPruefdatum(){
