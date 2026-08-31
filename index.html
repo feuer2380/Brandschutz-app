@@ -1633,6 +1633,11 @@ function istInnenrevisionspflichtig(g){
   return true;
 }
 
+function rauchmelderAblaufjahr(g){
+  if((g.kategorie || '').trim() !== 'Rauchmelder' || !g.baujahr) return null;
+  return parseInt(g.baujahr, 10) + 10;
+}
+
 function jetztLokalDatumZeit(){
   var d = new Date();
   var jj = d.getFullYear();
@@ -2077,6 +2082,12 @@ function renderKundeDetail(kundeId){
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
       html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
       if(bj) html += '<span class="badge ' + bj.cls + '">' + bj.label + '</span>';
+      var ablaufjahrRM = rauchmelderAblaufjahr(g);
+      if(ablaufjahrRM){
+        var ablaufJetzt = new Date().getFullYear();
+        var ablaufCls = ablaufjahrRM <= ablaufJetzt ? 'warn' : (ablaufjahrRM - ablaufJetzt <= 1 ? 'soon' : 'ok');
+        html += '<span class="badge ' + ablaufCls + '">Ablauf: ' + ablaufjahrRM + '</span>';
+      }
       html += '<button class="btn secondary small qrGeraetInlineBtn" data-gid="' + g.id + '" style="padding:5px 9px;">QR</button>';
       html += '</div>';
       html += '</div>';
@@ -2389,13 +2400,28 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
     reihenfolge.forEach(function(kat){
       var istPZ = (istFuellKategorie(kat));
       var istBegehung = (kat === 'Brandschutzbegehung');
+      var zeigtInnenrevision = (kat === 'Feuerlöscher');
+      var istRauchmelder = (kat === 'Rauchmelder');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>')) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>');
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
-        var bjStatus = (!istPZ && !istBegehung && g.baujahr && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
-        var statusSpalte = (!istPZ && !istBegehung) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
-        var mittelspalten = istPZ ? ('<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>') : (istBegehung ? ('<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>') : ('<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>' + statusSpalte));
+        var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
+        var statusSpalte = (!istPZ && !istBegehung && zeigtInnenrevision) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
+        var mittelspalten;
+        if(istPZ){
+          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>';
+        } else if(istBegehung){
+          mittelspalten = '<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>';
+        } else if(zeigtInnenrevision){
+          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>' + statusSpalte;
+        } else if(istRauchmelder){
+          var ablaufjahrDruck = rauchmelderAblaufjahr(g);
+          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (ablaufjahrDruck || '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
+        } else {
+          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
+        }
         var zeilenStil = '';
         if(bjStatus && bjStatus.cls === 'warn') zeilenStil = ' style="background:#fbdcd2; color:#8a2a10;"';
         else if(bjStatus && bjStatus.cls === 'soon') zeilenStil = ' style="background:#fde8c8; color:#8a5a10;"';
@@ -4270,7 +4296,7 @@ function bindKategorieToggle(kundeIdFuerReserve){
   if(!sel) return;
   function aktualisieren(){
     var istBegehung = (sel.value === 'Brandschutzbegehung');
-    if(block) block.style.display = (sel.value === 'Feuerlöscher') ? '' : 'none';
+    if(block) block.style.display = (sel.value === 'Feuerlöscher' || sel.value === 'Rauchmelder') ? '' : 'none';
     if(blockPZ) blockPZ.style.display = istFuellKategorie(sel.value) ? '' : 'none';
     if(blockMaengel) blockMaengel.style.display = istBegehung ? '' : 'none';
     if(blockSeriennr) blockSeriennr.style.display = istBegehung ? 'none' : '';
