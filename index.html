@@ -758,6 +758,7 @@ function renderDashboard(){
   html += '<div class="stat"><div class="n">' + geraeteSichtbar.length + '</div><div class="l">Geräte</div></div>';
   html += '<div class="stat"><div class="n" style="color:' + (ueberfaelligGeraete.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaelligGeraete.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
+  html += '<button class="btn block secondary" id="terminlisteBtnUebersicht" style="margin-top:12px;">Terminliste drucken (zum Abhaken, für unterwegs)</button>';
 
   html += '<div class="section-title">Diesen Monat zu prüfen (' + monatNamen[jetzt.getMonth()] + ')</div>';
   if(diesenMonat.length === 0){
@@ -2201,7 +2202,7 @@ function buildTerminlisteHtml(){
     html += '<div class="empty">Keine offenen Prüftermine</div>';
   } else {
     html += '<table class="pb-tabelle"><thead><tr>';
-    html += '<th>Kunde</th><th>Adresse</th><th>Gerät</th><th>Fällig</th><th>Status</th>';
+    html += '<th>Kunde</th><th>Adresse</th><th>Gerät</th><th>Fällig</th><th>Status</th><th style="text-align:center;">&#10003;</th>';
     html += '</tr></thead><tbody>';
     offen.forEach(function(p){
       var k = kundeFuerPruefung(p);
@@ -2213,6 +2214,7 @@ function buildTerminlisteHtml(){
       html += '<td>' + escapeHtml(p.typ||'Prüfung') + '</td>';
       html += '<td>' + fmtDate(p.datum) + '</td>';
       html += '<td><span class="' + stCls + '">' + st.label + '</span></td>';
+      html += '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
@@ -6106,6 +6108,8 @@ function bindDynamic(){
 
   var terminlisteBtn = document.getElementById('terminlisteBtn');
   if(terminlisteBtn) terminlisteBtn.onclick = modalTerminliste;
+  var terminlisteBtnUebersicht = document.getElementById('terminlisteBtnUebersicht');
+  if(terminlisteBtnUebersicht) terminlisteBtnUebersicht.onclick = modalTerminliste;
 
   document.querySelectorAll('.ausgeschiedenLoeschenBtn').forEach(function(b){
     b.onclick = function(){
