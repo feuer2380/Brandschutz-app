@@ -758,7 +758,7 @@ function renderDashboard(){
   html += '<div class="stat"><div class="n">' + geraeteSichtbar.length + '</div><div class="l">Geräte</div></div>';
   html += '<div class="stat"><div class="n" style="color:' + (ueberfaelligGeraete.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaelligGeraete.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
-  html += '<button class="btn block secondary" id="terminlisteBtnUebersicht" style="margin-top:12px;">Terminliste drucken (zum Abhaken, für unterwegs)</button>';
+  html += '<button class="btn block secondary" id="baldFaelligDruckBtn" style="margin-top:12px;">Bald fällig drucken (für unterwegs)</button>';
 
   html += '<div class="section-title">Diesen Monat zu prüfen (' + monatNamen[jetzt.getMonth()] + ')</div>';
   if(diesenMonat.length === 0){
@@ -2186,6 +2186,63 @@ function renderPruefungen(){
   return html;
 }
 
+function buildBaldFaelligDruckHtml(){
+  var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
+  var jetztFuerMonatslaenge = new Date();
+  var naechsterMonatDatum = new Date(jetztFuerMonatslaenge.getFullYear(), jetztFuerMonatslaenge.getMonth() + 1, 1);
+  var naechsterMonatIndex = naechsterMonatDatum.getMonth();
+  var naechsterMonatJahr = naechsterMonatDatum.getFullYear();
+  var jetzt = new Date();
+  var relevant = offen.filter(function(p){
+    var d = new Date(p.datum);
+    var istUeberfaellig = daysUntil(p.datum) < 0;
+    var istDiesenMonat = d.getMonth() === jetzt.getMonth() && d.getFullYear() === jetzt.getFullYear();
+    var istNaechsterMonat = d.getMonth() === naechsterMonatIndex && d.getFullYear() === naechsterMonatJahr;
+    return istUeberfaellig || istDiesenMonat || istNaechsterMonat;
+  });
+  relevant.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
+
+  var gruppen = {};
+  var reihenfolge = [];
+  relevant.forEach(function(p){
+    var k = kundeFuerPruefung(p);
+    var kid = k ? k.id : 'unbekannt';
+    if(!gruppen[kid]){ gruppen[kid] = { kunde: k, eintraege: [] }; reihenfolge.push(kid); }
+    gruppen[kid].eintraege.push(p);
+  });
+
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Bald fällig</h1><div class="sub">Überfällig, diesen und nächsten Monat</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+
+  if(reihenfolge.length === 0){
+    html += '<div class="empty">Keine anstehenden Prüfungen</div>';
+  } else {
+    reihenfolge.forEach(function(kid){
+      var gr = gruppen[kid];
+      var k = gr.kunde;
+      html += '<div class="pb-kundenbox" style="margin-bottom:14px;">';
+      html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (k && k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '</div>';
+      html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
+      html += '<table class="pb-tabelle" style="margin-top:8px;"><thead><tr><th>Gerät/Prüfung</th><th>Fällig</th></tr></thead><tbody>';
+      gr.eintraege.forEach(function(p){
+        html += '<tr><td>' + pruefungAnzeigeText(p) + '</td><td>' + fmtDate(p.datum) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      html += '</div>';
+    });
+  }
+
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
+  html += '</div>';
+  return html;
+}
+
 function buildTerminlisteHtml(){
   var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
   offen.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
@@ -2202,7 +2259,7 @@ function buildTerminlisteHtml(){
     html += '<div class="empty">Keine offenen Prüftermine</div>';
   } else {
     html += '<table class="pb-tabelle"><thead><tr>';
-    html += '<th>Kunde</th><th>Adresse</th><th>Gerät</th><th>Fällig</th><th>Status</th><th style="text-align:center;">&#10003;</th>';
+    html += '<th>Kunde</th><th>Adresse</th><th>Gerät</th><th>Fällig</th><th>Status</th>';
     html += '</tr></thead><tbody>';
     offen.forEach(function(p){
       var k = kundeFuerPruefung(p);
@@ -2214,7 +2271,6 @@ function buildTerminlisteHtml(){
       html += '<td>' + escapeHtml(p.typ||'Prüfung') + '</td>';
       html += '<td>' + fmtDate(p.datum) + '</td>';
       html += '<td><span class="' + stCls + '">' + st.label + '</span></td>';
-      html += '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
@@ -6108,8 +6164,12 @@ function bindDynamic(){
 
   var terminlisteBtn = document.getElementById('terminlisteBtn');
   if(terminlisteBtn) terminlisteBtn.onclick = modalTerminliste;
-  var terminlisteBtnUebersicht = document.getElementById('terminlisteBtnUebersicht');
-  if(terminlisteBtnUebersicht) terminlisteBtnUebersicht.onclick = modalTerminliste;
+  var baldFaelligDruckBtn = document.getElementById('baldFaelligDruckBtn');
+  if(baldFaelligDruckBtn) baldFaelligDruckBtn.onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildBaldFaelligDruckHtml();
+    setTimeout(function(){ window.print(); }, 120);
+  };
 
   document.querySelectorAll('.ausgeschiedenLoeschenBtn').forEach(function(b){
     b.onclick = function(){
