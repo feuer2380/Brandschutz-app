@@ -1212,6 +1212,20 @@ function stopMiniScanner(){
   }
 }
 
+function extraktionExterneIdAusScan(text){
+  text = text.trim();
+  if(!/^https?:\/\//i.test(text)) return text;
+  var ohneQuery = text.split('?')[0].replace(/\/$/, '');
+  var teile = ohneQuery.split('/');
+  var letzterTeil = teile[teile.length - 1];
+  if(/^\d+$/.test(letzterTeil)) return letzterTeil;
+  var qMatch = text.match(/[?&](?:id|code|nr)=(\d+)/i);
+  if(qMatch) return qMatch[1];
+  var anyNum = text.match(/(\d{3,})/);
+  if(anyNum) return anyNum[1];
+  return text;
+}
+
 function modalCodeScannen(zielFeldId){
   var alt = document.getElementById('miniScanOverlay');
   if(alt) alt.remove();
@@ -1242,7 +1256,7 @@ function modalCodeScannen(zielFeldId){
   miniScannerInstance.render(function(decodedText){
     if(schonVerarbeitet) return;
     schonVerarbeitet = true;
-    var code = decodedText.trim();
+    var code = extraktionExterneIdAusScan(decodedText);
     var inst = miniScannerInstance;
     miniScannerInstance = null;
     try {
