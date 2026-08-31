@@ -807,12 +807,8 @@ function renderDashboard(){
     });
   }
 
-  html += '<div class="section-title">Bald fällig (' + tageNaechsterMonat + ' Tage, ' + monatNamen[naechsterMonatIndex] + ')</div>';
-  var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
-  if(bald.length === 0 && ueberfaelligPruefungen.length === 0){
-    html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
-  } else {
-    var list = ueberfaelligPruefungen.concat(bald);
+  function renderPruefungsGruppenHtml(list){
+    var innerHtml = '';
     var gruppen = {};
     var reihenfolge = [];
     list.forEach(function(p){
@@ -840,24 +836,38 @@ function renderDashboard(){
       if(gr.eintraege.length === 1){
         var p = gr.eintraege[0];
         var st = statusFuerBaldFaellig(p.datum);
-        html += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
-        html += '<div class="row"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-        html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div></div>';
-        html += '</div>';
+        innerHtml += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
+        innerHtml += '<div class="row"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+        innerHtml += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div></div>';
+        innerHtml += '</div>';
       } else {
         var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['bf_' + key]);
-        html += '<div class="card">';
-        html += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer;"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        innerHtml += '<div class="card">';
+        innerHtml += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer;"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
         if(aufgeklappt){
           gr.eintraege.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
           gr.eintraege.forEach(function(p){
             var st = statusFuerBaldFaellig(p.datum);
-            html += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+            innerHtml += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
           });
         }
-        html += '</div>';
+        innerHtml += '</div>';
       }
     });
+    return innerHtml;
+  }
+
+  var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
+  if(ueberfaelligPruefungen.length > 0){
+    html += '<div class="section-title">Überfällig</div>';
+    html += renderPruefungsGruppenHtml(ueberfaelligPruefungen);
+  }
+
+  html += '<div class="section-title">Bald fällig (' + tageNaechsterMonat + ' Tage, ' + monatNamen[naechsterMonatIndex] + ')</div>';
+  if(bald.length === 0){
+    html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
+  } else {
+    html += renderPruefungsGruppenHtml(bald);
   }
 
   html += '<div class="section-title">Fällige Innenrevisionen</div>';
