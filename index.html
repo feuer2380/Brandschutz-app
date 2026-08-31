@@ -1245,16 +1245,18 @@ function modalCodeScannen(zielFeldId){
     var code = decodedText.trim();
     var inst = miniScannerInstance;
     miniScannerInstance = null;
-    inst.clear().catch(function(){}).then(function(){
-      var o = document.getElementById('miniScanOverlay');
-      if(o) o.remove();
-      var zielFeld = document.getElementById(zielFeldId);
-      if(zielFeld){
-        zielFeld.value = code;
-        zielFeld.dispatchEvent(new Event('input'));
-      }
-      toast('Code übernommen: ' + code);
-    });
+    try {
+      var ergebnis = inst.clear();
+      if(ergebnis && typeof ergebnis.catch === 'function') ergebnis.catch(function(){});
+    } catch(e){ /* ignorieren, Aufräumen ist nicht kritisch */ }
+    var o = document.getElementById('miniScanOverlay');
+    if(o) o.remove();
+    var zielFeld = document.getElementById(zielFeldId);
+    if(zielFeld){
+      zielFeld.value = code;
+      zielFeld.dispatchEvent(new Event('input'));
+    }
+    toast('Code übernommen: ' + code);
   }, function(){ /* noch nicht erkannt, ignorieren */ });
 }
 
