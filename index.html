@@ -4247,6 +4247,7 @@ function parseAltesSystemText(text){
         rest = zeilen[i+1];
         i++;
       }
+      if(rest && /this field is required|field is required|pflichtfeld/i.test(rest)) rest = '';
       if(rest) ergebnis[feld] = rest;
       break;
     }
