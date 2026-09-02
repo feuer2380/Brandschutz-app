@@ -1783,10 +1783,11 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
       g.letztePruefung = jetztIso.substring(0,10);
       g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
       if(ergebnis === 'in_ordnung' && istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
-        g.abfuelldatum = jetztLokalDatumZeit();
+        var anschlussZeitpunkt1 = jetztLokalDatumZeit();
+        g.letzterAnschluss = anschlussZeitpunkt1;
         if(!g.fuellungen) g.fuellungen = [];
         var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
-        g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '' });
+        g.fuellungen.push({ datum: anschlussZeitpunkt1, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum || null });
       }
       dbPut('geraete', g, function(){
         neuenOffenenTerminAnlegen(g, function(){
@@ -1902,10 +1903,11 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
         g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
         if(ergebnis === 'begehung') g.begehungStart = null;
         if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
-          g.abfuelldatum = jetztLokalDatumZeit();
+          var anschlussZeitpunkt2 = jetztLokalDatumZeit();
+          g.letzterAnschluss = anschlussZeitpunkt2;
           if(!g.fuellungen) g.fuellungen = [];
           var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
-        g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '' });
+        g.fuellungen.push({ datum: anschlussZeitpunkt2, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum || null });
         }
         dbPut('geraete', g, function(){
           neuenOffenenTerminAnlegen(g, function(){
@@ -2109,18 +2111,23 @@ function renderKundeDetail(kundeId){
       if(!g.ausgeschieden){
         var aktLetzte = letztePruefungFuerGeraet(g.id);
         var istBegehung = g.kategorie === 'Brandschutzbegehung';
+        var istKegAnschluss = istFuellKategorie((g.kategorie || 'Feuerlöscher').trim());
         var heuteIsoKurz = new Date().toISOString().substring(0,10);
         var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || g.letztePruefung || heuteIsoKurz;
         var bereitsHeute = letzteErledigungInnerhalb24h(g.id);
         html += '<div style="margin-top:8px;">';
         if(bereitsHeute){
-          html += '<div class="meta" style="color:var(--ok); font-weight:600;">&#10003; Heute bereits geprüft um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr (' + escapeHtml(bereitsHeute.ergebnis || '') + ')</div>';
+          html += '<div class="meta" style="color:var(--ok); font-weight:600;">&#10003; Heute bereits ' + (istKegAnschluss ? 'angeschlossen' : 'geprüft') + ' um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr (' + escapeHtml(bereitsHeute.ergebnis || '') + ')</div>';
         }
         html += '<div style="display:flex; align-items:center; gap:6px;">';
-        html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Datum der Prüfung</label>';
+        html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">' + (istKegAnschluss ? 'Datum des Anschlusses' : 'Datum der Prüfung') + '</label>';
         html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + datumWert + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
         html += '</div>';
-        html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr JETZT eine echte Prüfung eintragt (auch rückwirkend). Wollt ihr nur den nächsten Termin verschieben, ohne dass es als Prüfung zählt: <span class="nurTerminBtn" data-gid="' + g.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">hier klicken</span>.</div>';
+        if(istKegAnschluss){
+          html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr JETZT wirklich einen neuen Keg-Behälter anschließt (auch rückwirkend). Wollt ihr nur den nächsten Termin verschieben, ohne dass es als Anschluss zählt: <span class="nurTerminBtn" data-gid="' + g.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">hier klicken</span>.</div>';
+        } else {
+          html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr JETZT eine echte Prüfung eintragt (auch rückwirkend). Wollt ihr nur den nächsten Termin verschieben, ohne dass es als Prüfung zählt: <span class="nurTerminBtn" data-gid="' + g.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">hier klicken</span>.</div>';
+        }
         html += '</div>';
         if(istBegehung){
           html += '<div style="display:flex; gap:6px; margin-top:8px;">';
@@ -2419,14 +2426,19 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istRauchmelder = (kat === 'Rauchmelder');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
       var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>');
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
         var statusSpalte = (!istPZ && !istBegehung && zeigtInnenrevision) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
         var mittelspalten;
         if(istPZ){
-          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>';
+          var zeitspanneText = '-';
+          if(g.abfuelldatum && g.letzterAnschluss){
+            var tageSpanne = Math.round((new Date(g.letzterAnschluss) - new Date(g.abfuelldatum)) / 86400000);
+            if(!isNaN(tageSpanne) && tageSpanne >= 0) zeitspanneText = tageSpanne + ' Tag' + (tageSpanne === 1 ? '' : 'e');
+          }
+          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>';
         } else if(istBegehung){
           mittelspalten = '<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>';
         } else if(zeigtInnenrevision){
@@ -5543,9 +5555,11 @@ function modalSammelbericht(kundeId){
         var hh = jetzt.getHours(); if(hh<10) hh = '0'+hh;
         var mm = jetzt.getMinutes(); if(mm<10) mm = '0'+mm;
         g.abfuelldatum = abfuellVal + 'T' + hh + ':' + mm;
+        var anschlussZeitpunkt3 = jetztLokalDatumZeit();
+        g.letzterAnschluss = anschlussZeitpunkt3;
         if(!g.fuellungen) g.fuellungen = [];
         var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
-        g.fuellungen.push({ datum: g.abfuelldatum, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '' });
+        g.fuellungen.push({ datum: anschlussZeitpunkt3, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
       }
       var istBegehung = ((g.kategorie || 'Feuerlöscher').trim()) === 'Brandschutzbegehung';
       var maengelEl = istBegehung ? document.getElementById('sbMaengel_' + g.id) : null;
