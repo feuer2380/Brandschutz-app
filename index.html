@@ -4224,13 +4224,7 @@ function buildStandortDatalist(){
 }
 
 function buildTypChips(){
-  var alle = typListeAlle();
-  var html = '<div style="display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 10px 0;">';
-  alle.forEach(function(t){
-    html += '<button type="button" class="btn secondary small typChip" data-val="' + escapeHtml(t) + '" style="padding:6px 11px;">' + escapeHtml(t) + '</button>';
-  });
-  html += '</div>';
-  return html;
+  return '';
 }
 
 function parseAltesSystemText(text){
@@ -4328,6 +4322,8 @@ function bindKategorieToggle(kundeIdFuerReserve){
     if(blockPZ) blockPZ.style.display = istFuellKategorie(sel.value) ? '' : 'none';
     if(blockMaengel) blockMaengel.style.display = istBegehung ? '' : 'none';
     if(blockSeriennr) blockSeriennr.style.display = istBegehung ? 'none' : '';
+    var typChipsBlock = document.getElementById('typChipsBlock');
+    if(typChipsBlock) typChipsBlock.style.display = 'none';
     if(typLabel) typLabel.textContent = istBegehung ? 'Begehung (Datum/Beschreibung)' : 'Typ';
     if(typInput) typInput.placeholder = istBegehung ? 'z.B. Begehung Herbst 2026' : 'z.B. Pulverlöscher 6kg';
     if(intervallSel && !intervallSel.getAttribute('data-manuell')){
