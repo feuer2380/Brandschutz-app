@@ -3953,6 +3953,10 @@ function modalGeraetBearbeiten(geraetId){
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
     g.externeId = neueExterneId;
     g.standort = document.getElementById('fStandort').value.trim();
+    if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) && g.fuellungen && g.fuellungen.length > 0){
+      var neuesterEintrag = g.fuellungen.reduce(function(a, b){ return new Date(b.datum) > new Date(a.datum) ? b : a; });
+      neuesterEintrag.standort = g.standort;
+    }
     var letztePruefungVal = document.getElementById('fLetztePruefung').value;
     g.letztePruefung = letztePruefungVal || null;
     g.naechstePruefung = datum || null;
