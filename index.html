@@ -4893,10 +4893,34 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     });
   });
 
+  var standortListeRoh = [];
+  fuellzeilen.forEach(function(z){
+    var s = z.standort || 'Ohne Standort';
+    if(standortListeRoh.indexOf(s) === -1) standortListeRoh.push(s);
+  });
+  standortListeRoh.sort(function(a, b){ return a.length - b.length; });
+  var standortKanonisch = {};
+  var kanonischeNamenGesehen = [];
+  standortListeRoh.forEach(function(s){
+    if(standortKanonisch[s]) return;
+    var passendesKanon = null;
+    for(var i = 0; i < kanonischeNamenGesehen.length; i++){
+      var k = kanonischeNamenGesehen[i];
+      if(s.toLowerCase().indexOf(k.toLowerCase() + ' ') === 0){ passendesKanon = k; break; }
+    }
+    if(passendesKanon){
+      standortKanonisch[s] = passendesKanon;
+    } else {
+      standortKanonisch[s] = s;
+      kanonischeNamenGesehen.push(s);
+    }
+  });
+
   var gruppen = {};
   var reihenfolge = [];
   fuellzeilen.forEach(function(z){
-    var standort = z.standort || 'Ohne Standort';
+    var standortRoh = z.standort || 'Ohne Standort';
+    var standort = standortKanonisch[standortRoh] || standortRoh;
     if(!gruppen[standort]){ gruppen[standort] = []; reihenfolge.push(standort); }
     gruppen[standort].push(z);
   });
