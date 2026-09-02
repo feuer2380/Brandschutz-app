@@ -1721,6 +1721,16 @@ function nurTerminVerschieben(geraetId, neuesDatum){
   });
 }
 
+function nurAbfuelldatumAktualisieren(geraetId, neuesDatum){
+  if(!neuesDatum){ toast('Bitte zuerst ein Datum wählen'); return; }
+  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  if(!g) return;
+  g.abfuelldatum = neuesDatum;
+  dbPut('geraete', g, function(){
+    loadAll(function(){ render(); toast('Abfülldatum aktualisiert: ' + fmtDate(neuesDatum) + ' (kein Anschluss erfasst)'); });
+  });
+}
+
 function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
   var vorherige = letzteErledigungInnerhalb24h(geraetId);
   if(vorherige){
@@ -2144,6 +2154,9 @@ function renderKundeDetail(kundeId){
         html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
         html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
         html += '</div>';
+        if(istKegAnschluss){
+          html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px;" data-nurAbfuellBtn="' + g.id + '">Nur Abfülldatum aktualisieren (kein Anschluss)</button>';
+        }
         }
       }
       html += '</div>';
@@ -4862,9 +4875,13 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   // Flache Liste einzelner Füllungen bauen, gruppiert nach dem Standort zum Zeitpunkt der Füllung
   var fuellzeilen = [];
   eintraege.forEach(function(e){
+    var aufsteigend = (e.g.fuellungen || []).slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
     (e.g.fuellungen || []).forEach(function(f){
       var info = fuellungLesen(f, e.g.kategorie, e.g.standort);
-      fuellzeilen.push({ g: e.g, k: e.k, datum: f.datum, menge: info.menge, einheit: info.einheit, standort: info.standort });
+      var pos = aufsteigend.indexOf(f);
+      var naechste = aufsteigend[pos + 1];
+      var tageAmAnschluss = naechste ? Math.round((new Date(naechste.datum) - new Date(f.datum)) / 86400000) : Math.round((new Date() - new Date(f.datum)) / 86400000);
+      fuellzeilen.push({ g: e.g, k: e.k, datum: f.datum, menge: info.menge, einheit: info.einheit, standort: info.standort, abfuelldatum: f.abfuelldatum || null, tageAmAnschluss: tageAmAnschluss, istAktuell: !naechste });
     });
   });
 
@@ -4940,9 +4957,9 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     html += '<div class="pb-fuellgruppe">';
     html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(standort) + '</h3>';
     html += '<div class="meta2" style="margin-bottom:6px;">' + anzahlFlaschen(zeilen) + ' Flasche' + (anzahlFlaschen(zeilen) === 1 ? '' : 'n') + ' &middot; ' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(summenStandort) + '</div>';
-    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th><th>Datum/Uhrzeit</th><th>Menge</th></tr></thead><tbody>';
+    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th><th>Abgefüllt</th><th>Angeschlossen</th><th>Menge</th><th>Tage am Anschluss</th></tr></thead><tbody>';
     zeilen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); }).forEach(function(z){
-      html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.standort || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td></tr>';
+      html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.standort || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + (z.abfuelldatum ? fmtDatumZeitLokal(z.abfuelldatum) : '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td><td>' + z.tageAmAnschluss + ' Tag' + (z.tageAmAnschluss === 1 ? '' : 'e') + (z.istAktuell ? ' (aktuell)' : '') + '</td></tr>';
     });
     html += '</tbody></table>';
     html += '</div>';
@@ -4987,10 +5004,15 @@ function buildFuellhistorieEinzelDruckHtml(g, fuellungen){
     html += '<div>Gesamtmenge: ' + gesamtMenge.toLocaleString('de-AT') + ' ' + einheitGeraet + (hatUnbekannt ? ' (unvollständig)' : '') + '</div>';
     html += '</div>';
 
-    html += '<table class="pb-tabelle"><thead><tr><th>Datum/Uhrzeit</th><th>Menge</th><th>Ort</th></tr></thead><tbody>';
+    html += '<table class="pb-tabelle"><thead><tr><th>Abgefüllt</th><th>Angeschlossen</th><th>Menge</th><th>Ort</th><th>Tage am Anschluss</th></tr></thead><tbody>';
+    var fuellungenAufsteigendDruck = fuellungen.slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
     fuellungen.forEach(function(f){
       var infoZeile = fuellungLesen(f, g.kategorie, g.standort);
-      html += '<tr><td>' + fmtDatumZeitLokal(f.datum) + '</td><td>' + (typeof infoZeile.menge === 'number' ? (infoZeile.menge.toLocaleString('de-AT') + ' ' + infoZeile.einheit) : '-') + '</td><td>' + escapeHtml(infoZeile.standort || '-') + '</td></tr>';
+      var posAufsteigend = fuellungenAufsteigendDruck.indexOf(f);
+      var naechste = fuellungenAufsteigendDruck[posAufsteigend + 1];
+      var tageAmAnschluss = naechste ? Math.round((new Date(naechste.datum) - new Date(f.datum)) / 86400000) : Math.round((new Date() - new Date(f.datum)) / 86400000);
+      var tageAmAnschlussText = tageAmAnschluss + ' Tag' + (tageAmAnschluss === 1 ? '' : 'e') + (naechste ? '' : ' (aktuell)');
+      html += '<tr><td>' + (f.abfuelldatum ? fmtDatumZeitLokal(f.abfuelldatum) : '-') + '</td><td>' + fmtDatumZeitLokal(f.datum) + '</td><td>' + (typeof infoZeile.menge === 'number' ? (infoZeile.menge.toLocaleString('de-AT') + ' ' + infoZeile.einheit) : '-') + '</td><td>' + escapeHtml(infoZeile.standort || '-') + '</td><td>' + tageAmAnschlussText + '</td></tr>';
     });
     html += '</tbody></table>';
   }
@@ -5029,10 +5051,17 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
     html += '</div>';
 
     html += '<div class="section-title" style="margin-top:16px;">Einzelne Füllungen</div>';
+    var fuellungenAufsteigend = fuellungen.slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
     fuellungen.forEach(function(f, idx){
       var infoZeile = fuellungLesen(f, g.kategorie, g.standort);
+      var posAufsteigend = fuellungenAufsteigend.indexOf(f);
+      var naechste = fuellungenAufsteigend[posAufsteigend + 1];
+      var tageAmAnschluss = naechste ? Math.round((new Date(naechste.datum) - new Date(f.datum)) / 86400000) : Math.round((new Date() - new Date(f.datum)) / 86400000);
+      var tageAbfuellenBisAnschluss = f.abfuelldatum ? Math.round((new Date(f.datum) - new Date(f.abfuelldatum)) / 86400000) : null;
       html += '<div class="card" style="padding:10px 12px;">';
       html += '<div class="row"><span class="meta">' + fmtDatumZeitLokal(f.datum) + '</span><span class="meta">' + (typeof infoZeile.menge === 'number' ? (infoZeile.menge.toLocaleString('de-AT') + ' ' + infoZeile.einheit) : '-') + '</span></div>';
+      if(f.abfuelldatum) html += '<div class="meta">Abgefüllt: ' + fmtDatumZeitLokal(f.abfuelldatum) + (tageAbfuellenBisAnschluss !== null && tageAbfuellenBisAnschluss >= 0 ? ' (' + tageAbfuellenBisAnschluss + ' Tag' + (tageAbfuellenBisAnschluss === 1 ? '' : 'e') + ' bis Anschluss)' : '') + '</div>';
+      html += '<div class="meta">' + (naechste ? 'War ' + tageAmAnschluss + ' Tag' + (tageAmAnschluss === 1 ? '' : 'e') + ' am Anschluss (bis zum nächsten Wechsel)' : 'Seit ' + tageAmAnschluss + ' Tag' + (tageAmAnschluss === 1 ? '' : 'e') + ' am Anschluss (aktuell)') + '</div>';
       html += '<label style="margin-top:6px; font-size:12px;">Ort dieser Füllung</label>';
       html += '<input type="text" id="fuellOrt_' + idx + '" value="' + escapeHtml(infoZeile.standort || '') + '" placeholder="z.B. Weinfest Mödling">';
       html += '<div style="display:flex; gap:8px; margin-top:6px;">';
@@ -6302,6 +6331,14 @@ function bindDynamic(){
       var gid = el.getAttribute('data-gid');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
       nurTerminVerschieben(gid, datumInput ? datumInput.value : null);
+    };
+  });
+
+  document.querySelectorAll('[data-nurAbfuellBtn]').forEach(function(el){
+    el.onclick = function(){
+      var gid = el.getAttribute('data-nurAbfuellBtn');
+      var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
+      nurAbfuelldatumAktualisieren(gid, datumInput ? datumInput.value : null);
     };
   });
 
