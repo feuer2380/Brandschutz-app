@@ -4953,6 +4953,53 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   return html;
 }
 
+function buildFuellhistorieEinzelDruckHtml(g, fuellungen){
+  var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+  var einheitGeraet = (g.kategorie === 'CO2-Flaschen') ? 'g' : 'Liter';
+  var gesamtMenge = 0;
+  var hatUnbekannt = false;
+  fuellungen.forEach(function(f){
+    var info = fuellungLesen(f, g.kategorie, g.standort);
+    if(typeof info.menge === 'number' && !isNaN(info.menge)) gesamtMenge += info.menge; else hatUnbekannt = true;
+  });
+
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Füllhistorie</h1><div class="sub">' + escapeHtml(g.typ || '') + (g.standort ? (' &middot; ' + escapeHtml(g.standort)) : '') + '</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+
+  html += '<div class="pb-kundenbox">';
+  html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  html += '<div style="font-weight:700;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</div>';
+  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
+  html += '</div>';
+
+  if(fuellungen.length === 0){
+    html += '<div class="empty">Noch keine Füllungen erfasst</div>';
+  } else {
+    var ersteDatum = fuellungen[fuellungen.length - 1].datum;
+    var letzteDatum = fuellungen[0].datum;
+    html += '<div class="pb-kundenbox">';
+    html += '<div>' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + ' &middot; Zeitraum: ' + fmtDatumZeitLokal(ersteDatum) + ' bis ' + fmtDatumZeitLokal(letzteDatum) + '</div>';
+    html += '<div>Gesamtmenge: ' + gesamtMenge.toLocaleString('de-AT') + ' ' + einheitGeraet + (hatUnbekannt ? ' (unvollständig)' : '') + '</div>';
+    html += '</div>';
+
+    html += '<table class="pb-tabelle"><thead><tr><th>Datum/Uhrzeit</th><th>Menge</th><th>Ort</th></tr></thead><tbody>';
+    fuellungen.forEach(function(f){
+      var infoZeile = fuellungLesen(f, g.kategorie, g.standort);
+      html += '<tr><td>' + fmtDatumZeitLokal(f.datum) + '</td><td>' + (typeof infoZeile.menge === 'number' ? (infoZeile.menge.toLocaleString('de-AT') + ' ' + infoZeile.einheit) : '-') + '</td><td>' + escapeHtml(infoZeile.standort || '-') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
+  html += '</div>';
+  return html;
+}
+
 function modalFuellhistorie(geraetId, zurueckKundeId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
@@ -4994,11 +5041,18 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
       html += '</div>';
       html += '</div>';
     });
+    html += '<button type="button" class="btn block secondary" id="fuellhistorieDruckBtn" style="margin-top:14px;">Füllhistorie drucken / als PDF teilen</button>';
   }
 
   openModal(html);
   document.getElementById('mClose').onclick = function(){
     if(zurueckKundeId) modalFuellhistorieListe(zurueckKundeId); else modalGeraetBearbeiten(geraetId);
+  };
+  var fuellhistorieDruckBtn = document.getElementById('fuellhistorieDruckBtn');
+  if(fuellhistorieDruckBtn) fuellhistorieDruckBtn.onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildFuellhistorieEinzelDruckHtml(g, fuellungen);
+    setTimeout(function(){ window.print(); }, 120);
   };
   document.querySelectorAll('[data-fuellungloeschen]').forEach(function(b){
     b.onclick = function(){
