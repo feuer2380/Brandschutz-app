@@ -1738,7 +1738,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
   var pruefDatumKurz = datumOverride || new Date().toISOString().substring(0,10);
   var istRueckwirkend = pruefDatumKurz !== new Date().toISOString().substring(0,10);
   var jetztIso = pruefDatumKurz + 'T' + (istRueckwirkend ? '12:00:00' : new Date().toISOString().substring(11));
-  var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
+  var ergebnisLabel = ergebnis === 'in_ordnung' ? (istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) ? 'Angeschlossen' : 'In Ordnung') : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
   var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
   if(!offenePruefung){
     offenePruefung = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: jetztIso.substring(0,10), erledigt: false };
@@ -1828,7 +1828,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
   var sigTechnikerCanvas = document.getElementById('checkSigTechniker');
   var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
   var jetztIso = new Date().toISOString();
-  var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
+  var ergebnisLabel = ergebnis === 'in_ordnung' ? (istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) ? 'Angeschlossen' : 'In Ordnung') : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
   if(ergebnis === 'begehung' && g.begehungStart){
     var startZeit = fmtZeit(g.begehungStart) + ' Uhr';
     var endZeit = fmtZeit(jetztIso) + ' Uhr';
@@ -4530,6 +4530,7 @@ function initSigPad(canvasId){
 function modalErledigt(pruefungId){
   var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
   var k = kundeFuerPruefung(p);
+  var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] || {};
   var html = '';
   html += '<div class="modal-head"><h3>Prüfung abschließen</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + (k ? escapeHtml(k.name) : '') + ' &middot; ' + escapeHtml(p.typ || '') + '</div>';
@@ -4558,7 +4559,7 @@ function modalErledigt(pruefungId){
 
   function abschliessenMit(ergebnis){
     var jetztIso = new Date().toISOString();
-    var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
+    var ergebnisLabel = ergebnis === 'in_ordnung' ? (istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) ? 'Angeschlossen' : 'In Ordnung') : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
     p.erledigt = true;
     p.erledigtAm = jetztIso;
     p.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
@@ -5573,7 +5574,7 @@ function modalSammelbericht(kundeId){
       } else {
         ergebnis = auswahl[g.id] || 'in_ordnung';
       }
-      var ergebnisLabel = ergebnis === 'in_ordnung' ? 'In Ordnung' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
+      var ergebnisLabel = ergebnis === 'in_ordnung' ? (istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) ? 'Angeschlossen' : 'In Ordnung') : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
       var notiz = (document.getElementById('sbNotiz_' + g.id).value || '').trim();
 
       var pruefdatumElVorab = document.getElementById('sbPruefdatum_' + g.id);
