@@ -2151,7 +2151,15 @@ function renderKundeDetail(kundeId){
         var bereitsHeute = letzteErledigungInnerhalb24h(g.id);
         html += '<div style="margin-top:8px;">';
         if(bereitsHeute){
-          html += '<div class="meta" style="color:var(--ok); font-weight:600;">&#10003; Heute bereits ' + (istKegAnschluss ? 'angeschlossen' : 'geprüft') + ' um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr (' + escapeHtml(bereitsHeute.ergebnis || '') + ')</div>';
+          var bereitsHeuteDatum = new Date(bereitsHeute.erledigtAm);
+          var heuteMitternacht = new Date(); heuteMitternacht.setHours(0,0,0,0);
+          var jenerTagMitternacht = new Date(bereitsHeuteDatum); jenerTagMitternacht.setHours(0,0,0,0);
+          var tageDiff = Math.round((heuteMitternacht - jenerTagMitternacht) / 86400000);
+          var zeitpunktText;
+          if(tageDiff <= 0) zeitpunktText = 'heute um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr';
+          else if(tageDiff === 1) zeitpunktText = 'gestern um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr';
+          else zeitpunktText = 'vor ' + tageDiff + ' Tagen um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr';
+          html += '<div class="meta" style="color:var(--ok); font-weight:600;">&#10003; Bereits ' + (istKegAnschluss ? 'angeschlossen' : 'geprüft') + ' ' + zeitpunktText + ' (' + escapeHtml(bereitsHeute.ergebnis || '') + ')</div>';
         }
         html += '<div style="display:flex; align-items:center; gap:6px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">' + (istKegAnschluss ? 'Datum des Anschlusses' : 'Datum der Prüfung') + '</label>';
