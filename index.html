@@ -3841,7 +3841,7 @@ function modalQrGeraet(geraetId){
         correctLevel: QRCode.CorrectLevel.M
       });
     } catch(e){}
-    setTimeout(function(){ window.print(); }, 150);
+    window.print();
   };
   try{
     new QRCode(document.getElementById('qrTarget'), {
