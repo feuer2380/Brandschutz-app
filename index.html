@@ -3065,7 +3065,7 @@ function renderStatistik(){
         if(summeText.length) html += '<div class="meta">Gesamtmenge: ' + summeText.join(' &middot; ') + '</div>';
         zeilen.forEach(function(z){
           var info = fuellungLesen(z.fuellung, z.geraet.kategorie, z.geraet.standort);
-          html += '<div class="meta">' + fmtDate(z.fuellung.datum) + ' &middot; ' + escapeHtml(z.geraet.kategorie || '') + ' &middot; ' + escapeHtml(z.geraet.typ || 'Flasche') + (info.standort ? ' &middot; ' + escapeHtml(info.standort) : '') + (info.menge != null ? ' &middot; ' + info.menge + ' ' + info.einheit : '') + '</div>';
+          html += '<div class="meta">' + fmtDate(z.fuellung.datum) + ' &middot; Flasche Nr. ' + geraeteNummerWert(z.geraet) + ' &middot; ' + escapeHtml(z.geraet.kategorie || '') + ' &middot; ' + escapeHtml(z.geraet.typ || 'Flasche') + (info.standort ? ' &middot; ' + escapeHtml(info.standort) : '') + (info.menge != null ? ' &middot; ' + info.menge + ' ' + info.einheit : '') + '</div>';
         });
         html += '</div>';
       });
