@@ -4085,7 +4085,15 @@ function modalGeraetBearbeiten(geraetId){
     g.naechstePruefung = datum || null;
     var fAbfuelldatumEl = document.getElementById('fAbfuelldatum');
     var fZusatzdatenEl = document.getElementById('fZusatzdaten');
+    var altesAbfuelldatumVorSpeichern = g.abfuelldatum;
     g.abfuelldatum = fAbfuelldatumEl ? (fAbfuelldatumEl.value || null) : g.abfuelldatum;
+    var abfuelldatumGeaendert = fAbfuelldatumEl && g.abfuelldatum && g.abfuelldatum !== altesAbfuelldatumVorSpeichern;
+    if(abfuelldatumGeaendert && istFuellKategorie((g.kategorie || '').trim())){
+      if(!g.fuellungen) g.fuellungen = [];
+      g.letzterAnschluss = g.abfuelldatum + 'T12:00:00';
+      var mengeInfoBearb = mengeAusTyp(g.typ, g.kategorie);
+      g.fuellungen.push({ datum: g.abfuelldatum + 'T12:00:00', menge: mengeInfoBearb.wert, einheit: mengeInfoBearb.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
+    }
     g.zusatzdaten = fZusatzdatenEl ? fZusatzdatenEl.value.trim() : g.zusatzdaten;
     var fMaengelEl = document.getElementById('fMaengel');
     g.maengel = fMaengelEl ? fMaengelEl.value.trim() : g.maengel;
