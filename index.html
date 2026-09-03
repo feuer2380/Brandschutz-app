@@ -1767,24 +1767,28 @@ function korrigiereZuAbfuellung(geraetId, pruefungId){
   customConfirm('Alle heutigen "Angeschlossen"-Einträge für dieses Gerät werden rückgängig gemacht, der Anschluss-Termin wird auf den ursprünglichen Stand zurückgesetzt, und (falls noch nicht geschehen) wird stattdessen eine Abfüllung erfasst. Fortfahren?', function(){
     try {
       var grenze = new Date(); grenze.setHours(grenze.getHours() - 24);
-      var heutigeErledigte = state.pruefungen.filter(function(x){
-        return x.geraetId === geraetId && x.erledigt === true && x.erledigtAm && new Date(x.erledigtAm) >= grenze && x.ergebnis === 'Angeschlossen';
+      var alleFuerGeraet = state.pruefungen.filter(function(x){ return x.geraetId === geraetId; });
+      var heutigeErledigte = alleFuerGeraet.filter(function(x){
+        return x.erledigt === true && x.erledigtAm && new Date(x.erledigtAm) >= grenze && x.ergebnis === 'Angeschlossen';
       });
-      var alleOffenen = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && x.erledigt !== true; });
+      var alleOffenen = alleFuerGeraet.filter(function(x){ return x.erledigt !== true; });
       var frueheresDatum = null;
       heutigeErledigte.concat(alleOffenen).forEach(function(x){
         if(x.datum && (!frueheresDatum || x.datum < frueheresDatum)) frueheresDatum = x.datum;
       });
       var zuLoeschen = heutigeErledigte.concat(alleOffenen);
+      var debugInfo = 'Gefunden insgesamt für dieses Gerät: ' + alleFuerGeraet.length + '<br>Davon heute "Angeschlossen" (erledigt): ' + heutigeErledigte.length + '<br>Davon offen (unerledigt): ' + alleOffenen.length;
       if(zuLoeschen.length === 0){
-        toast('Kein heutiger Anschluss-Eintrag mehr gefunden - eventuell schon korrigiert?');
+        zeigeDebugErgebnis('Nichts zu tun gefunden', debugInfo + '<br><br>Es wurde nichts gelöscht.');
         return;
       }
       var heutigeIds = heutigeErledigte.map(function(x){ return x.id; });
+      var geloeschteIds = [];
       var idxL = 0;
       var naechstesLoeschen = function(){
         if(idxL >= zuLoeschen.length){ weiterMachen(); return; }
-        dbDelete('pruefungen', zuLoeschen[idxL].id, function(){ idxL++; naechstesLoeschen(); });
+        var zielId = zuLoeschen[idxL].id;
+        dbDelete('pruefungen', zielId, function(){ geloeschteIds.push(zielId); idxL++; naechstesLoeschen(); });
       };
       var weiterMachen = function(){
         var neueOffenePruefung = { id: uid(), kundeId: g.kundeId || null, geraetId: g.id, typ: g.typ || '', datum: frueheresDatum || new Date().toISOString().substring(0,10), erledigt: false };
@@ -1805,16 +1809,31 @@ function korrigiereZuAbfuellung(geraetId, pruefungId){
             g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: (mengeInfoKorr.wert === undefined ? null : mengeInfoKorr.wert), einheit: mengeInfoKorr.einheit || '', standort: g.standort || '', abfuelldatum: heuteKurz });
           }
           dbPut('geraete', g, function(){
-            loadAll(function(){ render(); toast('Korrigiert: Anschluss-Termin zurückgesetzt auf ' + fmtDate(neueOffenePruefung.datum)); });
+            loadAll(function(){
+              var nachher = state.pruefungen.filter(function(x){ return x.geraetId === geraetId; });
+              var nachherHeute = nachher.filter(function(x){ return x.erledigt === true && x.erledigtAm && new Date(x.erledigtAm) >= grenze; });
+              var kontrollText = debugInfo + '<br><br>Gelöscht: ' + geloeschteIds.length + '<br>Neuer offener Termin: ' + fmtDate(neueOffenePruefung.datum) + '<br><br><b>Nach dem Neuladen aus der Datenbank:</b><br>Einträge für dieses Gerät insgesamt: ' + nachher.length + '<br>Davon heute erledigt (egal welches Ergebnis): ' + nachherHeute.length + (nachherHeute.length ? '<br>Ergebnis(se): ' + nachherHeute.map(function(x){return x.ergebnis;}).join(', ') : '');
+              render();
+              zeigeDebugErgebnis('Korrektur durchgeführt', kontrollText);
+            });
           });
         });
       };
       naechstesLoeschen();
     } catch(err){
       console.error('Korrektur-Fehler', err);
-      toast('Fehler bei der Korrektur: ' + (err && err.message ? err.message : err));
+      zeigeDebugErgebnis('Fehler', 'Fehler bei der Korrektur:<br>' + (err && err.message ? err.message : err) + (err && err.stack ? '<br><br>' + escapeHtml(err.stack) : ''));
     }
   });
+}
+
+function zeigeDebugErgebnis(titel, textHtml){
+  var html = '';
+  html += '<div class="modal-head"><h3>' + escapeHtml(titel) + '</h3></div>';
+  html += '<div style="font-size:13px; line-height:1.5; margin-bottom:16px;">' + textHtml + '</div>';
+  html += '<button class="btn block" id="debugOkBtn">OK</button>';
+  openModal(html);
+  document.getElementById('debugOkBtn').onclick = closeModal;
 }
 
 function nurAbfuelldatumAktualisieren(geraetId, neuesDatum){
