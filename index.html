@@ -776,6 +776,16 @@ function renderDashboard(){
   html += '</div>';
   html += '<button class="btn block secondary" id="baldFaelligDruckBtn" style="margin-top:12px;">Bald fällig drucken (für unterwegs)</button>';
 
+  var lagerNiedrig = state.lagerartikel.filter(function(a){ return (a.mindestbestand != null) && (a.bestand <= a.mindestbestand); });
+  if(lagerNiedrig.length > 0){
+    html += '<div class="section-title" style="margin-top:16px; color:#c23f12;">&#9888; Lager niedrig (' + lagerNiedrig.length + ')</div>';
+    html += '<div class="card" style="border-left:4px solid #c23f12;">';
+    lagerNiedrig.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); }).forEach(function(a, idx){
+      html += '<div class="row" style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : '') + '"><span class="meta" style="font-size:14px; color:var(--ink);">' + escapeHtml(a.name) + '</span><span class="badge warn">' + a.bestand + ' ' + escapeHtml(a.einheit || 'Stk') + ' (Min. ' + a.mindestbestand + ')</span></div>';
+    });
+    html += '</div>';
+  }
+
   html += '<div class="section-title">Diesen Monat zu prüfen (' + monatNamen[jetzt.getMonth()] + ')</div>';
   if(diesenMonat.length === 0){
     html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
@@ -2825,7 +2835,8 @@ function renderStatistik(){
     {key:'pruefungen', label:'Prüfungen'},
     {key:'bestand', label:'Gerätebestand'},
     {key:'portal', label:'Kundenportal'},
-    {key:'fuellungen', label:'Füllungen'}
+    {key:'fuellungen', label:'Füllungen'},
+    {key:'lager', label:'Lager'}
   ];
   html += '<div class="filter-bar" style="margin-bottom:14px;">';
   subTabs.forEach(function(t){
@@ -3149,6 +3160,29 @@ function renderStatistik(){
       if(zugriffe.length > 50){
         html += '<div class="meta" style="text-align:center;">... und ' + (zugriffe.length - 50) + ' weitere</div>';
       }
+    }
+  }
+
+  if(subTab === 'lager'){
+    var lagerListe = state.lagerartikel.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+    var niedrigListe = lagerListe.filter(function(a){ return (a.mindestbestand != null) && (a.bestand <= a.mindestbestand); });
+    html += '<div class="statrow">';
+    html += '<div class="stat"><div class="n">' + lagerListe.length + '</div><div class="l">Artikel</div></div>';
+    html += '<div class="stat"><div class="n" style="color:' + (niedrigListe.length ? 'var(--warn)' : 'var(--ok)') + '">' + niedrigListe.length + '</div><div class="l">Niedriger Bestand</div></div>';
+    html += '</div>';
+    html += '<button class="btn block secondary no-print" id="lagerstandStatDruckBtn" style="margin-top:12px;">Lagerstand drucken</button>';
+    html += '<div class="section-title" style="margin-top:16px;">Aktueller Lagerstand</div>';
+    if(lagerListe.length === 0){
+      html += '<div class="empty">Noch keine Lagerartikel angelegt</div>';
+    } else {
+      html += '<div class="card">';
+      lagerListe.forEach(function(a, idx){
+        var niedrig = (a.mindestbestand != null) && (a.bestand <= a.mindestbestand);
+        html += '<div style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : '') + '">';
+        html += '<div class="row"><span class="meta" style="font-size:14px; color:var(--ink);">' + escapeHtml(a.name) + '</span><span class="badge ' + (niedrig ? 'warn' : 'ok') + '">' + a.bestand + ' ' + escapeHtml(a.einheit || 'Stk') + (a.mindestbestand != null ? ' (Min. ' + a.mindestbestand + ')' : '') + '</span></div>';
+        html += '</div>';
+      });
+      html += '</div>';
     }
   }
 
@@ -6283,6 +6317,12 @@ function bindDynamic(){
   });
   var lagerstandDruckenBtn = document.getElementById('lagerstandDruckenBtn');
   if(lagerstandDruckenBtn) lagerstandDruckenBtn.onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildLagerstandDruckHtml();
+    setTimeout(function(){ window.print(); }, 120);
+  };
+  var lagerstandStatDruckBtn = document.getElementById('lagerstandStatDruckBtn');
+  if(lagerstandStatDruckBtn) lagerstandStatDruckBtn.onclick = function(){
     var pa = document.getElementById('printArea');
     pa.innerHTML = buildLagerstandDruckHtml();
     setTimeout(function(){ window.print(); }, 120);
