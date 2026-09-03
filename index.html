@@ -1763,45 +1763,47 @@ function nurTerminVerschieben(geraetId, neuesDatum){
 
 function korrigiereZuAbfuellung(geraetId, pruefungId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
-  var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
-  if(!g || !p){ toast('Nicht gefunden'); return; }
-  customConfirm('Diese heutige Aktion wird stattdessen als "Abgefüllt" erfasst, und der Anschluss-Termin wird auf ' + fmtDate(p.datum) + ' zurückgesetzt. Fortfahren?', function(){
-    var neueOffene = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && !x.erledigt && x.id !== pruefungId; });
-    var weitereCompleted = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && x.erledigt && x.id !== pruefungId; });
-    weitereCompleted.sort(function(a,b){ return new Date(b.erledigtAm||b.datum) - new Date(a.erledigtAm||a.datum); });
-    var vorherigeErledigung = weitereCompleted.length ? weitereCompleted[0] : null;
-    var loescheNeueOffene = function(cb){
-      if(neueOffene.length === 0){ cb(); return; }
-      var verbleibend = neueOffene.length;
-      neueOffene.forEach(function(np){
-        dbDelete('pruefungen', np.id, function(){
-          verbleibend--;
-          if(verbleibend === 0) cb();
+  if(!g){ toast('Nicht gefunden'); return; }
+  customConfirm('Alle heutigen "Angeschlossen"-Einträge für dieses Gerät werden rückgängig gemacht, der Anschluss-Termin wird auf den ursprünglichen Stand zurückgesetzt, und (falls noch nicht geschehen) wird stattdessen eine Abfüllung erfasst. Fortfahren?', function(){
+    var grenze = new Date(); grenze.setHours(grenze.getHours() - 24);
+    var heutigeErledigte = state.pruefungen.filter(function(x){
+      return x.geraetId === geraetId && x.erledigt && x.erledigtAm && new Date(x.erledigtAm) >= grenze && x.ergebnis === 'Angeschlossen';
+    });
+    var alleOffenen = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && !x.erledigt; });
+    var frueheresDatum = null;
+    heutigeErledigte.concat(alleOffenen).forEach(function(x){
+      if(x.datum && (!frueheresDatum || x.datum < frueheresDatum)) frueheresDatum = x.datum;
+    });
+    var zuLoeschen = heutigeErledigte.concat(alleOffenen);
+    var idxL = 0;
+    var naechstesLoeschen = function(){
+      if(idxL >= zuLoeschen.length){ weiterMachen(); return; }
+      dbDelete('pruefungen', zuLoeschen[idxL].id, function(){ idxL++; naechstesLoeschen(); });
+    };
+    var weiterMachen = function(){
+      var neueOffenePruefung = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: frueheresDatum || new Date().toISOString().substring(0,10), erledigt: false };
+      var heutigeIds = heutigeErledigte.map(function(x){ return x.id; });
+      dbPut('pruefungen', neueOffenePruefung, function(){
+        var frueherErledigte = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && x.erledigt && heutigeIds.indexOf(x.id) === -1; });
+        frueherErledigte.sort(function(a,b){ return new Date(b.erledigtAm||b.datum) - new Date(a.erledigtAm||a.datum); });
+        var vorherigeErledigung = frueherErledigte.length ? frueherErledigte[0] : null;
+        g.naechstePruefung = neueOffenePruefung.datum;
+        g.letztePruefung = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || vorherigeErledigung.datum).substring(0,10) : null;
+        g.letzterAnschluss = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || null) : null;
+        var heuteKurz = new Date().toISOString().substring(0,10);
+        var hatHeutigeFuellung = (g.fuellungen || []).some(function(f){ return (f.datum || '').substring(0,10) === heuteKurz; });
+        if(!hatHeutigeFuellung){
+          g.abfuelldatum = heuteKurz;
+          if(!g.fuellungen) g.fuellungen = [];
+          var mengeInfoKorr = mengeAusTyp(g.typ, g.kategorie);
+          g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoKorr.wert, einheit: mengeInfoKorr.einheit, standort: g.standort || '', abfuelldatum: heuteKurz });
+        }
+        dbPut('geraete', g, function(){
+          loadAll(function(){ render(); toast('Korrigiert: Anschluss-Termin zurückgesetzt auf ' + fmtDate(neueOffenePruefung.datum)); });
         });
       });
     };
-    loescheNeueOffene(function(){
-      p.erledigt = false;
-      p.erledigtAm = null;
-      p.ergebnis = null;
-      p.bericht = false;
-      p.erledigtVon = null;
-      p.unterschriftKunde = null;
-      p.unterschriftTechniker = null;
-      p.bemerkung = null;
-      dbPut('pruefungen', p, function(){
-        g.naechstePruefung = p.datum;
-        g.letztePruefung = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || vorherigeErledigung.datum).substring(0,10) : null;
-        g.letzterAnschluss = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || null) : null;
-        g.abfuelldatum = new Date().toISOString().substring(0,10);
-        if(!g.fuellungen) g.fuellungen = [];
-        var mengeInfoKorr = mengeAusTyp(g.typ, g.kategorie);
-        g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoKorr.wert, einheit: mengeInfoKorr.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
-        dbPut('geraete', g, function(){
-          loadAll(function(){ render(); toast('Korrigiert: als Abfüllung erfasst, Anschluss-Termin zurückgesetzt auf ' + fmtDate(p.datum)); });
-        });
-      });
-    });
+    naechstesLoeschen();
   });
 }
 
