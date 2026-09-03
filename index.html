@@ -607,6 +607,14 @@ function daysUntil(iso){
   return Math.round((d - now) / 86400000);
 }
 
+function statusFuerAbfuellAlter(iso){
+  if(!iso) return {cls:'ok', label:'Kein Abfülldatum'};
+  var tage = -daysUntil(iso);
+  if(tage < 0) tage = 0;
+  var cls = tage <= 13 ? 'ok' : (tage <= 30 ? 'soon' : 'warn');
+  return {cls: cls, label: tage + ' Tage im Behälter'};
+}
+
 function statusForDate(iso){
   if(!iso) return {cls:'ok', label:'Kein Termin'};
   var du = daysUntil(iso);
@@ -2240,7 +2248,7 @@ function renderKundeDetail(kundeId){
       var katKey = (g.kategorie || 'Feuerlöscher').trim();
       katZaehler1[katKey] = (katZaehler1[katKey] || 0) + 1;
       var katNr = g.nr || katZaehler1[katKey];
-      var st = statusForDate(g.naechstePruefung);
+      var st = istFuellKategorie(katKey) ? statusFuerAbfuellAlter(g.abfuelldatum) : statusForDate(g.naechstePruefung);
       var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
