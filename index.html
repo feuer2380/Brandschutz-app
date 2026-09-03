@@ -607,7 +607,8 @@ function daysUntil(iso){
   return Math.round((d - now) / 86400000);
 }
 
-function statusFuerAbfuellAlter(iso){
+function statusFuerAbfuellAlter(iso, leer){
+  if(leer) return {cls:'warn', label:'Leer'};
   if(!iso) return {cls:'ok', label:'Kein Abfülldatum'};
   var tage = -daysUntil(iso);
   if(tage < 0) tage = 0;
@@ -1812,6 +1813,7 @@ function korrigiereZuAbfuellung(geraetId, pruefungId){
           var hatHeutigeFuellung = (g.fuellungen || []).some(function(f){ return (f.datum || '').substring(0,10) === heuteKurz; });
           if(!hatHeutigeFuellung){
             g.abfuelldatum = heuteKurz;
+            g.leer = false;
             if(!g.fuellungen) g.fuellungen = [];
             var mengeInfoKorr = mengeAusTyp(g.typ, g.kategorie);
             g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: (mengeInfoKorr.wert === undefined ? null : mengeInfoKorr.wert), einheit: mengeInfoKorr.einheit || '', standort: g.standort || '', abfuelldatum: heuteKurz });
@@ -1849,6 +1851,7 @@ function nurAbfuelldatumAktualisieren(geraetId, neuesDatum){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   g.abfuelldatum = neuesDatum;
+  g.leer = false;
   if(istFuellKategorie((g.kategorie || '').trim())){
     if(!g.fuellungen) g.fuellungen = [];
     var mengeInfoNur = mengeAusTyp(g.typ, g.kategorie);
@@ -1941,6 +1944,7 @@ function checkAbgefuellt(geraetId){
   if(standortEl) g.standort = standortEl.value.trim();
   var heuteKurz = new Date().toISOString().substring(0,10);
   g.abfuelldatum = heuteKurz;
+  g.leer = false;
   if(!g.fuellungen) g.fuellungen = [];
   var mengeInfoAbf = mengeAusTyp(g.typ, g.kategorie);
   g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoAbf.wert, einheit: mengeInfoAbf.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
@@ -2248,7 +2252,7 @@ function renderKundeDetail(kundeId){
       var katKey = (g.kategorie || 'Feuerlöscher').trim();
       katZaehler1[katKey] = (katZaehler1[katKey] || 0) + 1;
       var katNr = g.nr || katZaehler1[katKey];
-      var st = istFuellKategorie(katKey) ? statusFuerAbfuellAlter(g.abfuelldatum) : statusForDate(g.naechstePruefung);
+      var st = istFuellKategorie(katKey) ? statusFuerAbfuellAlter(g.abfuelldatum, g.leer) : statusForDate(g.naechstePruefung);
       var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
@@ -2316,6 +2320,7 @@ function renderKundeDetail(kundeId){
         html += '</div>';
         if(istKegAnschluss){
           html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px; background:#1d5fa8; color:#fff; border-color:#1d5fa8;" data-nurAbfuellBtn="' + g.id + '">&#128167; Abgefüllt (Wasser/CO2 neu befüllt)</button>';
+          html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px;' + (g.leer ? ' background:#c98a1c; color:#fff; border-color:#c98a1c;' : '') + '" data-leerToggleBtn="' + g.id + '">' + (g.leer ? '&#10003; Als leer markiert &ndash; wieder voll melden' : '&#128683; Behälter ist leer melden') + '</button>';
         }
         }
       }
@@ -4210,6 +4215,7 @@ function modalGeraetBearbeiten(geraetId){
     if(abfuelldatumGeaendert && istFuellKategorie((g.kategorie || '').trim())){
       if(!g.fuellungen) g.fuellungen = [];
       g.letzterAnschluss = g.abfuelldatum + 'T12:00:00';
+      g.leer = false;
       var mengeInfoBearb = mengeAusTyp(g.typ, g.kategorie);
       g.fuellungen.push({ datum: g.abfuelldatum + 'T12:00:00', menge: mengeInfoBearb.wert, einheit: mengeInfoBearb.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
     }
@@ -5932,6 +5938,7 @@ function modalSammelbericht(kundeId){
         var hh = jetzt.getHours(); if(hh<10) hh = '0'+hh;
         var mm = jetzt.getMinutes(); if(mm<10) mm = '0'+mm;
         g.abfuelldatum = abfuellVal + 'T' + hh + ':' + mm;
+        g.leer = false;
         var anschlussZeitpunkt3 = jetztLokalDatumZeit();
         g.letzterAnschluss = anschlussZeitpunkt3;
         if(!g.fuellungen) g.fuellungen = [];
@@ -6688,6 +6695,19 @@ function bindDynamic(){
       var gid = el.getAttribute('data-nurAbfuellBtn');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
       nurAbfuelldatumAktualisieren(gid, datumInput ? datumInput.value : null);
+    };
+  });
+
+  document.querySelectorAll('[data-leerToggleBtn]').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      var gid = el.getAttribute('data-leerToggleBtn');
+      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      if(!g) return;
+      g.leer = !g.leer;
+      dbPut('geraete', g, function(){
+        loadAll(function(){ render(); toast(g.leer ? 'Als leer markiert' : 'Wieder als voll markiert'); });
+      });
     };
   });
 
