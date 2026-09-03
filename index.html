@@ -3813,11 +3813,14 @@ function modalQrGeraet(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-  var qrText = KUNDEN_PORTAL_URL + '?id=' + encodeURIComponent(g.id);
+  var istKegAnschlussGeraet = istFuellKategorie((g.kategorie || 'Feuerlöscher').trim());
+  var qrText = istKegAnschlussGeraet ? g.id : (KUNDEN_PORTAL_URL + '?id=' + encodeURIComponent(g.id));
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code Gerät</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
-  if(!k || !k.freigabe){
+  if(istKegAnschlussGeraet){
+    html += '<div class="meta" style="margin-bottom:6px;">Dieser Code enthält nur die interne Geräte-ID (keine Internetadresse) – außerhalb der App ist er nicht auslesbar/anklickbar.</div>';
+  } else if(!k || !k.freigabe){
     html += '<div class="meta" style="color:#c23f12; margin-bottom:6px;">Hinweis: Kundenportal für diesen Kunden ist noch nicht freigegeben. Der Code funktioniert erst, wenn im Kundendatensatz "Kundenportal freigegeben" aktiviert ist. Innerhalb der App könnt ihr diesen Code trotzdem wie gewohnt scannen.</div>';
   } else if(!k.zugangscode){
     html += '<div class="meta" style="color:#c23f12; margin-bottom:6px;">Hinweis: Für diesen Kunden ist noch kein Zugangscode erzeugt. Kundendatensatz einmal speichern, damit automatisch einer erstellt wird.</div>';
