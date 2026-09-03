@@ -143,6 +143,17 @@ if('serviceWorker' in navigator){
   }
   .device-item:last-child{border-bottom:none;}
   .qr-box{background:#fff; padding:14px; border-radius:8px; display:flex; justify-content:center; margin:18px 0 10px 0;}
+  .qr-etikett{display:none;}
+  @media print{
+    .qr-etikett{
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      width:40mm; height:30mm; padding:1mm; box-sizing:border-box; background:#fff; font-family:Arial, sans-serif;
+      page-break-inside:avoid;
+    }
+    .qr-etikett-firma{font-size:7px; line-height:1.1; font-weight:700; text-align:center; margin-bottom:0.8mm; color:#000;}
+    .qr-etikett img, .qr-etikett canvas, .qr-etikett table{ width:22mm !important; height:22mm !important; }
+    @page{ size:40mm 30mm; margin:0; }
+  }
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center;}
@@ -1187,7 +1198,7 @@ function modalQrLagerartikel(artikelId){
       height: 500,
       correctLevel: QRCode.CorrectLevel.M
     });
-    qrMitRand('qrTarget');
+    // kein zus00e4tzlicher wei00dfer Rand mehr, wie beim alten System
   } catch(e){
     document.getElementById('qrTarget').innerHTML = '<div class="meta">QR-Code konnte nicht geladen werden (offline)</div>';
   }
@@ -3816,8 +3827,22 @@ function modalQrGeraet(geraetId){
   html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Weißen Rand beim Zuschneiden nicht wegschneiden.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
   html += '<div class="meta" style="margin-top:8px; font-family:monospace; word-break:break-all; user-select:text;">Code: ' + escapeHtml(qrText) + '</div>';
+  html += '<button type="button" class="btn block" id="qrEtikettDruckBtn" style="margin-top:14px;">Als Etikett drucken</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('qrEtikettDruckBtn').onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = '<div class="qr-etikett"><div class="qr-etikett-firma">Brandschutztechnik Janiba GmbH</div><div id="qrEtikettZiel"></div></div>';
+    try {
+      new QRCode(document.getElementById('qrEtikettZiel'), {
+        text: qrText,
+        width: 280,
+        height: 280,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(e){}
+    setTimeout(function(){ window.print(); }, 150);
+  };
   try{
     new QRCode(document.getElementById('qrTarget'), {
       text: qrText,
@@ -3825,7 +3850,7 @@ function modalQrGeraet(geraetId){
       height: 500,
       correctLevel: QRCode.CorrectLevel.M
     });
-    qrMitRand('qrTarget');
+    // kein zus00e4tzlicher wei00dfer Rand mehr, wie beim alten System
   } catch(e){
     document.getElementById('qrTarget').innerHTML = '<div class="meta">QR-Code konnte nicht geladen werden (offline)</div>';
   }
@@ -5993,7 +6018,7 @@ function modalQrKunde(kundeId){
       height: 500,
       correctLevel: QRCode.CorrectLevel.M
     });
-    qrMitRand('qrTarget');
+    // kein zus00e4tzlicher wei00dfer Rand mehr, wie beim alten System
   } catch(e){
     document.getElementById('qrTarget').innerHTML = '<div class="meta">QR-Code konnte nicht geladen werden (offline)</div>';
   }
