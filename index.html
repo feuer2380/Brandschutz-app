@@ -1761,6 +1761,50 @@ function nurTerminVerschieben(geraetId, neuesDatum){
   });
 }
 
+function korrigiereZuAbfuellung(geraetId, pruefungId){
+  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
+  if(!g || !p){ toast('Nicht gefunden'); return; }
+  customConfirm('Diese heutige Aktion wird stattdessen als "Abgefüllt" erfasst, und der Anschluss-Termin wird auf ' + fmtDate(p.datum) + ' zurückgesetzt. Fortfahren?', function(){
+    var neueOffene = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && !x.erledigt && x.id !== pruefungId; });
+    var weitereCompleted = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && x.erledigt && x.id !== pruefungId; });
+    weitereCompleted.sort(function(a,b){ return new Date(b.erledigtAm||b.datum) - new Date(a.erledigtAm||a.datum); });
+    var vorherigeErledigung = weitereCompleted.length ? weitereCompleted[0] : null;
+    var loescheNeueOffene = function(cb){
+      if(neueOffene.length === 0){ cb(); return; }
+      var verbleibend = neueOffene.length;
+      neueOffene.forEach(function(np){
+        dbDelete('pruefungen', np.id, function(){
+          verbleibend--;
+          if(verbleibend === 0) cb();
+        });
+      });
+    };
+    loescheNeueOffene(function(){
+      p.erledigt = false;
+      p.erledigtAm = null;
+      p.ergebnis = null;
+      p.bericht = false;
+      p.erledigtVon = null;
+      p.unterschriftKunde = null;
+      p.unterschriftTechniker = null;
+      p.bemerkung = null;
+      dbPut('pruefungen', p, function(){
+        g.naechstePruefung = p.datum;
+        g.letztePruefung = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || vorherigeErledigung.datum).substring(0,10) : null;
+        g.letzterAnschluss = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || null) : null;
+        g.abfuelldatum = new Date().toISOString().substring(0,10);
+        if(!g.fuellungen) g.fuellungen = [];
+        var mengeInfoKorr = mengeAusTyp(g.typ, g.kategorie);
+        g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoKorr.wert, einheit: mengeInfoKorr.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
+        dbPut('geraete', g, function(){
+          loadAll(function(){ render(); toast('Korrigiert: als Abfüllung erfasst, Anschluss-Termin zurückgesetzt auf ' + fmtDate(p.datum)); });
+        });
+      });
+    });
+  });
+}
+
 function nurAbfuelldatumAktualisieren(geraetId, neuesDatum){
   if(!neuesDatum){ toast('Bitte zuerst ein Datum wählen'); return; }
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
@@ -2202,6 +2246,9 @@ function renderKundeDetail(kundeId){
           else if(tageDiff === 1) zeitpunktText = 'gestern um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr';
           else zeitpunktText = 'vor ' + tageDiff + ' Tagen um ' + fmtZeit(bereitsHeute.erledigtAm) + ' Uhr';
           html += '<div class="meta" style="color:var(--ok); font-weight:600;">&#10003; Bereits ' + (istKegAnschluss ? 'angeschlossen' : 'geprüft') + ' ' + zeitpunktText + ' (' + escapeHtml(bereitsHeute.ergebnis || '') + ')</div>';
+          if(istKegAnschluss && bereitsHeute.ergebnis === 'Angeschlossen'){
+            html += '<div class="meta" style="margin-top:2px;">War das eigentlich eine Abfüllung, kein Anschluss? <span class="korrAbfuellBtn" data-gid="' + g.id + '" data-pid="' + bereitsHeute.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">Zu Abfüllung korrigieren</span></div>';
+          }
         }
         html += '<div style="display:flex; align-items:center; gap:6px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">' + (istKegAnschluss ? 'Datum des Anschlusses' : 'Datum der Prüfung') + '</label>';
@@ -6554,6 +6601,12 @@ function bindDynamic(){
       var gid = el.getAttribute('data-gid');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
       nurTerminVerschieben(gid, datumInput ? datumInput.value : null);
+    };
+  });
+
+  document.querySelectorAll('.korrAbfuellBtn').forEach(function(el){
+    el.onclick = function(){
+      korrigiereZuAbfuellung(el.getAttribute('data-gid'), el.getAttribute('data-pid'));
     };
   });
 
