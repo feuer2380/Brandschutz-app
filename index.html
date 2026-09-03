@@ -1559,7 +1559,7 @@ function renderGeraetCheck(geraetId){
   if(bj && !g.ausgeschieden){
     html += '<button type="button" class="btn secondary small" id="checkInnenrevErledigt" style="margin-top:10px;">Innenrevision jetzt als durchgeführt markieren</button>';
   }
-  if(!g.ausgeschieden && g.kategorie !== 'Brandschutzbegehung'){
+  if(!g.ausgeschieden && g.kategorie !== 'Brandschutzbegehung' && !istPerchtlZisch){
     html += '<button type="button" class="btn block" id="btnSchnellOk" style="background:var(--ok); margin-top:12px;">&#10003; Schnell bestätigen (In Ordnung, ohne Unterschrift)</button>';
   }
   html += '</div>';
@@ -1589,6 +1589,13 @@ function renderGeraetCheck(geraetId){
 
   if(!g.ausgeschieden){
     var istBegehungCheck = (g.kategorie === 'Brandschutzbegehung');
+    if(istPerchtlZisch){
+      html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
+      html += '<button type="button" class="btn block" id="btnAbgefuellt" style="background:#1d5fa8; margin-top:16px;">&#128167; Abgefüllt (heute) &ndash; Wasser/CO2 neu befüllt</button>';
+      html += '<button type="button" class="btn block" id="btnAngeschlossen" style="background:var(--ok); margin-top:10px;">&#10003; Angeschlossen &ndash; Flasche in Betrieb genommen</button>';
+      html += '<button type="button" class="btn block secondary" id="btnReparatur" style="margin-top:10px; color:#c98a1c; border-color:#e6c9a3;">&#9881; Reparatur nötig</button>';
+      html += '<button type="button" class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Gerät ausscheiden (zu alt / defekt)</button>';
+    } else {
     html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
     html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
     html += '<canvas class="sig" id="checkSigKunde"></canvas>';
@@ -1613,6 +1620,7 @@ function renderGeraetCheck(geraetId){
       html += '<button class="btn block" id="btnOk" style="background:var(--ok); margin-top:16px;' + hlOk + '">&#10003; In Ordnung - Prüfung abschließen</button>';
       html += '<button class="btn block" id="btnReparatur" style="background:#c98a1c; margin-top:10px;' + hlRep + '">&#9881; Reparatur nötig</button>';
       html += '<button class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;' + hlAus + '">Gerät ausscheiden (zu alt / defekt)</button>';
+    }
     }
   }
 
@@ -1758,8 +1766,13 @@ function nurAbfuelldatumAktualisieren(geraetId, neuesDatum){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return;
   g.abfuelldatum = neuesDatum;
+  if(istFuellKategorie((g.kategorie || '').trim())){
+    if(!g.fuellungen) g.fuellungen = [];
+    var mengeInfoNur = mengeAusTyp(g.typ, g.kategorie);
+    g.fuellungen.push({ datum: neuesDatum + 'T12:00:00', menge: mengeInfoNur.wert, einheit: mengeInfoNur.einheit, standort: g.standort || '', abfuelldatum: neuesDatum });
+  }
   dbPut('geraete', g, function(){
-    loadAll(function(){ render(); toast('Abfülldatum aktualisiert: ' + fmtDate(neuesDatum) + ' (kein Anschluss erfasst)'); });
+    loadAll(function(){ render(); toast('Abfüllung erfasst: ' + fmtDate(neuesDatum)); });
   });
 }
 
@@ -1825,11 +1838,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
       g.letztePruefung = jetztIso.substring(0,10);
       g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
       if(ergebnis === 'in_ordnung' && istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
-        var anschlussZeitpunkt1 = jetztLokalDatumZeit();
-        g.letzterAnschluss = anschlussZeitpunkt1;
-        if(!g.fuellungen) g.fuellungen = [];
-        var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
-        g.fuellungen.push({ datum: anschlussZeitpunkt1, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum || null });
+        g.letzterAnschluss = jetztLokalDatumZeit();
       }
       dbPut('geraete', g, function(){
         neuenOffenenTerminAnlegen(g, function(){
@@ -1839,6 +1848,33 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
     } else {
       loadAll(function(){ render(); toast('Gespeichert: Reparatur nötig'); });
     }
+  });
+}
+
+function checkAbgefuellt(geraetId){
+  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  if(!g) return;
+  var standortEl = document.getElementById('checkStandort');
+  if(standortEl) g.standort = standortEl.value.trim();
+  var heuteKurz = new Date().toISOString().substring(0,10);
+  g.abfuelldatum = heuteKurz;
+  if(!g.fuellungen) g.fuellungen = [];
+  var mengeInfoAbf = mengeAusTyp(g.typ, g.kategorie);
+  g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoAbf.wert, einheit: mengeInfoAbf.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
+  dbPut('geraete', g, function(){
+    var rueckkehrKunde = state.checkRueckkehrZuKunde;
+    loadAll(function(){
+      if(rueckkehrKunde){
+        state.activeKundeId = rueckkehrKunde;
+        state.checkRueckkehrZuKunde = null;
+        state.tab = 'kundeDetail';
+        render();
+      } else {
+        state.tab = 'scan';
+        render();
+      }
+      toast('Abfüllung erfasst: ' + fmtDate(heuteKurz));
+    });
   });
 }
 
@@ -1945,11 +1981,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
         g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
         if(ergebnis === 'begehung') g.begehungStart = null;
         if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
-          var anschlussZeitpunkt2 = jetztLokalDatumZeit();
-          g.letzterAnschluss = anschlussZeitpunkt2;
-          if(!g.fuellungen) g.fuellungen = [];
-          var mengeInfo = mengeAusTyp(g.typ, g.kategorie);
-        g.fuellungen.push({ datum: anschlussZeitpunkt2, menge: mengeInfo.wert, einheit: mengeInfo.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum || null });
+          g.letzterAnschluss = jetztLokalDatumZeit();
         }
         dbPut('geraete', g, function(){
           neuenOffenenTerminAnlegen(g, function(){
@@ -2192,12 +2224,12 @@ function renderKundeDetail(kundeId){
         var stilSchnell = function(key){ return 'flex:1;' + (aktErgSchnell === key ? ' background:' + farbeSchnell(key) + '; color:#fff;' : ''); };
         var klasseSchnell = function(key){ return aktErgSchnell === key ? 'btn small' : 'btn small secondary'; };
         html += '<div style="display:flex; gap:6px; margin-top:8px;">';
-        html += '<button type="button" class="' + klasseSchnell('in_ordnung') + '" style="' + stilSchnell('in_ordnung') + '" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">In Ordnung</button>';
+        html += '<button type="button" class="' + klasseSchnell('in_ordnung') + '" style="' + stilSchnell('in_ordnung') + '" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">' + (istKegAnschluss ? 'Angeschlossen' : 'In Ordnung') + '</button>';
         html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
         html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
         html += '</div>';
         if(istKegAnschluss){
-          html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px;" data-nurAbfuellBtn="' + g.id + '">Nur Abfülldatum aktualisieren (kein Anschluss)</button>';
+          html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px; background:#1d5fa8; color:#fff; border-color:#1d5fa8;" data-nurAbfuellBtn="' + g.id + '">&#128167; Abgefüllt (Wasser/CO2 neu befüllt)</button>';
         }
         }
       }
@@ -4013,14 +4045,15 @@ function modalGeraetBearbeiten(geraetId){
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><div class="row" style="gap:8px;"><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269" style="flex:1;"><button type="button" class="btn secondary" id="fExterneIdScanBtn" style="flex:0 0 auto; padding:0 14px;">&#128247;</button></div>';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '" list="standortDatalist" autocomplete="off">';
   html += buildStandortDatalist();
-  html += '<label>Prüfdatum (letzte Prüfung)</label><input id="fLetztePruefung" type="date" value="' + (g.letztePruefung || '') + '">';
-  html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
+  var istFuellKatBearb = istFuellKategorie((g.kategorie || '').trim());
+  html += '<label>' + (istFuellKatBearb ? 'Datum des letzten Anschlusses' : 'Prüfdatum (letzte Prüfung)') + '</label><input id="fLetztePruefung" type="date" value="' + (g.letztePruefung || '') + '">';
+  html += '<label>' + (istFuellKatBearb ? 'Nächster Anschluss fällig' : 'Nächste Prüfung') + '</label><input id="fDatum" type="date" value="' + (g.naechstePruefung || '') + '">';
   html += '<div style="display:flex; gap:8px; margin:-4px 0 10px 0;">';
   html += '<button type="button" class="btn secondary small" id="btnDatumHeute">Heute</button>';
   html += '<button type="button" class="btn secondary small" id="btnDatum1J">+1 Jahr</button>';
   html += '<button type="button" class="btn secondary small" id="btnDatum2J">+2 Jahre</button>';
   html += '</div>';
-  html += '<label>Prüfintervall (bei "In Ordnung" im Scan wird der naechste Termin automatisch so weit vorgesetzt)</label>';
+  html += '<label>' + (istFuellKatBearb ? 'Anschluss-Intervall (beim Anschließen im Scan wird der naechste Termin automatisch so weit vorgesetzt)' : 'Prüfintervall (bei "In Ordnung" im Scan wird der naechste Termin automatisch so weit vorgesetzt)') + '</label>';
   html += '<select id="fIntervall">';
   [1,3,12,24,36].forEach(function(m){
     html += '<option value="' + m + '"' + ((g.intervallMonate||24) === m ? ' selected' : '') + '>' + m + ' Monate</option>';
@@ -6285,6 +6318,10 @@ function bindDynamic(){
   if(btnOk) btnOk.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
   var btnSchnellOk = document.getElementById('btnSchnellOk');
   if(btnSchnellOk) btnSchnellOk.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
+  var btnAbgefuellt = document.getElementById('btnAbgefuellt');
+  if(btnAbgefuellt) btnAbgefuellt.onclick = function(){ checkAbgefuellt(state.activeGeraetId); };
+  var btnAngeschlossen = document.getElementById('btnAngeschlossen');
+  if(btnAngeschlossen) btnAngeschlossen.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
   var btnReparatur = document.getElementById('btnReparatur');
   if(btnReparatur) btnReparatur.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'reparatur'); };
 
