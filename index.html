@@ -1763,47 +1763,57 @@ function nurTerminVerschieben(geraetId, neuesDatum){
 
 function korrigiereZuAbfuellung(geraetId, pruefungId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
-  if(!g){ toast('Nicht gefunden'); return; }
+  if(!g){ toast('Gerät nicht gefunden'); return; }
   customConfirm('Alle heutigen "Angeschlossen"-Einträge für dieses Gerät werden rückgängig gemacht, der Anschluss-Termin wird auf den ursprünglichen Stand zurückgesetzt, und (falls noch nicht geschehen) wird stattdessen eine Abfüllung erfasst. Fortfahren?', function(){
-    var grenze = new Date(); grenze.setHours(grenze.getHours() - 24);
-    var heutigeErledigte = state.pruefungen.filter(function(x){
-      return x.geraetId === geraetId && x.erledigt && x.erledigtAm && new Date(x.erledigtAm) >= grenze && x.ergebnis === 'Angeschlossen';
-    });
-    var alleOffenen = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && !x.erledigt; });
-    var frueheresDatum = null;
-    heutigeErledigte.concat(alleOffenen).forEach(function(x){
-      if(x.datum && (!frueheresDatum || x.datum < frueheresDatum)) frueheresDatum = x.datum;
-    });
-    var zuLoeschen = heutigeErledigte.concat(alleOffenen);
-    var idxL = 0;
-    var naechstesLoeschen = function(){
-      if(idxL >= zuLoeschen.length){ weiterMachen(); return; }
-      dbDelete('pruefungen', zuLoeschen[idxL].id, function(){ idxL++; naechstesLoeschen(); });
-    };
-    var weiterMachen = function(){
-      var neueOffenePruefung = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: frueheresDatum || new Date().toISOString().substring(0,10), erledigt: false };
-      var heutigeIds = heutigeErledigte.map(function(x){ return x.id; });
-      dbPut('pruefungen', neueOffenePruefung, function(){
-        var frueherErledigte = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && x.erledigt && heutigeIds.indexOf(x.id) === -1; });
-        frueherErledigte.sort(function(a,b){ return new Date(b.erledigtAm||b.datum) - new Date(a.erledigtAm||a.datum); });
-        var vorherigeErledigung = frueherErledigte.length ? frueherErledigte[0] : null;
-        g.naechstePruefung = neueOffenePruefung.datum;
-        g.letztePruefung = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || vorherigeErledigung.datum).substring(0,10) : null;
-        g.letzterAnschluss = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || null) : null;
-        var heuteKurz = new Date().toISOString().substring(0,10);
-        var hatHeutigeFuellung = (g.fuellungen || []).some(function(f){ return (f.datum || '').substring(0,10) === heuteKurz; });
-        if(!hatHeutigeFuellung){
-          g.abfuelldatum = heuteKurz;
-          if(!g.fuellungen) g.fuellungen = [];
-          var mengeInfoKorr = mengeAusTyp(g.typ, g.kategorie);
-          g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoKorr.wert, einheit: mengeInfoKorr.einheit, standort: g.standort || '', abfuelldatum: heuteKurz });
-        }
-        dbPut('geraete', g, function(){
-          loadAll(function(){ render(); toast('Korrigiert: Anschluss-Termin zurückgesetzt auf ' + fmtDate(neueOffenePruefung.datum)); });
-        });
+    try {
+      var grenze = new Date(); grenze.setHours(grenze.getHours() - 24);
+      var heutigeErledigte = state.pruefungen.filter(function(x){
+        return x.geraetId === geraetId && x.erledigt === true && x.erledigtAm && new Date(x.erledigtAm) >= grenze && x.ergebnis === 'Angeschlossen';
       });
-    };
-    naechstesLoeschen();
+      var alleOffenen = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && x.erledigt !== true; });
+      var frueheresDatum = null;
+      heutigeErledigte.concat(alleOffenen).forEach(function(x){
+        if(x.datum && (!frueheresDatum || x.datum < frueheresDatum)) frueheresDatum = x.datum;
+      });
+      var zuLoeschen = heutigeErledigte.concat(alleOffenen);
+      if(zuLoeschen.length === 0){
+        toast('Kein heutiger Anschluss-Eintrag mehr gefunden - eventuell schon korrigiert?');
+        return;
+      }
+      var heutigeIds = heutigeErledigte.map(function(x){ return x.id; });
+      var idxL = 0;
+      var naechstesLoeschen = function(){
+        if(idxL >= zuLoeschen.length){ weiterMachen(); return; }
+        dbDelete('pruefungen', zuLoeschen[idxL].id, function(){ idxL++; naechstesLoeschen(); });
+      };
+      var weiterMachen = function(){
+        var neueOffenePruefung = { id: uid(), kundeId: g.kundeId || null, geraetId: g.id, typ: g.typ || '', datum: frueheresDatum || new Date().toISOString().substring(0,10), erledigt: false };
+        dbPut('pruefungen', neueOffenePruefung, function(){
+          var frueherErledigte = state.pruefungen.filter(function(x){ return x.geraetId === geraetId && x.erledigt === true && heutigeIds.indexOf(x.id) === -1; });
+          frueherErledigte.sort(function(a,b){ return new Date(b.erledigtAm||b.datum||0) - new Date(a.erledigtAm||a.datum||0); });
+          var vorherigeErledigung = frueherErledigte.length ? frueherErledigte[0] : null;
+          var vorherDatumStr = vorherigeErledigung ? (vorherigeErledigung.erledigtAm || vorherigeErledigung.datum || null) : null;
+          g.naechstePruefung = neueOffenePruefung.datum;
+          g.letztePruefung = vorherDatumStr ? vorherDatumStr.substring(0,10) : null;
+          g.letzterAnschluss = (vorherigeErledigung && vorherigeErledigung.erledigtAm) ? vorherigeErledigung.erledigtAm : null;
+          var heuteKurz = new Date().toISOString().substring(0,10);
+          var hatHeutigeFuellung = (g.fuellungen || []).some(function(f){ return (f.datum || '').substring(0,10) === heuteKurz; });
+          if(!hatHeutigeFuellung){
+            g.abfuelldatum = heuteKurz;
+            if(!g.fuellungen) g.fuellungen = [];
+            var mengeInfoKorr = mengeAusTyp(g.typ, g.kategorie);
+            g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: (mengeInfoKorr.wert === undefined ? null : mengeInfoKorr.wert), einheit: mengeInfoKorr.einheit || '', standort: g.standort || '', abfuelldatum: heuteKurz });
+          }
+          dbPut('geraete', g, function(){
+            loadAll(function(){ render(); toast('Korrigiert: Anschluss-Termin zurückgesetzt auf ' + fmtDate(neueOffenePruefung.datum)); });
+          });
+        });
+      };
+      naechstesLoeschen();
+    } catch(err){
+      console.error('Korrektur-Fehler', err);
+      toast('Fehler bei der Korrektur: ' + (err && err.message ? err.message : err));
+    }
   });
 }
 
