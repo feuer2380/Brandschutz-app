@@ -1653,6 +1653,17 @@ function rauchmelderAblaufjahr(g){
   return parseInt(g.baujahr, 10) + 10;
 }
 
+function akkutauschStatus(g){
+  if((g.kategorie || '').trim() !== 'RWA-Anlage' || !g.letzterAkkutausch) return null;
+  var intervallJahre = g.akkuIntervallJahre || 3;
+  var naechstes = new Date(g.letzterAkkutausch);
+  naechstes.setFullYear(naechstes.getFullYear() + intervallJahre);
+  var heute = new Date();
+  var tageBis = Math.round((naechstes - heute) / 86400000);
+  var cls = tageBis < 0 ? 'warn' : (tageBis <= 90 ? 'soon' : 'ok');
+  return { naechstesDatum: naechstes.toISOString().substring(0,10), cls: cls, label: 'Akkutausch: ' + fmtDate(naechstes.toISOString()) };
+}
+
 function jetztLokalDatumZeit(){
   var d = new Date();
   var jj = d.getFullYear();
@@ -2115,6 +2126,8 @@ function renderKundeDetail(kundeId){
         var ablaufCls = ablaufjahrRM <= ablaufJetzt ? 'warn' : (ablaufjahrRM - ablaufJetzt <= 1 ? 'soon' : 'ok');
         html += '<span class="badge ' + ablaufCls + '">Ablauf: ' + ablaufjahrRM + '</span>';
       }
+      var akkuStatusBadge = akkutauschStatus(g);
+      if(akkuStatusBadge) html += '<span class="badge ' + akkuStatusBadge.cls + '">' + akkuStatusBadge.label + '</span>';
       html += '<button class="btn secondary small qrGeraetInlineBtn" data-gid="' + g.id + '" style="padding:5px 9px;">QR</button>';
       html += '</div>';
       html += '</div>';
@@ -2437,8 +2450,9 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istBegehung = (kat === 'Brandschutzbegehung');
       var zeigtInnenrevision = (kat === 'Feuerlöscher');
       var istRauchmelder = (kat === 'Rauchmelder');
+      var istRWA = (kat === 'RWA-Anlage');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
-      var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>');
+      var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : (istRWA ? '<th>Baujahr</th><th>Letzter Akkutausch</th><th>Nächster Akkutausch</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>'));
       html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
@@ -2459,6 +2473,9 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
         } else if(istRauchmelder){
           var ablaufjahrDruck = rauchmelderAblaufjahr(g);
           mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (ablaufjahrDruck || '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
+        } else if(istRWA){
+          var akkuStatusDruck = akkutauschStatus(g);
+          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzterAkkutausch ? fmtDate(g.letzterAkkutausch) : '-') + '</td><td>' + (akkuStatusDruck ? fmtDate(akkuStatusDruck.naechstesDatum) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
         } else {
           mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
         }
@@ -3880,6 +3897,13 @@ function modalGeraetBearbeiten(geraetId){
   html += '<div id="fjBlockBaujahr" style="display:none;">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" value="' + (g.baujahr || '') + '">';
   html += '</div>';
+  html += '<div id="fjBlockAkku" style="display:none;">';
+  html += '<label>Letzter Akkutausch</label><input id="fLetzterAkkutausch" type="date" value="' + (g.letzterAkkutausch || '') + '">';
+  html += '<label>Akkutausch-Intervall</label><select id="fAkkuIntervall">';
+  html += '<option value="2"' + (g.akkuIntervallJahre === 2 ? ' selected' : '') + '>2 Jahre</option>';
+  html += '<option value="3"' + (g.akkuIntervallJahre !== 2 ? ' selected' : '') + '>3 Jahre</option>';
+  html += '</select>';
+  html += '</div>';
   html += '<div id="fjBlockPerchtlZisch" style="display:none;">';
   html += '<label>Abfülldatum</label><input id="fAbfuelldatum" type="date" value="' + (g.abfuelldatum ? g.abfuelldatum.substring(0,10) : '') + '">';
   html += '<label>Zusatzdaten</label><input id="fZusatzdaten" type="text" value="' + escapeHtml(g.zusatzdaten || '') + '">';
@@ -3949,6 +3973,10 @@ function modalGeraetBearbeiten(geraetId){
     var neueNr = parseInt(document.getElementById('fNr').value, 10);
     g.nr = isNaN(neueNr) ? null : neueNr;
     g.baujahr = baujahrVal ? parseInt(baujahrVal, 10) : null;
+    var fLetzterAkkutauschEl = document.getElementById('fLetzterAkkutausch');
+    var fAkkuIntervallEl = document.getElementById('fAkkuIntervall');
+    if(fLetzterAkkutauschEl) g.letzterAkkutausch = fLetzterAkkutauschEl.value || null;
+    if(fAkkuIntervallEl) g.akkuIntervallJahre = parseInt(fAkkuIntervallEl.value, 10);
     g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
     g.externeId = neueExterneId;
@@ -4329,6 +4357,7 @@ function bindEinfuegenAltesSystem(){
 function bindKategorieToggle(kundeIdFuerReserve){
   var sel = document.getElementById('fKategorie');
   var block = document.getElementById('fjBlockBaujahr');
+  var blockAkku = document.getElementById('fjBlockAkku');
   var blockPZ = document.getElementById('fjBlockPerchtlZisch');
   var blockMaengel = document.getElementById('fjBlockMaengel');
   var blockSeriennr = document.getElementById('fjBlockSeriennr');
@@ -4340,6 +4369,7 @@ function bindKategorieToggle(kundeIdFuerReserve){
   function aktualisieren(){
     var istBegehung = (sel.value === 'Brandschutzbegehung');
     if(block) block.style.display = (sel.value === 'Feuerlöscher' || sel.value === 'Rauchmelder') ? '' : 'none';
+    if(blockAkku) blockAkku.style.display = (sel.value === 'RWA-Anlage') ? '' : 'none';
     if(blockPZ) blockPZ.style.display = istFuellKategorie(sel.value) ? '' : 'none';
     if(blockMaengel) blockMaengel.style.display = istBegehung ? '' : 'none';
     if(blockSeriennr) blockSeriennr.style.display = istBegehung ? 'none' : '';
@@ -4413,6 +4443,13 @@ function modalNeuesGeraet(kundeId, vorgabe){
   html += '<div id="fjBlockBaujahr" style="display:none;">';
   html += '<label>Baujahr</label><input id="fBaujahr" type="number" inputmode="numeric" min="1980" max="2100" placeholder="z.B. 2020" value="' + (letzte && letzte.baujahr ? escapeHtml(String(letzte.baujahr)) : '') + '">';
   html += '</div>';
+  html += '<div id="fjBlockAkku" style="display:none;">';
+  html += '<label>Letzter Akkutausch</label><input id="fLetzterAkkutausch" type="date">';
+  html += '<label>Akkutausch-Intervall</label><select id="fAkkuIntervall">';
+  html += '<option value="2">2 Jahre</option>';
+  html += '<option value="3" selected>3 Jahre</option>';
+  html += '</select>';
+  html += '</div>';
   html += '<div id="fjBlockPerchtlZisch" style="display:none;">';
   html += '<label>Abfülldatum</label><input id="fAbfuelldatum" type="date">';
   html += '<label>Zusatzdaten</label><input id="fZusatzdaten" type="text">';
@@ -4462,7 +4499,9 @@ function modalNeuesGeraet(kundeId, vorgabe){
       naechstePruefung: datum || null,
       abfuelldatum: document.getElementById('fAbfuelldatum').value || null,
       zusatzdaten: document.getElementById('fZusatzdaten').value.trim(),
-      maengel: document.getElementById('fMaengel').value.trim()
+      maengel: document.getElementById('fMaengel').value.trim(),
+      letzterAkkutausch: document.getElementById('fLetzterAkkutausch') ? (document.getElementById('fLetzterAkkutausch').value || null) : null,
+      akkuIntervallJahre: document.getElementById('fAkkuIntervall') ? parseInt(document.getElementById('fAkkuIntervall').value, 10) : null
     };
     var speichernFortsetzen = function(){
     state.letzteGeraeteWerte = {
