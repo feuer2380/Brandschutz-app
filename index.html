@@ -6659,7 +6659,8 @@ function bindDynamic(){
   });
 
   document.querySelectorAll('.nurTerminBtn').forEach(function(el){
-    el.onclick = function(){
+    el.onclick = function(e){
+      e.stopPropagation();
       var gid = el.getAttribute('data-gid');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
       nurTerminVerschieben(gid, datumInput ? datumInput.value : null);
@@ -6667,13 +6668,15 @@ function bindDynamic(){
   });
 
   document.querySelectorAll('.korrAbfuellBtn').forEach(function(el){
-    el.onclick = function(){
+    el.onclick = function(e){
+      e.stopPropagation();
       korrigiereZuAbfuellung(el.getAttribute('data-gid'), el.getAttribute('data-pid'));
     };
   });
 
   document.querySelectorAll('[data-nurAbfuellBtn]').forEach(function(el){
-    el.onclick = function(){
+    el.onclick = function(e){
+      e.stopPropagation();
       var gid = el.getAttribute('data-nurAbfuellBtn');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
       nurAbfuelldatumAktualisieren(gid, datumInput ? datumInput.value : null);
