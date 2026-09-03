@@ -5732,10 +5732,14 @@ function modalSammelbericht(kundeId){
       } else {
         html += '<label style="margin-top:6px;">Prüfdatum</label><input type="date" id="sbPruefdatum_' + g.id + '" value="' + (g.letztePruefung || new Date().toISOString().substring(0,10)) + '">';
         html += '<div style="display:flex; gap:6px; margin-top:10px;">';
-        html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">In Ordnung</button>';
+        var istFuellKatSB = istFuellKategorie((g.kategorie || 'Feuerlöscher').trim());
+        html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">' + (istFuellKatSB ? 'Angeschlossen' : 'In Ordnung') + '</button>';
         html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
         html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
         html += '</div>';
+        if(istFuellKatSB){
+          html += '<button type="button" class="' + (aktErg === 'nur_abfuellen' ? 'btn small sbErgBtn active' : 'btn small secondary sbErgBtn') + '" data-gid="' + g.id + '" data-erg="nur_abfuellen" style="width:100%; margin-top:6px;' + (aktErg === 'nur_abfuellen' ? ' background:#1d5fa8;' : '') + '">&#128167; Nur Abfüllen (kein Anschluss, Termin bleibt)</button>';
+        }
         if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
           var fuellLabel = (g.kategorie === 'CO2-Flaschen') ? 'Neufüllung Gasflasche am' : 'Neufüllung Sodawasser am';
           html += '<label style="margin-top:6px;">' + fuellLabel + '</label><input type="date" id="sbAbfuell_' + g.id + '" value="' + (g.abfuelldatum || new Date().toISOString().substring(0,10)) + '">';
@@ -5788,7 +5792,7 @@ function modalSammelbericht(kundeId){
         other.className = 'btn small secondary sbErgBtn';
         other.style.background = '';
       });
-      var farbe = auswahl[gid] === 'in_ordnung' ? 'var(--ok)' : (auswahl[gid] === 'reparatur' ? '#c98a1c' : '#c23f12');
+      var farbe = auswahl[gid] === 'in_ordnung' ? 'var(--ok)' : (auswahl[gid] === 'reparatur' ? '#c98a1c' : (auswahl[gid] === 'nur_abfuellen' ? '#1d5fa8' : '#c23f12'));
       b.className = 'btn small sbErgBtn active';
       b.style.background = farbe;
     };
@@ -5911,8 +5915,35 @@ function modalSammelbericht(kundeId){
       } else {
         ergebnis = auswahl[g.id] || 'in_ordnung';
       }
-      var ergebnisLabel = ergebnis === 'in_ordnung' ? (istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) ? 'Angeschlossen' : 'In Ordnung') : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden');
+      var ergebnisLabel = ergebnis === 'in_ordnung' ? (istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) ? 'Angeschlossen' : 'In Ordnung') : (ergebnis === 'nur_abfuellen' ? 'Abgefüllt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
       var notiz = (document.getElementById('sbNotiz_' + g.id).value || '').trim();
+
+      if(ergebnis === 'nur_abfuellen'){
+        dbPut('geraete', g, function(){
+          var bjSnapAbf = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+          snapshot.push({
+            nr: g.nr || (idx + 1),
+            typ: g.typ,
+            kategorie: (g.kategorie || 'Feuerlöscher').trim(),
+            standort: g.standort || '',
+            baujahr: g.baujahr || null,
+            seriennummer: g.seriennummer || '',
+            abfuelldatum: g.abfuelldatum || null,
+            ergebnis: ergebnisLabel,
+            notiz: notiz,
+            naechstePruefung: g.naechstePruefung || null,
+            letztePruefung: g.letztePruefung || null,
+            innenrevision: bjSnapAbf ? bjSnapAbf.label : null,
+            letzteInnenrevision: g.letzteInnenrevision || null,
+            akkuTausch: akkuVal || null,
+            maengel: g.maengel || null,
+            dienstErgebnisse: null
+          });
+          idx++;
+          naechstesGeraet();
+        });
+        return;
+      }
 
       var pruefdatumElVorab = document.getElementById('sbPruefdatum_' + g.id);
       var pruefdatumWertVorab = (ergebnis === 'in_ordnung' && pruefdatumElVorab && pruefdatumElVorab.value) ? pruefdatumElVorab.value : null;
