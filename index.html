@@ -2605,7 +2605,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istRWA = (kat === 'RWA-Anlage');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
       var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : (istRWA ? '<th>Baujahr</th><th>Letzter Akkutausch</th><th>Nächster Akkutausch</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>'));
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
@@ -2617,7 +2617,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
             var tageSpanne = Math.round((new Date(g.letzterAnschluss) - new Date(g.abfuelldatum)) / 86400000);
             if(!isNaN(tageSpanne) && tageSpanne >= 0) zeitspanneText = tageSpanne + ' Tag' + (tageSpanne === 1 ? '' : 'e');
           }
-          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>';
+          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.leer ? 'Ja' : 'Nein') + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>';
         } else if(istBegehung){
           mittelspalten = '<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>';
         } else if(zeigtInnenrevision){
