@@ -5213,6 +5213,18 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     return ids.length;
   }
 
+  function leereFlaschenListe(zeilen){
+    var ids = [];
+    var liste = [];
+    zeilen.forEach(function(z){
+      if(z.g.leer && ids.indexOf(z.g.id) === -1){
+        ids.push(z.g.id);
+        liste.push('Nr. ' + geraeteNummerWert(z.g) + (z.g.seriennummer ? ' (SN ' + escapeHtml(z.g.seriennummer) + ')' : ''));
+      }
+    });
+    return liste;
+  }
+
   var gesamtSummen = summeProEinheitDruck(fuellzeilen);
   var zeitraeumeDruck = (function(){
     var heute = new Date(); heute.setHours(0,0,0,0);
@@ -5247,6 +5259,10 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   html += '<div class="pb-kundenbox">';
   html += '<div class="knr">Gesamt</div>';
   html += '<div>' + anzahlFlaschen(fuellzeilen) + ' Flasche' + (anzahlFlaschen(fuellzeilen) === 1 ? '' : 'n') + ' &middot; ' + fuellzeilen.length + ' Füllung' + (fuellzeilen.length === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(gesamtSummen) + ' gesamt</div>';
+  var leereGesamt = leereFlaschenListe(fuellzeilen);
+  if(leereGesamt.length){
+    html += '<div style="margin-top:4px; color:#c23f12; font-weight:600;">Aktuell leer (' + leereGesamt.length + '): ' + leereGesamt.join(', ') + '</div>';
+  }
   html += '<div style="margin-top:4px;">Heute: ' + formatiereSummenDruck(zeitraeumeDruck.tag) + ' &middot; Diesen Monat: ' + formatiereSummenDruck(zeitraeumeDruck.monat) + ' &middot; Dieses Jahr: ' + formatiereSummenDruck(zeitraeumeDruck.jahr) + '</div>';
   html += '</div>';
 
@@ -5256,6 +5272,10 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     html += '<div class="pb-fuellgruppe">';
     html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(standort) + '</h3>';
     html += '<div class="meta2" style="margin-bottom:6px;">' + anzahlFlaschen(zeilen) + ' Flasche' + (anzahlFlaschen(zeilen) === 1 ? '' : 'n') + ' &middot; ' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + ' &middot; ' + formatiereSummenDruck(summenStandort) + '</div>';
+    var leereStandort = leereFlaschenListe(zeilen);
+    if(leereStandort.length){
+      html += '<div class="meta2" style="margin-bottom:6px; color:#c23f12; font-weight:600;">Aktuell leer: ' + leereStandort.join(', ') + '</div>';
+    }
     html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th><th>Abgefüllt</th><th>Angeschlossen</th><th>Menge</th><th>Tage am Anschluss</th></tr></thead><tbody>';
     zeilen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); }).forEach(function(z){
       html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.standort || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + (z.abfuelldatum ? fmtDatumZeitLokal(z.abfuelldatum) : '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td><td>' + (z.istLager ? '- (Lager)' : (z.tageAmAnschluss + ' Tag' + (z.tageAmAnschluss === 1 ? '' : 'e') + (z.istAktuell ? ' (aktuell)' : ''))) + '</td></tr>';
