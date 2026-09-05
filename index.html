@@ -6471,6 +6471,8 @@ function bindDynamic(){
   if(btnLeerToggle) btnLeerToggle.onclick = function(){
     var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
     if(!g) return;
+    var standortElLeer = document.getElementById('checkStandort');
+    if(standortElLeer) g.standort = standortElLeer.value.trim();
     g.leer = !g.leer;
     dbPut('geraete', g, function(){
       loadAll(function(){ render(); toast(g.leer ? 'Als leer markiert' : 'Wieder als voll markiert'); });
