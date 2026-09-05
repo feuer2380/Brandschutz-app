@@ -1602,6 +1602,7 @@ function renderGeraetCheck(geraetId){
       html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
       html += '<button type="button" class="btn block" id="btnAbgefuellt" style="background:#1d5fa8; margin-top:16px;">&#128167; Abgefüllt (heute) &ndash; Wasser/CO2 neu befüllt</button>';
       html += '<button type="button" class="btn block" id="btnAngeschlossen" style="background:var(--ok); margin-top:10px;">&#10003; Angeschlossen &ndash; Flasche in Betrieb genommen</button>';
+      html += '<button type="button" class="btn block secondary" id="btnLeerToggle" style="margin-top:10px;' + (g.leer ? ' background:#c98a1c; color:#fff; border-color:#c98a1c;' : ' color:#c98a1c; border-color:#e6c9a3;') + '">' + (g.leer ? '&#10003; Als leer markiert &ndash; wieder voll melden' : '&#128683; Behälter ist leer melden') + '</button>';
       html += '<button type="button" class="btn block secondary" id="btnReparatur" style="margin-top:10px; color:#c98a1c; border-color:#e6c9a3;">&#9881; Reparatur nötig</button>';
       html += '<button type="button" class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Gerät ausscheiden (zu alt / defekt)</button>';
     } else {
@@ -6466,6 +6467,15 @@ function bindDynamic(){
   if(btnAbgefuellt) btnAbgefuellt.onclick = function(){ checkAbgefuellt(state.activeGeraetId); };
   var btnAngeschlossen = document.getElementById('btnAngeschlossen');
   if(btnAngeschlossen) btnAngeschlossen.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
+  var btnLeerToggle = document.getElementById('btnLeerToggle');
+  if(btnLeerToggle) btnLeerToggle.onclick = function(){
+    var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
+    if(!g) return;
+    g.leer = !g.leer;
+    dbPut('geraete', g, function(){
+      loadAll(function(){ render(); toast(g.leer ? 'Als leer markiert' : 'Wieder als voll markiert'); });
+    });
+  };
   var btnReparatur = document.getElementById('btnReparatur');
   if(btnReparatur) btnReparatur.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'reparatur'); };
 
