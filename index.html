@@ -5826,7 +5826,7 @@ function modalSammelbericht(kundeId){
         }
         if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())){
           var fuellLabel = (g.kategorie === 'CO2-Flaschen') ? 'Neufüllung Gasflasche am' : 'Neufüllung Sodawasser am';
-          html += '<label style="margin-top:6px;">' + fuellLabel + '</label><input type="date" id="sbAbfuell_' + g.id + '" value="' + (g.abfuelldatum || new Date().toISOString().substring(0,10)) + '">';
+          html += '<label style="margin-top:6px;">' + fuellLabel + '</label><input type="date" id="sbAbfuell_' + g.id + '" data-orig="' + (g.abfuelldatum ? g.abfuelldatum.substring(0,10) : '') + '" value="' + (g.abfuelldatum || new Date().toISOString().substring(0,10)) + '">';
         }
         if(((g.kategorie || 'Feuerlöscher').trim()) === 'Brandschutzbegehung'){
           html += '<label style="margin-top:6px;">Mängel</label><textarea id="sbMaengel_' + g.id + '" rows="3" placeholder="Festgestellte Mängel eintragen...">' + escapeHtml(g.maengel || '') + '</textarea>';
@@ -5972,7 +5972,8 @@ function modalSammelbericht(kundeId){
       var istPZ = istFuellKategorie((g.kategorie || 'Feuerlöscher').trim());
       var abfuellEl = istPZ ? document.getElementById('sbAbfuell_' + g.id) : null;
       var abfuellVal = abfuellEl ? abfuellEl.value : '';
-      if(abfuellVal){
+      var abfuellOrig = abfuellEl ? abfuellEl.getAttribute('data-orig') : '';
+      if(abfuellVal && abfuellVal !== abfuellOrig){
         var jetzt = new Date();
         var hh = jetzt.getHours(); if(hh<10) hh = '0'+hh;
         var mm = jetzt.getMinutes(); if(mm<10) mm = '0'+mm;
