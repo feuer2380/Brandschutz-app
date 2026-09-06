@@ -1815,6 +1815,7 @@ function korrigiereZuAbfuellung(geraetId, pruefungId){
           if(!hatHeutigeFuellung){
             g.abfuelldatum = heuteKurz;
             g.leer = false;
+            g.leerSeit = null;
             if(!g.fuellungen) g.fuellungen = [];
             var mengeInfoKorr = mengeAusTyp(g.typ, g.kategorie);
             g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: (mengeInfoKorr.wert === undefined ? null : mengeInfoKorr.wert), einheit: mengeInfoKorr.einheit || '', standort: g.standort || '', abfuelldatum: heuteKurz });
@@ -1853,6 +1854,7 @@ function nurAbfuelldatumAktualisieren(geraetId, neuesDatum){
   if(!g) return;
   g.abfuelldatum = neuesDatum;
   g.leer = false;
+            g.leerSeit = null;
   if(istFuellKategorie((g.kategorie || '').trim())){
     if(!g.fuellungen) g.fuellungen = [];
     var mengeInfoNur = mengeAusTyp(g.typ, g.kategorie);
@@ -1946,6 +1948,7 @@ function checkAbgefuellt(geraetId){
   var heuteKurz = new Date().toISOString().substring(0,10);
   g.abfuelldatum = heuteKurz;
   g.leer = false;
+            g.leerSeit = null;
   if(!g.fuellungen) g.fuellungen = [];
   var mengeInfoAbf = mengeAusTyp(g.typ, g.kategorie);
   g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoAbf.wert, einheit: mengeInfoAbf.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
@@ -4212,6 +4215,7 @@ function modalGeraetBearbeiten(geraetId){
       if(!g.fuellungen) g.fuellungen = [];
       g.letzterAnschluss = g.abfuelldatum + 'T12:00:00';
       g.leer = false;
+            g.leerSeit = null;
       var mengeInfoBearb = mengeAusTyp(g.typ, g.kategorie);
       g.fuellungen.push({ datum: g.abfuelldatum + 'T12:00:00', menge: mengeInfoBearb.wert, einheit: mengeInfoBearb.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
     }
@@ -5955,6 +5959,7 @@ function modalSammelbericht(kundeId){
         var mm = jetzt.getMinutes(); if(mm<10) mm = '0'+mm;
         g.abfuelldatum = abfuellVal + 'T' + hh + ':' + mm;
         g.leer = false;
+            g.leerSeit = null;
         var anschlussZeitpunkt3 = jetztLokalDatumZeit();
         g.letzterAnschluss = anschlussZeitpunkt3;
         if(!g.fuellungen) g.fuellungen = [];
@@ -6150,6 +6155,13 @@ function buildSammelberichtHtml(sb, k){
         var neufuellPrefix = (kat === 'CO2-Flaschen') ? 'Neufüllung Gasflasche am ' : 'Neufüllung Sodawasser am ';
         var neufuellText = neufuellPrefix + (g.abfuelldatum ? fmtDatumZeitLokal(g.abfuelldatum) : fmtDate(sb.datum));
         html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(neufuellText) + '</span><span class="' + ei.cls + '">Ergebnis: ' + (istOk ? 'OK' : escapeHtml(ei.label)) + '</span></div>';
+        if(g.letzterAnschluss){
+          html += '<div class="pos-dienst"><span class="dname">Angeschlossen am ' + escapeHtml(fmtDatumZeitLokal(g.letzterAnschluss)) + '</span></div>';
+        }
+        if(g.leer && g.leerSeit){
+          var tageImEinsatz = g.letzterAnschluss ? Math.round((new Date(g.leerSeit) - new Date(g.letzterAnschluss)) / 86400000) : null;
+          html += '<div class="pos-dienst"><span class="dname">Leer seit ' + escapeHtml(fmtDatumZeitLokal(g.leerSeit)) + (tageImEinsatz !== null ? ' &middot; ' + tageImEinsatz + ' Tag' + (tageImEinsatz === 1 ? '' : 'e') + ' im Einsatz ab Anschluss' : '') + '</span></div>';
+        }
       } else {
         var dienste = dienstleistungenFuer(kat);
         dienste.forEach(function(dName){
@@ -6481,6 +6493,7 @@ function bindDynamic(){
     var standortElLeer = document.getElementById('checkStandort');
     if(standortElLeer) g.standort = standortElLeer.value.trim();
     g.leer = !g.leer;
+    g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
     dbPut('geraete', g, function(){
       loadAll(function(){ render(); toast(g.leer ? 'Als leer markiert' : 'Wieder als voll markiert'); });
     });
@@ -6744,6 +6757,7 @@ function bindDynamic(){
       var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
       if(!g) return;
       g.leer = !g.leer;
+      g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
       dbPut('geraete', g, function(){
         loadAll(function(){ render(); toast(g.leer ? 'Als leer markiert' : 'Wieder als voll markiert'); });
       });
