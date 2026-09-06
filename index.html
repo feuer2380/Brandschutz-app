@@ -5276,9 +5276,9 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
     if(leereStandort.length){
       html += '<div class="meta2" style="margin-bottom:6px; color:#c23f12; font-weight:600;">Aktuell leer: ' + leereStandort.join(', ') + '</div>';
     }
-    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th><th>Abgefüllt</th><th>Angeschlossen</th><th>Menge</th><th>Tage am Anschluss</th></tr></thead><tbody>';
+    html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Typ</th><th>Standort</th><th>Serien-Nr.</th><th>Abgefüllt</th><th>Angeschlossen</th><th>Menge</th><th>Tage am Anschluss</th><th>Leer</th></tr></thead><tbody>';
     zeilen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); }).forEach(function(z){
-      html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.standort || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + (z.abfuelldatum ? fmtDatumZeitLokal(z.abfuelldatum) : '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td><td>' + (z.istLager ? '- (Lager)' : (z.tageAmAnschluss + ' Tag' + (z.tageAmAnschluss === 1 ? '' : 'e') + (z.istAktuell ? ' (aktuell)' : ''))) + '</td></tr>';
+      html += '<tr><td>' + (z.k ? escapeHtml(z.k.name) : '-') + '</td><td>' + escapeHtml(z.g.typ || '-') + '</td><td>' + escapeHtml(z.standort || '-') + '</td><td>' + escapeHtml(z.g.seriennummer || '-') + '</td><td>' + (z.abfuelldatum ? fmtDatumZeitLokal(z.abfuelldatum) : '-') + '</td><td>' + fmtDatumZeitLokal(z.datum) + '</td><td>' + (typeof z.menge === 'number' ? (z.menge.toLocaleString('de-AT') + ' ' + z.einheit) : '-') + '</td><td>' + (z.istLager ? '- (Lager)' : (z.tageAmAnschluss + ' Tag' + (z.tageAmAnschluss === 1 ? '' : 'e') + (z.istAktuell ? ' (aktuell)' : ''))) + '</td><td>' + (z.g.leer ? '<strong style="color:#c23f12;">Ja</strong>' : 'Nein') + '</td></tr>';
     });
     html += '</tbody></table>';
     html += '</div>';
