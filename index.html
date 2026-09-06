@@ -1603,8 +1603,6 @@ function renderGeraetCheck(geraetId){
       html += '<button type="button" class="btn block" id="btnAbgefuellt" style="background:#1d5fa8; margin-top:16px;">&#128167; Abgefüllt (heute) &ndash; Wasser/CO2 neu befüllt</button>';
       html += '<button type="button" class="btn block" id="btnAngeschlossen" style="background:var(--ok); margin-top:10px;">&#10003; Angeschlossen &ndash; Flasche in Betrieb genommen</button>';
       html += '<button type="button" class="btn block secondary" id="btnLeerToggle" style="margin-top:10px;' + (g.leer ? ' background:#c98a1c; color:#fff; border-color:#c98a1c;' : ' color:#c98a1c; border-color:#e6c9a3;') + '">' + (g.leer ? '&#10003; Als leer markiert &ndash; wieder voll melden' : '&#128683; Behälter ist leer melden') + '</button>';
-      html += '<button type="button" class="btn block secondary" id="btnReparatur" style="margin-top:10px; color:#c98a1c; border-color:#e6c9a3;">&#9881; Reparatur nötig</button>';
-      html += '<button type="button" class="btn block secondary" id="btnAusscheiden" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Gerät ausscheiden (zu alt / defekt)</button>';
     } else {
     html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
     html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
@@ -2242,7 +2240,24 @@ function renderKundeDetail(kundeId){
       html += '</select>';
     }
     var geraeteGefiltert = state.kundeGeraeteKatFilter ? geraete.filter(function(g){ return (g.kategorie || 'Feuerlöscher').trim() === state.kundeGeraeteKatFilter; }) : geraete;
-    var geraeteSortiert = geraeteGefiltert.slice().sort(function(a,b){
+    var geraeteNachNr = geraeteGefiltert.slice().sort(function(a,b){ return geraeteSortierVergleich(a, b); });
+    var katReihenfolge1 = [];
+    geraeteNachNr.forEach(function(g){
+      var k = (g.kategorie || 'Feuerlöscher').trim();
+      if(katReihenfolge1.indexOf(k) === -1) katReihenfolge1.push(k);
+    });
+    function tageSeitAbfuellung(g){
+      return g.abfuelldatum ? Math.floor((new Date() - new Date(g.abfuelldatum)) / 86400000) : -1;
+    }
+    var geraeteSortiert = geraeteNachNr.slice().sort(function(a,b){
+      var ak = (a.kategorie || 'Feuerlöscher').trim();
+      var bk = (b.kategorie || 'Feuerlöscher').trim();
+      if(ak !== bk) return katReihenfolge1.indexOf(ak) - katReihenfolge1.indexOf(bk);
+      if(istFuellKategorie(ak)){
+        if(!!a.leer !== !!b.leer) return a.leer ? -1 : 1;
+        var at = tageSeitAbfuellung(a), bt = tageSeitAbfuellung(b);
+        if(at !== bt) return bt - at;
+      }
       return geraeteSortierVergleich(a, b);
     });
     var katZaehler1 = {};
@@ -2314,8 +2329,10 @@ function renderKundeDetail(kundeId){
         var klasseSchnell = function(key){ return aktErgSchnell === key ? 'btn small' : 'btn small secondary'; };
         html += '<div style="display:flex; gap:6px; margin-top:8px;">';
         html += '<button type="button" class="' + klasseSchnell('in_ordnung') + '" style="' + stilSchnell('in_ordnung') + '" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">' + (istKegAnschluss ? 'Angeschlossen' : 'In Ordnung') + '</button>';
-        html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
-        html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
+        if(!istKegAnschluss){
+          html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
+          html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
+        }
         html += '</div>';
         if(istKegAnschluss){
           html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px; background:#1d5fa8; color:#fff; border-color:#1d5fa8;" data-nurAbfuellBtn="' + g.id + '">&#128167; Abgefüllt (Wasser/CO2 neu befüllt)</button>';
@@ -5799,8 +5816,10 @@ function modalSammelbericht(kundeId){
         html += '<div style="display:flex; gap:6px; margin-top:10px;">';
         var istFuellKatSB = istFuellKategorie((g.kategorie || 'Feuerlöscher').trim());
         html += '<button type="button" class="' + klasse('in_ordnung') + '" data-gid="' + g.id + '" data-erg="in_ordnung" style="' + stil('in_ordnung') + '">' + (istFuellKatSB ? 'Angeschlossen' : 'In Ordnung') + '</button>';
-        html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
-        html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
+        if(!istFuellKatSB){
+          html += '<button type="button" class="' + klasse('reparatur') + '" data-gid="' + g.id + '" data-erg="reparatur" style="' + stil('reparatur') + '">Reparatur</button>';
+          html += '<button type="button" class="' + klasse('ausscheiden') + '" data-gid="' + g.id + '" data-erg="ausscheiden" style="' + stil('ausscheiden') + '">Ausscheiden</button>';
+        }
         html += '</div>';
         if(istFuellKatSB){
           html += '<button type="button" class="' + (aktErg === 'nur_abfuellen' ? 'btn small sbErgBtn active' : 'btn small secondary sbErgBtn') + '" data-gid="' + g.id + '" data-erg="nur_abfuellen" style="width:100%; margin-top:6px;' + (aktErg === 'nur_abfuellen' ? ' background:#1d5fa8;' : '') + '">&#128167; Nur Abfüllen (kein Anschluss, Termin bleibt)</button>';
