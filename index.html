@@ -1950,17 +1950,12 @@ function checkAbgefuellt(geraetId){
   var mengeInfoAbf = mengeAusTyp(g.typ, g.kategorie);
   g.fuellungen.push({ datum: jetztLokalDatumZeit(), menge: mengeInfoAbf.wert, einheit: mengeInfoAbf.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
   dbPut('geraete', g, function(){
-    var rueckkehrKunde = state.checkRueckkehrZuKunde;
+    var rueckkehrKunde = state.checkRueckkehrZuKunde || g.kundeId;
     loadAll(function(){
-      if(rueckkehrKunde){
-        state.activeKundeId = rueckkehrKunde;
-        state.checkRueckkehrZuKunde = null;
-        state.tab = 'kundeDetail';
-        render();
-      } else {
-        state.tab = 'scan';
-        render();
-      }
+      state.activeKundeId = rueckkehrKunde;
+      state.checkRueckkehrZuKunde = null;
+      state.tab = 'kundeDetail';
+      render();
       toast('Abfüllung erfasst: ' + fmtDate(heuteKurz));
     });
   });
