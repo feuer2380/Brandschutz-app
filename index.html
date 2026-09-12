@@ -5676,7 +5676,8 @@ function modalBrandschutzplan(kundeId){
 
 function bsplanPinchAktivieren(){
   var canvas = document.getElementById('bsplanCanvas');
-  if(!canvas) return;
+  var box = document.getElementById('bsplanViewerBox');
+  if(!canvas || !box) return;
   var start = null;
   var letzterFaktor = 1;
 
@@ -5688,9 +5689,20 @@ function bsplanPinchAktivieren(){
 
   canvas.addEventListener('touchstart', function(e){
     if(e.touches.length === 2){
-      start = { dist: abstand(e.touches), zoom: bsplanZoom };
+      var mitteX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      var mitteY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      var canvasRect = canvas.getBoundingClientRect();
+      var boxRect = box.getBoundingClientRect();
+      start = {
+        dist: abstand(e.touches),
+        zoom: bsplanZoom,
+        canvasX: mitteX - canvasRect.left,
+        canvasY: mitteY - canvasRect.top,
+        versatzX: mitteX - boxRect.left,
+        versatzY: mitteY - boxRect.top
+      };
       letzterFaktor = 1;
-      canvas.style.transformOrigin = 'center center';
+      canvas.style.transformOrigin = start.canvasX + 'px ' + start.canvasY + 'px';
     }
   }, { passive: true });
 
@@ -5708,7 +5720,13 @@ function bsplanPinchAktivieren(){
       var neuerZoom = Math.max(0.6, Math.min(8, start.zoom * letzterFaktor));
       canvas.style.transform = '';
       bsplanZoom = neuerZoom;
-      bsplanSeiteAnzeigen(bsplanAktuelleSeite, bsplanAktuelleMarkierung);
+      bsplanSeiteAnzeigen(bsplanAktuelleSeite, bsplanAktuelleMarkierung, null, {
+        canvasXAlt: start.canvasX,
+        canvasYAlt: start.canvasY,
+        zoomAlt: start.zoom,
+        versatzX: start.versatzX,
+        versatzY: start.versatzY
+      });
       start = null;
     }
   });
@@ -5730,7 +5748,7 @@ function bsplanPdfLaden(plan, cb){
   }
 }
 
-function bsplanSeiteAnzeigen(seitenNr, markierung, zoomUeberschreiben){
+function bsplanSeiteAnzeigen(seitenNr, markierung, zoomUeberschreiben, anker){
   if(!bsplanAktuellesPdf) return;
   bsplanAktuelleSeite = seitenNr;
   if(markierung !== undefined) bsplanAktuelleMarkierung = markierung;
@@ -5750,12 +5768,14 @@ function bsplanSeiteAnzeigen(seitenNr, markierung, zoomUeberschreiben){
     var renderAufgabe = page.render({ canvasContext: ctx, viewport: viewport });
     renderAufgabe.promise.then(function(){
       var mitte = bsplanMarkierungZeichnen(ctx, viewport, bsplanAktuelleMarkierung);
-      if(mitte){
-        var box = document.getElementById('bsplanViewerBox');
-        if(box){
-          box.scrollLeft = mitte.x - box.clientWidth / 2;
-          box.scrollTop = mitte.y - box.clientHeight / 2;
-        }
+      var box = document.getElementById('bsplanViewerBox');
+      if(anker && box){
+        var faktorAenderung = bsplanZoom / anker.zoomAlt;
+        box.scrollLeft = anker.canvasXAlt * faktorAenderung - anker.versatzX;
+        box.scrollTop = anker.canvasYAlt * faktorAenderung - anker.versatzY;
+      } else if(mitte && box){
+        box.scrollLeft = mitte.x - box.clientWidth / 2;
+        box.scrollTop = mitte.y - box.clientHeight / 2;
       }
     }).catch(function(err){
       console.error('Brandschutzplan Renderfehler', err);
