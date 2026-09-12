@@ -5704,30 +5704,39 @@ function bsplanTextEnthaeltNummer(seitenText, suche){
 function bsplanSuchen(){
   if(!bsplanAktuellesPdf) return;
   var feld = document.getElementById('bsplanSuche');
-  var suche = feld ? feld.value.trim() : '';
-  if(!suche){ toast('Bitte eine Nummer eingeben'); return; }
+  var sucheRoh = feld ? feld.value.trim() : '';
+  if(!sucheRoh){ toast('Bitte eine Nummer eingeben'); return; }
   var ergebnis = document.getElementById('bsplanErgebnis');
   if(ergebnis) ergebnis.textContent = 'Suche läuft...';
 
   var pdfDoc = bsplanAktuellesPdf;
   var anzahlSeiten = pdfDoc.numPages;
-  var gefunden = [];
+  var trefferGenau = [];
+  var trefferLocker = [];
+  var sucheKlein = sucheRoh.toLowerCase();
+  var sucheLocker = sucheRoh.replace(/\s+/g, '').toLowerCase();
   var i = 1;
 
   function naechsteSeite(){
     if(i > anzahlSeiten){
-      bsplanSucheFertig(gefunden, suche);
+      bsplanSucheFertig(trefferGenau.length ? trefferGenau : trefferLocker, sucheRoh);
       return;
     }
     var seitenNr = i;
     pdfDoc.getPage(seitenNr).then(function(page){
       return page.getTextContent();
     }).then(function(content){
-      var teile = [];
-      content.items.forEach(function(it){ teile.push(it.str); });
-      var text = teile.join(' ');
-      if(bsplanTextEnthaeltNummer(text, suche)){
-        gefunden.push(seitenNr);
+      var genauerTreffer = false;
+      var gesamtText = '';
+      content.items.forEach(function(it){
+        var stueck = it.str || '';
+        if(stueck.trim().toLowerCase() === sucheKlein) genauerTreffer = true;
+        gesamtText += stueck;
+      });
+      if(genauerTreffer){
+        trefferGenau.push(seitenNr);
+      } else if(gesamtText.replace(/\s+/g, '').toLowerCase().indexOf(sucheLocker) !== -1){
+        trefferLocker.push(seitenNr);
       }
       i++;
       naechsteSeite();
