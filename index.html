@@ -5549,6 +5549,7 @@ function modalDokumenteListe(kundeId){
 // ---------- Brandschutzplan (PDF mit Meldernummern-Suche) ----------
 var BSPLAN_ZOOM_STANDARD = 2.0;
 var BSPLAN_ZOOM_TREFFER = 4.5;
+var BSPLAN_MAX_CANVAS = 4000;
 var bsplanAktuellesPdf = null;
 var bsplanAktuelleSeite = 1;
 var bsplanAktuellerKundeId = null;
@@ -5736,6 +5737,11 @@ function bsplanSeiteAnzeigen(seitenNr, markierung, zoomUeberschreiben){
   if(zoomUeberschreiben) bsplanZoom = zoomUeberschreiben;
   bsplanAktuellesPdf.getPage(seitenNr).then(function(page){
     var viewport = page.getViewport({ scale: bsplanZoom });
+    var groessteSeite = Math.max(viewport.width, viewport.height);
+    if(groessteSeite > BSPLAN_MAX_CANVAS){
+      bsplanZoom = bsplanZoom * (BSPLAN_MAX_CANVAS / groessteSeite);
+      viewport = page.getViewport({ scale: bsplanZoom });
+    }
     var canvas = document.getElementById('bsplanCanvas');
     if(!canvas) return;
     canvas.width = viewport.width;
@@ -5751,6 +5757,8 @@ function bsplanSeiteAnzeigen(seitenNr, markierung, zoomUeberschreiben){
           box.scrollTop = mitte.y - box.clientHeight / 2;
         }
       }
+    }).catch(function(err){
+      console.error('Brandschutzplan Renderfehler', err);
     });
     var info = document.getElementById('bsplanSeiteInfo');
     if(info) info.textContent = 'Seite ' + seitenNr + ' von ' + bsplanAktuellesPdf.numPages;
