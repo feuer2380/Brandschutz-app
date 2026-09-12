@@ -5548,10 +5548,12 @@ function modalDokumenteListe(kundeId){
 
 // ---------- Brandschutzplan (PDF mit Meldernummern-Suche) ----------
 var BSPLAN_ZOOM_STANDARD = 2.0;
+var BSPLAN_ZOOM_TREFFER = 4.5;
 var bsplanAktuellesPdf = null;
 var bsplanAktuelleSeite = 1;
 var bsplanAktuellerKundeId = null;
 var bsplanZoom = BSPLAN_ZOOM_STANDARD;
+var bsplanAktuelleMarkierung = null;
 
 function bsplanDataUrlZuUint8Array(dataUrl){
   var parts = dataUrl.split(',');
@@ -5571,6 +5573,7 @@ function modalBrandschutzplan(kundeId){
   bsplanAktuelleSeite = 1;
   bsplanAktuellerKundeId = kundeId;
   bsplanZoom = BSPLAN_ZOOM_STANDARD;
+  bsplanAktuelleMarkierung = null;
 
   var html = '';
   html += '<div class="modal-head"><h3>Brandschutzplan</h3><button class="close" id="mClose">&times;</button></div>';
@@ -5597,7 +5600,7 @@ function modalBrandschutzplan(kundeId){
     html += '<button class="btn small secondary" id="bsplanZoomPlusBtn">+</button>';
     html += '</div>';
 
-    html += '<div style="overflow:auto; max-height:55vh; margin-top:10px; border:1px solid var(--line); border-radius:8px; -webkit-overflow-scrolling:touch;">';
+    html += '<div id="bsplanViewerBox" style="overflow:auto; max-height:55vh; margin-top:10px; border:1px solid var(--line); border-radius:8px; -webkit-overflow-scrolling:touch;">';
     html += '<canvas id="bsplanCanvas" style="display:block;"></canvas>';
     html += '</div>';
 
@@ -5647,17 +5650,23 @@ function modalBrandschutzplan(kundeId){
       if(e.key === 'Enter'){ bsplanSuchen(); }
     });
     document.getElementById('bsplanVorherBtn').onclick = function(){
-      if(bsplanAktuelleSeite > 1) bsplanSeiteAnzeigen(bsplanAktuelleSeite - 1);
+      if(bsplanAktuelleSeite > 1){
+        bsplanAktuelleMarkierung = null;
+        bsplanSeiteAnzeigen(bsplanAktuelleSeite - 1);
+      }
     };
     document.getElementById('bsplanNaechsteBtn').onclick = function(){
-      if(bsplanAktuellesPdf && bsplanAktuelleSeite < bsplanAktuellesPdf.numPages) bsplanSeiteAnzeigen(bsplanAktuelleSeite + 1);
+      if(bsplanAktuellesPdf && bsplanAktuelleSeite < bsplanAktuellesPdf.numPages){
+        bsplanAktuelleMarkierung = null;
+        bsplanSeiteAnzeigen(bsplanAktuelleSeite + 1);
+      }
     };
     document.getElementById('bsplanZoomMinusBtn').onclick = function(){
       bsplanZoom = Math.max(0.6, bsplanZoom - 0.3);
       bsplanSeiteAnzeigen(bsplanAktuelleSeite);
     };
     document.getElementById('bsplanZoomPlusBtn').onclick = function(){
-      bsplanZoom = Math.min(4, bsplanZoom + 0.3);
+      bsplanZoom = Math.min(6, bsplanZoom + 0.3);
       bsplanSeiteAnzeigen(bsplanAktuelleSeite);
     };
   }
@@ -5679,9 +5688,11 @@ function bsplanPdfLaden(plan, cb){
   }
 }
 
-function bsplanSeiteAnzeigen(seitenNr){
+function bsplanSeiteAnzeigen(seitenNr, markierung, zoomUeberschreiben){
   if(!bsplanAktuellesPdf) return;
   bsplanAktuelleSeite = seitenNr;
+  if(markierung !== undefined) bsplanAktuelleMarkierung = markierung;
+  if(zoomUeberschreiben) bsplanZoom = zoomUeberschreiben;
   bsplanAktuellesPdf.getPage(seitenNr).then(function(page){
     var viewport = page.getViewport({ scale: bsplanZoom });
     var canvas = document.getElementById('bsplanCanvas');
@@ -5689,16 +5700,40 @@ function bsplanSeiteAnzeigen(seitenNr){
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     var ctx = canvas.getContext('2d');
-    page.render({ canvasContext: ctx, viewport: viewport });
+    var renderAufgabe = page.render({ canvasContext: ctx, viewport: viewport });
+    renderAufgabe.promise.then(function(){
+      var mitte = bsplanMarkierungZeichnen(ctx, viewport, bsplanAktuelleMarkierung);
+      if(mitte){
+        var box = document.getElementById('bsplanViewerBox');
+        if(box){
+          box.scrollLeft = mitte.x - box.clientWidth / 2;
+          box.scrollTop = mitte.y - box.clientHeight / 2;
+        }
+      }
+    });
     var info = document.getElementById('bsplanSeiteInfo');
     if(info) info.textContent = 'Seite ' + seitenNr + ' von ' + bsplanAktuellesPdf.numPages;
   });
 }
 
-function bsplanTextEnthaeltNummer(seitenText, suche){
-  var sicher = suche.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var re = new RegExp('(^|[^0-9A-Za-z/])' + sicher + '($|[^0-9A-Za-z/])', 'i');
-  return re.test(' ' + seitenText + ' ');
+function bsplanMarkierungZeichnen(ctx, viewport, markierung){
+  if(!markierung) return null;
+  var combined = pdfjsLib.Util.transform(viewport.transform, markierung.transform);
+  var hoehe = Math.sqrt(combined[2]*combined[2] + combined[3]*combined[3]);
+  var breite = Math.max(markierung.width * viewport.scale, hoehe);
+  var mitteX = combined[4] + breite / 2;
+  var mitteY = combined[5] - hoehe / 2;
+  var radius = Math.max(breite, hoehe) * 0.75 + 16;
+
+  ctx.save();
+  ctx.strokeStyle = '#e8541f';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(mitteX, mitteY, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  return { x: mitteX, y: mitteY };
 }
 
 function bsplanSuchen(){
@@ -5726,17 +5761,19 @@ function bsplanSuchen(){
     pdfDoc.getPage(seitenNr).then(function(page){
       return page.getTextContent();
     }).then(function(content){
-      var genauerTreffer = false;
+      var treffer = null;
       var gesamtText = '';
       content.items.forEach(function(it){
         var stueck = it.str || '';
-        if(stueck.trim().toLowerCase() === sucheKlein) genauerTreffer = true;
+        if(!treffer && stueck.trim().toLowerCase() === sucheKlein){
+          treffer = { seite: seitenNr, transform: it.transform, width: it.width, height: it.height };
+        }
         gesamtText += stueck;
       });
-      if(genauerTreffer){
-        trefferGenau.push(seitenNr);
+      if(treffer){
+        trefferGenau.push(treffer);
       } else if(gesamtText.replace(/\s+/g, '').toLowerCase().indexOf(sucheLocker) !== -1){
-        trefferLocker.push(seitenNr);
+        trefferLocker.push({ seite: seitenNr, transform: null });
       }
       i++;
       naechsteSeite();
@@ -5757,20 +5794,23 @@ function bsplanSucheFertig(gefunden, suche){
     return;
   }
   if(gefunden.length === 1){
-    ergebnis.textContent = 'Gefunden auf Seite ' + gefunden[0];
-    bsplanSeiteAnzeigen(gefunden[0]);
+    var t = gefunden[0];
+    ergebnis.textContent = 'Gefunden auf Seite ' + t.seite;
+    bsplanSeiteAnzeigen(t.seite, t.transform ? t : null, t.transform ? BSPLAN_ZOOM_TREFFER : BSPLAN_ZOOM_STANDARD);
     return;
   }
   ergebnis.innerHTML = '';
   var label = document.createElement('span');
   label.textContent = 'Mehrere Treffer, bitte Seite wählen: ';
   ergebnis.appendChild(label);
-  gefunden.forEach(function(seitenNr){
+  gefunden.forEach(function(t){
     var btn = document.createElement('button');
     btn.className = 'btn small secondary';
     btn.style.marginLeft = '6px';
-    btn.textContent = 'Seite ' + seitenNr;
-    btn.onclick = function(){ bsplanSeiteAnzeigen(seitenNr); };
+    btn.textContent = 'Seite ' + t.seite;
+    btn.onclick = function(){
+      bsplanSeiteAnzeigen(t.seite, t.transform ? t : null, t.transform ? BSPLAN_ZOOM_TREFFER : BSPLAN_ZOOM_STANDARD);
+    };
     ergebnis.appendChild(btn);
   });
 }
