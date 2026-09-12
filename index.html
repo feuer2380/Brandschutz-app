@@ -5666,10 +5666,51 @@ function modalBrandschutzplan(kundeId){
       bsplanSeiteAnzeigen(bsplanAktuelleSeite);
     };
     document.getElementById('bsplanZoomPlusBtn').onclick = function(){
-      bsplanZoom = Math.min(6, bsplanZoom + 0.3);
+      bsplanZoom = Math.min(8, bsplanZoom + 0.3);
       bsplanSeiteAnzeigen(bsplanAktuelleSeite);
     };
+    bsplanPinchAktivieren();
   }
+}
+
+function bsplanPinchAktivieren(){
+  var canvas = document.getElementById('bsplanCanvas');
+  if(!canvas) return;
+  var start = null;
+  var letzterFaktor = 1;
+
+  function abstand(touches){
+    var dx = touches[0].clientX - touches[1].clientX;
+    var dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+
+  canvas.addEventListener('touchstart', function(e){
+    if(e.touches.length === 2){
+      start = { dist: abstand(e.touches), zoom: bsplanZoom };
+      letzterFaktor = 1;
+      canvas.style.transformOrigin = 'center center';
+    }
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', function(e){
+    if(start && e.touches.length === 2){
+      e.preventDefault();
+      var neuerAbstand = abstand(e.touches);
+      letzterFaktor = neuerAbstand / start.dist;
+      canvas.style.transform = 'scale(' + letzterFaktor + ')';
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', function(){
+    if(start){
+      var neuerZoom = Math.max(0.6, Math.min(8, start.zoom * letzterFaktor));
+      canvas.style.transform = '';
+      bsplanZoom = neuerZoom;
+      bsplanSeiteAnzeigen(bsplanAktuelleSeite, bsplanAktuelleMarkierung);
+      start = null;
+    }
+  });
 }
 
 function bsplanPdfLaden(plan, cb){
