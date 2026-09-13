@@ -5568,7 +5568,72 @@ function bsplanDataUrlZuUint8Array(dataUrl){
 function modalBrandschutzplan(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
-  var plan = state.brandschutzplaene.filter(function(p){ return p.kundeId === kundeId; })[0];
+  var plaene = state.brandschutzplaene.filter(function(p){ return p.kundeId === kundeId; })
+    .slice().sort(function(a,b){ return new Date(b.hochgeladenAm) - new Date(a.hochgeladenAm); });
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Brandschutzpläne</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>PDF-Datei auswählen</label>';
+  html += '<input type="file" accept="application/pdf" id="bsplanFile">';
+  html += '<label style="margin-top:8px;">Bezeichnung</label>';
+  html += '<input type="text" id="bsplanName" placeholder="z.B. Erdgeschoss, Dachboden">';
+  html += '<button class="btn block" id="bsplanHochladenBtn" style="margin-top:12px;">Plan hinzufügen</button>';
+
+  html += '<div class="section-title" style="margin-top:20px;">Hinterlegte Pläne</div>';
+  if(plaene.length === 0){
+    html += '<div class="empty">Noch keine Brandschutzpläne hinterlegt</div>';
+  } else {
+    plaene.forEach(function(p){
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + escapeHtml(p.name || 'Brandschutzplan') + '</h3></div>';
+      html += '<div class="meta">' + (p.hochgeladenAm ? fmtDate(p.hochgeladenAm) : '') + '</div>';
+      html += '<div style="display:flex; gap:8px; margin-top:8px;">';
+      html += '<button class="btn small secondary" data-bsplanoeffnen="' + p.id + '">Öffnen</button>';
+      html += '<button class="btn small" style="background:#b02a2a; color:#fff;" data-bsplanloeschen="' + p.id + '">Löschen</button>';
+      html += '</div></div>';
+    });
+  }
+
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+
+  document.getElementById('bsplanHochladenBtn').onclick = function(){
+    var fileEl = document.getElementById('bsplanFile');
+    var file = fileEl.files && fileEl.files[0];
+    if(!file){ toast('Bitte zuerst eine PDF-Datei auswählen'); return; }
+    var name = document.getElementById('bsplanName').value.trim() || file.name;
+    var reader = new FileReader();
+    reader.onload = function(){
+      var neuerPlan = { id: uid(), kundeId: kundeId, name: name, dataUrl: reader.result, hochgeladenAm: new Date().toISOString().substring(0,10) };
+      dbPut('brandschutzplaene', neuerPlan, function(){
+        state.brandschutzplaene.push(neuerPlan);
+        toast('Brandschutzplan gespeichert');
+        modalBrandschutzplan(kundeId);
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  document.querySelectorAll('[data-bsplanoeffnen]').forEach(function(b){
+    b.onclick = function(){
+      modalBrandschutzplanAnsicht(kundeId, b.getAttribute('data-bsplanoeffnen'));
+    };
+  });
+  document.querySelectorAll('[data-bsplanloeschen]').forEach(function(b){
+    b.onclick = function(){
+      var pid = b.getAttribute('data-bsplanloeschen');
+      if(!confirm('Diesen Brandschutzplan wirklich löschen?')) return;
+      dbDelete('brandschutzplaene', pid, function(){
+        state.brandschutzplaene = state.brandschutzplaene.filter(function(x){ return x.id !== pid; });
+        modalBrandschutzplan(kundeId);
+      });
+    };
+  });
+}
+
+function modalBrandschutzplanAnsicht(kundeId, planId){
+  var plan = state.brandschutzplaene.filter(function(p){ return p.id === planId; })[0];
+  if(!plan) return;
 
   bsplanAktuellesPdf = null;
   bsplanAktuelleSeite = 1;
@@ -5577,101 +5642,68 @@ function modalBrandschutzplan(kundeId){
   bsplanAktuelleMarkierung = null;
 
   var html = '';
-  html += '<div class="modal-head"><h3>Brandschutzplan</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="modal-head"><h3>' + escapeHtml(plan.name || 'Brandschutzplan') + '</h3><button class="close" id="mClose">&times;</button></div>';
 
-  if(!plan){
-    html += '<div class="meta">Noch kein Brandschutzplan hinterlegt.</div>';
-    html += '<label style="margin-top:10px;">PDF-Datei auswählen</label>';
-    html += '<input type="file" accept="application/pdf" id="bsplanFile">';
-    html += '<button class="btn block" id="bsplanHochladenBtn" style="margin-top:12px;">Plan hochladen</button>';
-  } else {
-    html += '<div class="meta">' + escapeHtml(plan.name || 'Brandschutzplan') + (plan.hochgeladenAm ? (' &middot; hinterlegt am ' + fmtDate(plan.hochgeladenAm)) : '') + '</div>';
+  html += '<div style="display:flex; gap:8px; margin-top:4px;">';
+  html += '<input type="text" id="bsplanSuche" placeholder="Melder-Nummer, z.B. 133/9" style="flex:1;">';
+  html += '<button class="btn" id="bsplanSuchenBtn">Suchen</button>';
+  html += '</div>';
+  html += '<div class="meta" id="bsplanErgebnis" style="margin-top:8px;"></div>';
 
-    html += '<div style="display:flex; gap:8px; margin-top:12px;">';
-    html += '<input type="text" id="bsplanSuche" placeholder="Melder-Nummer, z.B. 133/9" style="flex:1;">';
-    html += '<button class="btn" id="bsplanSuchenBtn">Suchen</button>';
-    html += '</div>';
-    html += '<div class="meta" id="bsplanErgebnis" style="margin-top:8px;"></div>';
+  html += '<div style="display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">';
+  html += '<button class="btn small secondary" id="bsplanVorherBtn">&laquo; Seite zurück</button>';
+  html += '<span id="bsplanSeiteInfo" class="meta">Seite wird geladen...</span>';
+  html += '<button class="btn small secondary" id="bsplanNaechsteBtn">Seite vor &raquo;</button>';
+  html += '<button class="btn small secondary" id="bsplanZoomMinusBtn">&minus;</button>';
+  html += '<button class="btn small secondary" id="bsplanZoomPlusBtn">+</button>';
+  html += '</div>';
 
-    html += '<div style="display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">';
-    html += '<button class="btn small secondary" id="bsplanVorherBtn">&laquo; Seite zurück</button>';
-    html += '<span id="bsplanSeiteInfo" class="meta">Seite wird geladen...</span>';
-    html += '<button class="btn small secondary" id="bsplanNaechsteBtn">Seite vor &raquo;</button>';
-    html += '<button class="btn small secondary" id="bsplanZoomMinusBtn">&minus;</button>';
-    html += '<button class="btn small secondary" id="bsplanZoomPlusBtn">+</button>';
-    html += '</div>';
+  html += '<div id="bsplanViewerBox" style="overflow:auto; max-height:55vh; margin-top:10px; border:1px solid var(--line); border-radius:8px; -webkit-overflow-scrolling:touch;">';
+  html += '<canvas id="bsplanCanvas" style="display:block;"></canvas>';
+  html += '</div>';
 
-    html += '<div id="bsplanViewerBox" style="overflow:auto; max-height:55vh; margin-top:10px; border:1px solid var(--line); border-radius:8px; -webkit-overflow-scrolling:touch;">';
-    html += '<canvas id="bsplanCanvas" style="display:block;"></canvas>';
-    html += '</div>';
-
-    html += '<div class="section-title" style="margin-top:20px;">Plan ersetzen</div>';
-    html += '<input type="file" accept="application/pdf" id="bsplanFile">';
-    html += '<button class="btn block secondary" id="bsplanHochladenBtn" style="margin-top:10px;">Neuen Plan hochladen (ersetzt den aktuellen)</button>';
-  }
+  html += '<button class="btn block secondary" id="bsplanZurueckBtn" style="margin-top:16px;">Zurück zur Planliste</button>';
 
   openModal(html);
   document.getElementById('mClose').onclick = function(){
     bsplanAktuellesPdf = null;
     closeModal();
   };
-
-  document.getElementById('bsplanHochladenBtn').onclick = function(){
-    var fileEl = document.getElementById('bsplanFile');
-    var file = fileEl.files && fileEl.files[0];
-    if(!file){ toast('Bitte zuerst eine PDF-Datei auswählen'); return; }
-    var reader = new FileReader();
-    reader.onload = function(){
-      var neuerPlan = { id: uid(), kundeId: kundeId, name: file.name, dataUrl: reader.result, hochgeladenAm: new Date().toISOString().substring(0,10) };
-      var speichern = function(){
-        dbPut('brandschutzplaene', neuerPlan, function(){
-          state.brandschutzplaene = state.brandschutzplaene.filter(function(p){ return p.kundeId !== kundeId; });
-          state.brandschutzplaene.push(neuerPlan);
-          toast('Brandschutzplan gespeichert');
-          modalBrandschutzplan(kundeId);
-        });
-      };
-      if(plan){
-        dbDelete('brandschutzplaene', plan.id, function(){ speichern(); });
-      } else {
-        speichern();
-      }
-    };
-    reader.readAsDataURL(file);
+  document.getElementById('bsplanZurueckBtn').onclick = function(){
+    bsplanAktuellesPdf = null;
+    modalBrandschutzplan(kundeId);
   };
 
-  if(plan){
-    bsplanPdfLaden(plan, function(pdfDoc){
-      bsplanAktuellesPdf = pdfDoc;
-      bsplanSeiteAnzeigen(1);
-    });
+  bsplanPdfLaden(plan, function(pdfDoc){
+    bsplanAktuellesPdf = pdfDoc;
+    bsplanSeiteAnzeigen(1);
+  });
 
-    document.getElementById('bsplanSuchenBtn').onclick = function(){ bsplanSuchen(); };
-    document.getElementById('bsplanSuche').addEventListener('keydown', function(e){
-      if(e.key === 'Enter'){ bsplanSuchen(); }
-    });
-    document.getElementById('bsplanVorherBtn').onclick = function(){
-      if(bsplanAktuelleSeite > 1){
-        bsplanAktuelleMarkierung = null;
-        bsplanSeiteAnzeigen(bsplanAktuelleSeite - 1);
-      }
-    };
-    document.getElementById('bsplanNaechsteBtn').onclick = function(){
-      if(bsplanAktuellesPdf && bsplanAktuelleSeite < bsplanAktuellesPdf.numPages){
-        bsplanAktuelleMarkierung = null;
-        bsplanSeiteAnzeigen(bsplanAktuelleSeite + 1);
-      }
-    };
-    document.getElementById('bsplanZoomMinusBtn').onclick = function(){
-      bsplanZoom = Math.max(0.6, bsplanZoom - 0.3);
-      bsplanSeiteAnzeigen(bsplanAktuelleSeite);
-    };
-    document.getElementById('bsplanZoomPlusBtn').onclick = function(){
-      bsplanZoom = Math.min(8, bsplanZoom + 0.3);
-      bsplanSeiteAnzeigen(bsplanAktuelleSeite);
-    };
-    bsplanPinchAktivieren();
-  }
+  document.getElementById('bsplanSuchenBtn').onclick = function(){ bsplanSuchen(); };
+  document.getElementById('bsplanSuche').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ bsplanSuchen(); }
+  });
+  document.getElementById('bsplanVorherBtn').onclick = function(){
+    if(bsplanAktuelleSeite > 1){
+      bsplanAktuelleMarkierung = null;
+      bsplanSeiteAnzeigen(bsplanAktuelleSeite - 1);
+    }
+  };
+  document.getElementById('bsplanNaechsteBtn').onclick = function(){
+    if(bsplanAktuellesPdf && bsplanAktuelleSeite < bsplanAktuellesPdf.numPages){
+      bsplanAktuelleMarkierung = null;
+      bsplanSeiteAnzeigen(bsplanAktuelleSeite + 1);
+    }
+  };
+  document.getElementById('bsplanZoomMinusBtn').onclick = function(){
+    bsplanZoom = Math.max(0.6, bsplanZoom - 0.3);
+    bsplanSeiteAnzeigen(bsplanAktuelleSeite);
+  };
+  document.getElementById('bsplanZoomPlusBtn').onclick = function(){
+    bsplanZoom = Math.min(8, bsplanZoom + 0.3);
+    bsplanSeiteAnzeigen(bsplanAktuelleSeite);
+  };
+  bsplanPinchAktivieren();
 }
 
 function bsplanPinchAktivieren(){
