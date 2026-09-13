@@ -1616,6 +1616,10 @@ function renderGeraetCheck(geraetId){
       html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
       html += '<button type="button" class="btn block" id="btnAbgefuellt" style="background:#1d5fa8; margin-top:16px;">&#128167; Abgefüllt (heute) &ndash; Wasser/CO2 neu befüllt</button>';
       html += '<button type="button" class="btn block" id="btnAngeschlossen" style="background:var(--ok); margin-top:10px;">&#10003; Angeschlossen &ndash; Flasche in Betrieb genommen</button>';
+      if(g.leer && g.leerSeit){
+        var tageBisLeerScan = g.letzterAnschluss ? Math.round((new Date(g.leerSeit) - new Date(g.letzterAnschluss)) / 86400000) : null;
+        html += '<div class="meta" style="margin-top:8px; color:#c23f12; font-weight:600;">Leer seit ' + escapeHtml(fmtDatumZeitLokal(g.leerSeit)) + (tageBisLeerScan !== null ? ' &middot; ' + tageBisLeerScan + ' Tag' + (tageBisLeerScan === 1 ? '' : 'e') + ' im Einsatz ab Anschluss' : '') + '</div>';
+      }
       html += '<button type="button" class="btn block secondary" id="btnLeerToggle" style="margin-top:10px;' + (g.leer ? ' background:#c98a1c; color:#fff; border-color:#c98a1c;' : ' color:#c98a1c; border-color:#e6c9a3;') + '">' + (g.leer ? '&#10003; Als leer markiert &ndash; wieder voll melden' : '&#128683; Behälter ist leer melden') + '</button>';
     } else {
     html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
@@ -2350,6 +2354,10 @@ function renderKundeDetail(kundeId){
         html += '</div>';
         if(istKegAnschluss){
           html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px; background:#1d5fa8; color:#fff; border-color:#1d5fa8;" data-nurAbfuellBtn="' + g.id + '">&#128167; Abgefüllt (Wasser/CO2 neu befüllt)</button>';
+          if(g.leer && g.leerSeit){
+            var tageBisLeerSchnell = g.letzterAnschluss ? Math.round((new Date(g.leerSeit) - new Date(g.letzterAnschluss)) / 86400000) : null;
+            html += '<div class="meta" style="margin-top:6px; color:#c23f12; font-weight:600;">Leer seit ' + escapeHtml(fmtDatumZeitLokal(g.leerSeit)) + (tageBisLeerSchnell !== null ? ' &middot; ' + tageBisLeerSchnell + ' Tag' + (tageBisLeerSchnell === 1 ? '' : 'e') + ' im Einsatz ab Anschluss' : '') + '</div>';
+          }
           html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px;' + (g.leer ? ' background:#c98a1c; color:#fff; border-color:#c98a1c;' : '') + '" data-leerToggleBtn="' + g.id + '">' + (g.leer ? '&#10003; Als leer markiert &ndash; wieder voll melden' : '&#128683; Behälter ist leer melden') + '</button>';
         }
         }
