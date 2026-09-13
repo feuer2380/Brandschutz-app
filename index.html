@@ -1569,6 +1569,10 @@ function renderGeraetCheck(geraetId){
   } else if(g.standort){
     html += '<div class="meta">Standort: ' + escapeHtml(g.standort) + '</div>';
   }
+  if(istPerchtlZisch){
+    var abfuellStatus = statusFuerAbfuellAlter(g.abfuelldatum, g.leer);
+    html += '<div style="margin-top:6px;"><span class="badge ' + abfuellStatus.cls + '">' + escapeHtml(abfuellStatus.label) + '</span></div>';
+  }
   if(g.baujahr) html += '<div class="meta">Baujahr: ' + g.baujahr + '</div>';
   if(g.seriennummer) html += '<div class="meta">Seriennummer: ' + escapeHtml(g.seriennummer) + '</div>';
   if(g.externeId) html += '<div class="meta">Externe ID: ' + escapeHtml(g.externeId) + '</div>';
