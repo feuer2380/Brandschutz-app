@@ -5573,6 +5573,16 @@ function modalBrandschutzplan(kundeId){
 
   var html = '';
   html += '<div class="modal-head"><h3>Brandschutzpläne</h3><button class="close" id="mClose">&times;</button></div>';
+
+  if(plaene.length > 0){
+    html += '<div style="display:flex; gap:8px; margin-top:4px;">';
+    html += '<input type="text" id="bsplanListSuche" placeholder="Melder-Nummer suchen, z.B. 133/9" style="flex:1;">';
+    html += '<button class="btn" id="bsplanListSuchenBtn">Suchen</button>';
+    html += '</div>';
+    html += '<div class="meta" id="bsplanListErgebnis" style="margin-top:8px;"></div>';
+  }
+
+  html += '<div class="section-title" style="margin-top:20px;">Plan hinzufügen</div>';
   html += '<label>PDF-Datei auswählen</label>';
   html += '<input type="file" accept="application/pdf" id="bsplanFile">';
   html += '<label style="margin-top:8px;">Bezeichnung</label>';
@@ -5597,10 +5607,19 @@ function modalBrandschutzplan(kundeId){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
 
+  if(plaene.length > 0){
+    document.getElementById('bsplanListSuchenBtn').onclick = function(){ bsplanSucheInListe(kundeId); };
+    document.getElementById('bsplanListSuche').addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ bsplanSucheInListe(kundeId); }
+    });
+  }
+
   document.getElementById('bsplanHochladenBtn').onclick = function(){
+    var hochladenBtn = document.getElementById('bsplanHochladenBtn');
     var fileEl = document.getElementById('bsplanFile');
     var file = fileEl.files && fileEl.files[0];
     if(!file){ toast('Bitte zuerst eine PDF-Datei auswählen'); return; }
+    hochladenBtn.disabled = true;
     var name = document.getElementById('bsplanName').value.trim() || file.name;
     var reader = new FileReader();
     reader.onload = function(){
@@ -5624,14 +5643,107 @@ function modalBrandschutzplan(kundeId){
       var pid = b.getAttribute('data-bsplanloeschen');
       if(!confirm('Diesen Brandschutzplan wirklich löschen?')) return;
       dbDelete('brandschutzplaene', pid, function(){
-        state.brandschutzplaene = state.brandschutzplaene.filter(function(x){ return x.id !== pid; });
-        modalBrandschutzplan(kundeId);
+        dbGetAll('brandschutzplaene', function(alle){
+          state.brandschutzplaene = alle;
+          modalBrandschutzplan(kundeId);
+        });
       });
     };
   });
 }
 
-function modalBrandschutzplanAnsicht(kundeId, planId){
+function bsplanSucheInListe(kundeId){
+  var feld = document.getElementById('bsplanListSuche');
+  var sucheRoh = feld ? feld.value.trim() : '';
+  if(!sucheRoh){ toast('Bitte eine Nummer eingeben'); return; }
+  var ergebnis = document.getElementById('bsplanListErgebnis');
+  if(ergebnis) ergebnis.textContent = 'Suche läuft...';
+
+  var plaene = state.brandschutzplaene.filter(function(p){ return p.kundeId === kundeId; });
+  if(plaene.length === 0){
+    if(ergebnis) ergebnis.textContent = 'Keine Pläne hinterlegt';
+    return;
+  }
+  var sucheKlein = sucheRoh.toLowerCase();
+  var sucheLocker = sucheRoh.replace(/\s+/g, '').toLowerCase();
+  var trefferGenau = [];
+  var trefferLocker = [];
+  var planIndex = 0;
+
+  function naechsterPlan(){
+    if(planIndex >= plaene.length){
+      bsplanListeSucheFertig(kundeId, trefferGenau.length ? trefferGenau : trefferLocker, sucheRoh);
+      return;
+    }
+    var plan = plaene[planIndex];
+    bsplanPdfLaden(plan, function(pdfDoc){
+      var seite = 1;
+      function naechsteSeite(){
+        if(seite > pdfDoc.numPages){
+          planIndex++;
+          naechsterPlan();
+          return;
+        }
+        var seitenNr = seite;
+        pdfDoc.getPage(seitenNr).then(function(page){
+          return page.getTextContent();
+        }).then(function(content){
+          var treffer = null;
+          var gesamtText = '';
+          content.items.forEach(function(it){
+            var stueck = it.str || '';
+            if(!treffer && stueck.trim().toLowerCase() === sucheKlein){
+              treffer = { transform: it.transform, width: it.width, height: it.height };
+            }
+            gesamtText += stueck;
+          });
+          if(treffer){
+            trefferGenau.push({ planId: plan.id, planName: plan.name, seite: seitenNr, transform: treffer.transform, width: treffer.width, height: treffer.height });
+          } else if(gesamtText.replace(/\s+/g, '').toLowerCase().indexOf(sucheLocker) !== -1){
+            trefferLocker.push({ planId: plan.id, planName: plan.name, seite: seitenNr, transform: null });
+          }
+          seite++;
+          naechsteSeite();
+        }).catch(function(err){
+          console.error('Fehler beim Durchsuchen von ' + plan.name + ', Seite ' + seitenNr, err);
+          seite++;
+          naechsteSeite();
+        });
+      }
+      naechsteSeite();
+    });
+  }
+  naechsterPlan();
+}
+
+function bsplanListeSucheFertig(kundeId, gefunden, suche){
+  var ergebnis = document.getElementById('bsplanListErgebnis');
+  if(!ergebnis) return;
+  if(gefunden.length === 0){
+    ergebnis.textContent = 'Nummer "' + suche + '" wurde in keinem Plan gefunden';
+    return;
+  }
+  if(gefunden.length === 1){
+    var t = gefunden[0];
+    modalBrandschutzplanAnsicht(kundeId, t.planId, t);
+    return;
+  }
+  ergebnis.innerHTML = '';
+  var label = document.createElement('span');
+  label.textContent = 'Mehrere Treffer, bitte wählen: ';
+  ergebnis.appendChild(label);
+  gefunden.forEach(function(t){
+    var btn = document.createElement('button');
+    btn.className = 'btn small secondary';
+    btn.style.marginLeft = '6px';
+    btn.style.marginTop = '6px';
+    btn.textContent = escapeHtml(t.planName) + ' (Seite ' + t.seite + ')';
+    btn.onclick = function(){ modalBrandschutzplanAnsicht(kundeId, t.planId, t); };
+    ergebnis.appendChild(btn);
+  });
+}
+
+function modalBrandschutzplanAnsicht(kundeId, planId, anfangsTreffer){
   var plan = state.brandschutzplaene.filter(function(p){ return p.id === planId; })[0];
   if(!plan) return;
 
@@ -5676,7 +5788,13 @@ function modalBrandschutzplanAnsicht(kundeId, planId){
 
   bsplanPdfLaden(plan, function(pdfDoc){
     bsplanAktuellesPdf = pdfDoc;
-    bsplanSeiteAnzeigen(1);
+    if(anfangsTreffer && anfangsTreffer.transform){
+      bsplanSeiteAnzeigen(anfangsTreffer.seite, anfangsTreffer, BSPLAN_ZOOM_TREFFER);
+    } else if(anfangsTreffer){
+      bsplanSeiteAnzeigen(anfangsTreffer.seite);
+    } else {
+      bsplanSeiteAnzeigen(1);
+    }
   });
 
   document.getElementById('bsplanSuchenBtn').onclick = function(){ bsplanSuchen(); };
