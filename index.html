@@ -95,6 +95,7 @@ if('serviceWorker' in navigator){
   .badge.ok{background:#2f7a4f; color:#fff;}
   .badge.warn{background:#c23f12; color:#fff;}
   .badge.blau{background:#dbe9fb; color:#1d5fa8;}
+  .chev{color:var(--muted); font-size:13px; flex-shrink:0;}
   .badge.soon{background:#e8a316; color:#fff;}
   .btn{
     background:var(--ember); color:#fff; border:none; border-radius:8px;
@@ -721,6 +722,9 @@ function renderInner(){
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
   if(state.tab === 'scan') startScanner();
+  if(fabEl && m.scrollHeight > m.clientHeight + 30){
+    fabEl.classList.add('fab-hidden');
+  }
 }
 
 // ---------- Dashboard ----------
@@ -835,7 +839,7 @@ function renderDashboard(){
     dmReihenfolge.forEach(function(kid){
       var eintraege = dmGruppen[kid];
       var k = kundeFuerPruefung(eintraege[0]);
-      var schlimmsteCls = 'ok';
+      var schlimmsteCls = 'blau';
       eintraege.forEach(function(p){
         var c = statusForDate(p.datum).cls;
         if(c === 'warn') schlimmsteCls = 'warn';
@@ -852,7 +856,7 @@ function renderDashboard(){
       } else {
         var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['dm_' + kid]);
         html += '<div class="card">';
-        html += '<div class="row offenKundeToggle" data-kid="dm_' + kid + '" style="cursor:pointer;"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        html += '<div class="row offenKundeToggle" data-kid="dm_' + kid + '" style="cursor:pointer; gap:8px;"><h3 style="flex:1;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' fällig</span><span class="chev">' + (aufgeklappt ? '&#9660;' : '&#9654;') + '</span></div>';
         if(!aufgeklappt && k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
         if(aufgeklappt){
           eintraege.forEach(function(p, idx){
@@ -888,7 +892,7 @@ function renderDashboard(){
     });
     reihenfolge.forEach(function(key){
       var gr = gruppen[key];
-      var schlimmsteCls = 'ok';
+      var schlimmsteCls = 'blau';
       gr.eintraege.forEach(function(p){
         var c = statusFuerBaldFaellig(p.datum).cls;
         if(c === 'warn') schlimmsteCls = 'warn';
@@ -904,7 +908,7 @@ function renderDashboard(){
       } else {
         var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['bf_' + key]);
         innerHtml += '<div class="card">';
-        innerHtml += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer;"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        innerHtml += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer; gap:8px;"><h3 style="flex:1;">' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig</span><span class="chev">' + (aufgeklappt ? '&#9660;' : '&#9654;') + '</span></div>';
         if(aufgeklappt){
           gr.eintraege.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
           gr.eintraege.forEach(function(p){
@@ -2479,14 +2483,24 @@ function renderPruefungen(){
   var offenAlle = sorted.filter(function(p){ return !p.erledigt; });
   var erledigtAlle = sorted.filter(function(p){ return p.erledigt; });
 
+  html += '<div class="row" style="align-items:center; margin-bottom:10px;">';
+  html += '<div class="section-title" style="margin:0;">Prüfungen</div>';
+  html += '<button type="button" class="icon-btn no-print" id="terminlisteBtn" title="Terminliste drucken / per Mail senden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg></button>';
+  html += '</div>';
+
   html += '<input id="pruefungSuchInput" type="text" placeholder="Suche nach Kunde, Gerät oder Standort..." value="' + escapeHtml(state.pruefungSuche || '') + '" style="margin-bottom:12px;">';
 
-  html += '<div class="row" style="align-items:center; gap:8px; margin-bottom:12px;">';
-  html += '<label style="white-space:nowrap; margin:0;">Zeitraum (Tage)</label>';
-  html += '<input id="pruefungTageInput" type="number" inputmode="numeric" min="1" placeholder="z.B. 365" value="' + (state.pruefungTage ? escapeHtml(String(state.pruefungTage)) : '') + '" style="max-width:120px;">';
-  if(state.pruefungTage){
-    html += '<button class="btn small secondary" id="pruefungTageZuruecksetzen">Zurücksetzen</button>';
-  }
+  var zeitraumOptionen = [
+    {tage:'', label:'Alle'},
+    {tage:'30', label:'30 Tage'},
+    {tage:'90', label:'90 Tage'},
+    {tage:'365', label:'Dieses Jahr'}
+  ];
+  html += '<div class="filter-bar segmented" style="margin-bottom:12px;">';
+  zeitraumOptionen.forEach(function(o){
+    var aktiv = (o.tage === '' && !state.pruefungTage) || (o.tage !== '' && String(state.pruefungTage) === o.tage);
+    html += '<button class="filter-btn' + (aktiv ? ' active' : '') + '" data-zeitraumtage="' + o.tage + '">' + o.label + '</button>';
+  });
   html += '</div>';
 
   var filter = state.pruefungFilter || 'alle';
@@ -2498,13 +2512,11 @@ function renderPruefungen(){
     {key:'reparatur', label:'Reparatur'},
     {key:'ausgeschieden', label:'Ausgeschieden'}
   ];
-  html += '<div class="filter-bar">';
+  html += '<div class="filter-bar segmented" style="margin-bottom:16px;">';
   filterOptionen.forEach(function(f){
     html += '<button class="filter-btn' + (filter === f.key ? ' active' : '') + '" data-filter="' + f.key + '">' + f.label + '</button>';
   });
   html += '</div>';
-
-  html += '<button class="btn block secondary" id="terminlisteBtn" style="margin-bottom:16px;">Terminliste drucken / per Mail senden</button>';
 
   var ergebnisFilter = (filter === 'reparatur' || filter === 'ausgeschieden');
   var tageLimit = state.pruefungTage ? parseInt(state.pruefungTage, 10) : null;
@@ -2533,7 +2545,7 @@ function renderPruefungen(){
       kReihenfolge.forEach(function(kid){
         var eintraege = kGruppen[kid];
         var k = kundeFuerPruefung(eintraege[0]);
-        var schlimmsteCls = 'ok';
+        var schlimmsteCls = 'blau';
         eintraege.forEach(function(p){
           var c = statusForDate(p.datum).cls;
           if(c === 'warn') schlimmsteCls = 'warn';
@@ -2541,7 +2553,7 @@ function renderPruefungen(){
         });
         var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt[kid]);
         html += '<div class="card">';
-        html += '<div class="row offenKundeToggle" data-kid="' + kid + '" style="cursor:pointer;"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' offen ' + (aufgeklappt ? '&#9650;' : '&#9660;') + '</span></div>';
+        html += '<div class="row offenKundeToggle" data-kid="' + kid + '" style="cursor:pointer; gap:8px;"><h3 style="flex:1;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' offen</span><span class="chev">' + (aufgeklappt ? '&#9660;' : '&#9654;') + '</span></div>';
         if(aufgeklappt){
           eintraege.forEach(function(p, idx){
             var st = statusForDate(p.datum);
@@ -7083,22 +7095,14 @@ function bindDynamic(){
     };
   }
 
-  var pruefungTageInput = document.getElementById('pruefungTageInput');
-  if(pruefungTageInput){
-    pruefungTageInput.oninput = function(){
-      state.pruefungTage = pruefungTageInput.value ? pruefungTageInput.value : '';
-      var pos = pruefungTageInput.selectionStart;
-      render();
-      var neu = document.getElementById('pruefungTageInput');
-      if(neu){ neu.focus(); try{ neu.setSelectionRange(pos, pos); } catch(e){} }
-    };
-  }
-  var pruefungTageZuruecksetzen = document.getElementById('pruefungTageZuruecksetzen');
-  if(pruefungTageZuruecksetzen){
-    pruefungTageZuruecksetzen.onclick = function(){
-      state.pruefungTage = '';
-      render();
-    };
+  var pruefungZeitraumBtns = document.querySelectorAll('[data-zeitraumtage]');
+  if(pruefungZeitraumBtns.length){
+    pruefungZeitraumBtns.forEach(function(b){
+      b.onclick = function(){
+        state.pruefungTage = b.getAttribute('data-zeitraumtage');
+        render();
+      };
+    });
   }
 
   document.querySelectorAll('.offenKundeToggle').forEach(function(el){
