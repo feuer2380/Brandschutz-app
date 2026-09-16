@@ -63,7 +63,7 @@ if('serviceWorker' in navigator){
     display:flex; align-items:baseline; justify-content:space-between;
     border-bottom:3px solid var(--ember);
   }
-  header.top h1{font-size:19px; color:#fff;}
+  header.top h1{font-size:19px; color:#fff; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif; font-weight:700;}
   header.top .sub{font-size:11px; color:var(--amber); text-transform:uppercase; letter-spacing:.08em;}
   main{flex:1; overflow-y:auto; padding:16px; padding-bottom:150px;}
   nav.tabs{
@@ -79,6 +79,7 @@ if('serviceWorker' in navigator){
     font-family:inherit;
   }
   nav.tabs button .ic{font-size:19px;}
+  nav.tabs button .ic .navsvg{width:21px; height:21px; display:block;}
   nav.tabs button.active{color:var(--amber);}
   .card{
     background:var(--card); border:1px solid var(--line); border-radius:10px;
@@ -162,7 +163,7 @@ if('serviceWorker' in navigator){
   }
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
-  .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center;}
+  .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center; box-shadow:0 1px 4px rgba(26,20,16,.06);}
   .stat .n{font-size:26px; font-family:Georgia,serif; color:var(--ember-dark);}
   .stat .l{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
   .statrow{display:flex; gap:10px; margin-bottom:16px;}
@@ -189,6 +190,11 @@ if('serviceWorker' in navigator){
   .filter-bar{display:flex; gap:8px; margin-bottom:15px; flex-wrap:wrap;}
   .filter-btn{padding:8px 12px; border:1px solid var(--line); border-radius:6px; background-color:#f5f5f5; cursor:pointer; font-size:13px; font-family:inherit; color:var(--ink);}
   .filter-btn.active{background-color:var(--ember-dark); color:#fff; border-color:var(--ember-dark);}
+  .filter-bar.segmented{flex-wrap:nowrap; overflow-x:auto; gap:0; background:#f0ebe2; border:1px solid var(--line); border-radius:8px; padding:3px; -webkit-overflow-scrolling:touch;}
+  .filter-bar.segmented .filter-btn{flex:0 0 auto; border:none; background:none; border-radius:6px; padding:7px 11px; white-space:nowrap;}
+  .filter-bar.segmented .filter-btn.active{background-color:var(--card); color:var(--ember-dark); box-shadow:0 1px 3px rgba(26,20,16,.12);}
+  .icon-btn{background:none; border:1px solid var(--line); border-radius:8px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; color:var(--ink); flex-shrink:0;}
+  .icon-btn svg{width:18px; height:18px;}
 
   .bericht-brief{background:#fff;}
   .bericht-kopf{
@@ -270,13 +276,11 @@ if('serviceWorker' in navigator){
   <button class="fab" id="fabBtn">+</button>
 
   <nav class="tabs">
-    <button class="tabbtn active" data-tab="dashboard"><span class="ic">&#8962;</span>Übersicht</button>
-    <button class="tabbtn" data-tab="kunden"><span class="ic">&#128100;</span>Kunden</button>
-    <button class="tabbtn" data-tab="scan"><span class="ic">&#128247;</span>Scan</button>
-    <button class="tabbtn" data-tab="pruefungen"><span class="ic">&#128197;</span>Prüfungen</button>
-    <button class="tabbtn" data-tab="berichte"><span class="ic">&#128196;</span>Berichte</button>
-    <button class="tabbtn" data-tab="statistik"><span class="ic">&#128202;</span>Statistik</button>
-    <button class="tabbtn" data-tab="lager"><span class="ic">&#128230;</span>Lager</button>
+    <button class="tabbtn active" data-tab="dashboard"><span class="ic"><svg class="navsvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></span>Übersicht</button>
+    <button class="tabbtn" data-tab="kunden"><span class="ic"><svg class="navsvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg></span>Kunden</button>
+    <button class="tabbtn" data-tab="scan"><span class="ic"><svg class="navsvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3.5"/><path d="M8 7l1.3-2h5.4L16 7"/></svg></span>Scan</button>
+    <button class="tabbtn" data-tab="pruefungen"><span class="ic"><svg class="navsvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg></span>Prüfungen</button>
+    <button class="tabbtn" data-tab="mehr"><span class="ic"><svg class="navsvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg></span>Mehr</button>
   </nav>
 </div>
 
@@ -688,9 +692,11 @@ function renderInner(){
     return;
   }
   if(tabsEl) tabsEl.style.display = '';
-  if(fabEl) fabEl.style.display = '';
+  if(fabEl) fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte') ? 'none' : '';
   document.querySelectorAll('.tabbtn').forEach(function(b){
-    b.className = 'tabbtn' + (b.getAttribute('data-tab') === state.tab ? ' active' : '');
+    var dt = b.getAttribute('data-tab');
+    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager'));
+    b.className = 'tabbtn' + (istAktiv ? ' active' : '');
   });
   if(state.tab === 'dashboard') m.innerHTML = renderDashboard();
   else if(state.tab === 'kunden') m.innerHTML = renderKunden();
@@ -2968,7 +2974,16 @@ function fmtKW2(datum){
 
 function renderStatistik(){
   var html = '';
-  html += '<div class="section-title">Statistik</div>';
+  var subTab = state.statSubTab || 'pruefungen';
+  var zeitRelevant = (subTab === 'pruefungen' || subTab === 'fuellungen');
+
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;">';
+  html += '<div class="section-title" style="margin:0;">Statistik</div>';
+  if(zeitRelevant){
+    html += '<button class="icon-btn no-print" id="druckBtnStat" title="Drucken / Als PDF teilen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1"/><path d="M6 17v4h12v-4"/></svg></button>';
+  }
+  html += '</div>';
+
   var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var statFilter = state.statFilter || 'tag';
   var statOptionen = [
@@ -2978,21 +2993,21 @@ function renderStatistik(){
     {key:'jahr', label:'Dieses Jahr'},
     {key:'benutzerdefiniert', label:'Zeitraum wählen'}
   ];
-  html += '<div class="filter-bar">';
-  statOptionen.forEach(function(f){
-    html += '<button class="filter-btn' + (statFilter === f.key ? ' active' : '') + '" data-statfilter="' + f.key + '">' + f.label + '</button>';
-  });
-  html += '</div>';
-  if(statFilter === 'benutzerdefiniert'){
-    var heuteKurz = new Date().toISOString().substring(0,10);
-    html += '<div class="row" style="gap:8px; margin-bottom:10px;">';
-    html += '<div style="flex:1;"><label style="margin-top:0;">Von</label><input type="date" id="statVonInput" value="' + (state.statVon || heuteKurz) + '"></div>';
-    html += '<div style="flex:1;"><label style="margin-top:0;">Bis</label><input type="date" id="statBisInput" value="' + (state.statBis || heuteKurz) + '"></div>';
+  if(zeitRelevant){
+    html += '<div class="filter-bar segmented">';
+    statOptionen.forEach(function(f){
+      html += '<button class="filter-btn' + (statFilter === f.key ? ' active' : '') + '" data-statfilter="' + f.key + '">' + f.label + '</button>';
+    });
     html += '</div>';
+    if(statFilter === 'benutzerdefiniert'){
+      var heuteKurz = new Date().toISOString().substring(0,10);
+      html += '<div class="row" style="gap:8px; margin-bottom:10px;">';
+      html += '<div style="flex:1;"><label style="margin-top:0;">Von</label><input type="date" id="statVonInput" value="' + (state.statVon || heuteKurz) + '"></div>';
+      html += '<div style="flex:1;"><label style="margin-top:0;">Bis</label><input type="date" id="statBisInput" value="' + (state.statBis || heuteKurz) + '"></div>';
+      html += '</div>';
+    }
   }
-  html += '<button class="btn block secondary no-print" id="druckBtnStat" style="margin-bottom:14px;">Drucken / Als PDF teilen</button>';
 
-  var subTab = state.statSubTab || 'pruefungen';
   var subTabs = [
     {key:'pruefungen', label:'Prüfungen'},
     {key:'bestand', label:'Gerätebestand'},
@@ -3000,7 +3015,7 @@ function renderStatistik(){
     {key:'fuellungen', label:'Füllungen'},
     {key:'lager', label:'Lager'}
   ];
-  html += '<div class="filter-bar" style="margin-bottom:14px;">';
+  html += '<div class="filter-bar segmented" style="margin-bottom:14px;">';
   subTabs.forEach(function(t){
     html += '<button class="filter-btn' + (subTab === t.key ? ' active' : '') + '" data-statsubtab="' + t.key + '">' + t.label + '</button>';
   });
@@ -5577,6 +5592,30 @@ function bsplanDataUrlZuUint8Array(dataUrl){
   return u8arr;
 }
 
+function modalMehrMenu(){
+  var html = '';
+  html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
+  var eintraege = [
+    { tab:'berichte', label:'Berichte', svg:'<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>' },
+    { tab:'statistik', label:'Statistik', svg:'<path d="M4 20V10M12 20V4M20 20v-7"/>' },
+    { tab:'lager', label:'Lager', svg:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' }
+  ];
+  eintraege.forEach(function(e){
+    html += '<button type="button" class="btn block secondary" style="justify-content:flex-start; gap:10px; margin-top:8px;" data-mehrtab="' + e.tab + '">';
+    html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px; height:19px; flex-shrink:0;">' + e.svg + '</svg>';
+    html += e.label + '</button>';
+  });
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('[data-mehrtab]').forEach(function(b){
+    b.onclick = function(){
+      state.tab = b.getAttribute('data-mehrtab');
+      closeModal();
+      render();
+    };
+  });
+}
+
 function modalBrandschutzplan(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -7407,7 +7446,9 @@ function bindDynamic(){
 // ---------- Tab Nav ----------
 document.querySelectorAll('.tabbtn').forEach(function(b){
   b.addEventListener('click', function(){
-    state.tab = b.getAttribute('data-tab');
+    var ziel = b.getAttribute('data-tab');
+    if(ziel === 'mehr'){ modalMehrMenu(); return; }
+    state.tab = ziel;
     render();
   });
 });
