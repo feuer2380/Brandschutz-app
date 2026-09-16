@@ -85,7 +85,7 @@ if('serviceWorker' in navigator){
     background:var(--card); border:1px solid var(--line); border-radius:10px;
     padding:14px 16px; margin-bottom:12px;
   }
-  .card h3{font-size:15px; line-height:1.3;}
+  .card h3{font-size:15px; line-height:1.3; font-family:inherit;}
   .card .meta{font-size:12px; color:var(--muted); margin-top:2px; line-height:1.35;}
   .row{display:flex; justify-content:space-between; align-items:center; gap:10px;}
   .badge{
@@ -109,7 +109,9 @@ if('serviceWorker' in navigator){
     width:56px; height:56px; border-radius:50%; background:var(--ember);
     color:#fff; border:none; font-size:26px; box-shadow:0 4px 14px rgba(0,0,0,.25);
     display:flex; align-items:center; justify-content:center;
+    transition:opacity .18s, transform .18s;
   }
+  .fab.fab-hidden{opacity:0; transform:scale(.8); pointer-events:none;}
   input,select,textarea{
     width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:8px;
     font-size:15px; font-family:inherit; background:#fff; color:var(--ink); margin-bottom:10px;
@@ -195,6 +197,7 @@ if('serviceWorker' in navigator){
   .filter-bar.segmented .filter-btn.active{background-color:var(--card); color:var(--ember-dark); box-shadow:0 1px 3px rgba(26,20,16,.12);}
   .icon-btn{background:none; border:1px solid var(--line); border-radius:8px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; color:var(--ink); flex-shrink:0;}
   .icon-btn svg{width:18px; height:18px;}
+  .info-i{width:17px; height:17px; border-radius:50%; background:var(--line); color:var(--muted); border:none; font-size:11px; font-weight:700; font-style:italic; font-family:Georgia,serif; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0;}
 
   .bericht-brief{background:#fff;}
   .bericht-kopf{
@@ -692,7 +695,10 @@ function renderInner(){
     return;
   }
   if(tabsEl) tabsEl.style.display = '';
-  if(fabEl) fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte') ? 'none' : '';
+  if(fabEl){
+    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte') ? 'none' : '';
+    fabEl.classList.remove('fab-hidden');
+  }
   document.querySelectorAll('.tabbtn').forEach(function(b){
     var dt = b.getAttribute('data-tab');
     var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager'));
@@ -2131,7 +2137,15 @@ function renderKundenListe(query){
   var q = (query || '').trim().toLowerCase();
   var liste = state.kunden.filter(function(k){ return !k.geloescht; });
   liste = liste.filter(kundeSichtbarFuerRolle);
+  var sortModus = state.kundenSort || 'nummer';
   liste = liste.slice().sort(function(a, b){
+    if(sortModus === 'name') return (a.name || '').localeCompare(b.name || '');
+    if(sortModus === 'ort') return (a.adresse || '').localeCompare(b.adresse || '');
+    if(sortModus === 'geraete'){
+      var ga = state.geraete.filter(function(g){ return g.kundeId === a.id && !g.ausgeschieden; }).length;
+      var gb = state.geraete.filter(function(g){ return g.kundeId === b.id && !g.ausgeschieden; }).length;
+      return gb - ga;
+    }
     var na = parseInt((a.kundennummer || '').replace(/[^0-9]/g, ''), 10);
     var nb = parseInt((b.kundennummer || '').replace(/[^0-9]/g, ''), 10);
     var aLeer = isNaN(na), bLeer = isNaN(nb);
@@ -2159,7 +2173,7 @@ function renderKundenListe(query){
   liste.forEach(function(k){
     var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id && !g.ausgeschieden; }).length;
     html += '<div class="card kunde-card" data-id="' + k.id + '">';
-    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Portal</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
+    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Portal</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
     if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
     html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
     html += '<div class="meta">' + geraeteAnz + ' Gerät(e)</div>';
@@ -2170,7 +2184,15 @@ function renderKundenListe(query){
 
 function renderKunden(){
   var html = '';
-  html += '<input id="kundenSuchInput" type="text" placeholder="Suche nach Name oder Kundennummer..." value="' + escapeHtml(state.kundenSuche || '') + '">';
+  html += '<div style="display:flex; gap:8px;">';
+  html += '<input id="kundenSuchInput" type="text" placeholder="Suche nach Name oder Kundennummer..." value="' + escapeHtml(state.kundenSuche || '') + '" style="flex:1;">';
+  html += '<select id="kundenSortSelect" style="width:auto; flex-shrink:0; margin-bottom:10px;">';
+  var kundenSortOptionen = [ {key:'nummer', label:'Nr.'}, {key:'name', label:'Name'}, {key:'ort', label:'Ort'}, {key:'geraete', label:'Geräte'} ];
+  kundenSortOptionen.forEach(function(o){
+    html += '<option value="' + o.key + '"' + ((state.kundenSort || 'nummer') === o.key ? ' selected' : '') + '>' + o.label + '</option>';
+  });
+  html += '</select>';
+  html += '</div>';
   html += '<div id="kundenListContainer">' + renderKundenListe(state.kundenSuche) + '</div>';
 
   var verwaist = state.geraete.filter(function(g){
@@ -2221,28 +2243,18 @@ function renderKundeDetail(kundeId){
   var html = '';
   html += '<button class="btn secondary small" id="backToKunden">&larr; Zurück</button>';
   html += '<div class="card" style="margin-top:12px;">';
-  html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Kundenportal aktiv</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
-  if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
+  html += '<div class="row" style="align-items:flex-start;"><h3 style="flex:1;">' + escapeHtml(k.name) + '</h3>';
+  html += '<button type="button" class="icon-btn" id="kundeAktionenBtn" title="Aktionen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>';
+  html += '</div>';
+  if(k.kundennummer || k.freigabe || k.stillgelegt){
+    html += '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">' + (k.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Kundenportal aktiv</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
+  }
+  if(k.objekt) html += '<div class="meta" style="font-weight:600; margin-top:8px;">' + escapeHtml(k.objekt) + '</div>';
   html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
   if(k.telefon) html += '<div class="meta">Tel: ' + escapeHtml(k.telefon) + '</div>';
   if(k.email) html += '<div class="meta">' + escapeHtml(k.email) + '</div>';
-  html += '<button class="btn small secondary" id="editKundeBtn" style="margin-top:10px;">Daten bearbeiten</button>';
   if(k.stillgelegt){
     html += '<div class="meta" style="margin-top:10px; color:#a3300d;">Stillgelegt' + (k.stillgelegtAm ? ' seit ' + fmtDate(k.stillgelegtAm) : '') + ' &ndash; keine Erinnerungen, bis wieder aktiviert.</div>';
-    html += '<button class="btn small" id="kundeAktivierenBtn" style="margin-top:8px;">Wieder aktivieren</button>';
-  } else {
-    html += '<button class="btn small secondary" id="kundeStilllegenBtn" style="margin-top:10px;">Stilllegen (keine Erinnerungen, bis reaktiviert)</button>';
-    html += '<button class="btn small secondary" id="pruefungenVerschiebenBtn" style="margin-top:8px; margin-left:8px;">Prüfungen verschieben</button>';
-    var erweitertOffen = !!state.kundeWerkzeugeOffen;
-    html += '<div id="erweiterteWerkzeugeToggle" style="margin-top:14px; font-size:13px; color:var(--muted); cursor:pointer;">Erweiterte Werkzeuge (Datenreparatur) ' + (erweitertOffen ? '&#9650;' : '&#9660;') + '</div>';
-    if(erweitertOffen){
-      html += '<div style="margin-top:8px;">';
-      html += '<button class="btn small secondary" id="pruefungenKorrigierenBtn">Fälschlich "heute geprüft" korrigieren</button>';
-      html += '<button class="btn small secondary" id="fehlendeTermineBtn" style="margin-top:8px; margin-left:8px;">Fehlende Termine nachtragen</button>';
-      html += '<button class="btn small secondary" id="doppelteTermineBtn" style="margin-top:8px; margin-left:8px;">Doppelte Termine bereinigen</button>';
-      html += '<button class="btn small secondary" id="nummernReparierenBtn" style="margin-top:8px; margin-left:8px;">Gerätenummern neu ordnen</button>';
-      html += '</div>';
-    }
   }
   html += '</div>';
 
@@ -2333,13 +2345,9 @@ function renderKundeDetail(kundeId){
         }
         html += '<div style="display:flex; align-items:center; gap:6px;">';
         html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">' + (istKegAnschluss ? 'Datum des Anschlusses' : 'Datum der Prüfung') + '</label>';
+        html += '<button type="button" class="info-i hinweisInfoBtn" data-gid="' + g.id + '" data-typ="' + (istKegAnschluss ? 'anschluss' : 'pruefung') + '" title="Hinweis">i</button>';
         html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + datumWert + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
         html += '</div>';
-        if(istKegAnschluss){
-          html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr JETZT wirklich einen neuen Keg-Behälter anschließt (auch rückwirkend). Wollt ihr nur den nächsten Termin verschieben, ohne dass es als Anschluss zählt: <span class="nurTerminBtn" data-gid="' + g.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">hier klicken</span>.</div>';
-        } else {
-          html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr JETZT eine echte Prüfung eintragt (auch rückwirkend). Wollt ihr nur den nächsten Termin verschieben, ohne dass es als Prüfung zählt: <span class="nurTerminBtn" data-gid="' + g.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">hier klicken</span>.</div>';
-        }
         html += '</div>';
         if(istBegehung){
           html += '<div style="display:flex; gap:6px; margin-top:8px;">';
@@ -3342,7 +3350,7 @@ function renderStatistik(){
     } else {
       zugriffe.slice(0, 50).forEach(function(z){
         html += '<div class="card">';
-        html += '<div class="row"><h3>' + escapeHtml(z.kundenname || 'Unbekannt') + '</h3>' + (z.kundennummer ? '<span class="badge ok">Nr. ' + escapeHtml(z.kundennummer) + '</span>' : '') + '</div>';
+        html += '<div class="row"><h3>' + escapeHtml(z.kundenname || 'Unbekannt') + '</h3>' + (z.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(z.kundennummer) + '</span>' : '') + '</div>';
         html += '<div class="meta">' + escapeHtml(z.typ || '') + (z.standort ? ' &middot; ' + escapeHtml(z.standort) : '') + '</div>';
         html += '<div class="meta">' + fmtDate(z.zeitpunkt) + ' um ' + fmtZeit(z.zeitpunkt) + ' Uhr</div>';
         html += '</div>';
@@ -5592,6 +5600,75 @@ function bsplanDataUrlZuUint8Array(dataUrl){
   return u8arr;
 }
 
+function modalKundeAktionen(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var html = '';
+  html += '<div class="modal-head"><h3>Aktionen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<button type="button" class="btn block secondary" id="aktEditBtn">Daten bearbeiten</button>';
+  if(k.stillgelegt){
+    html += '<button type="button" class="btn block" style="margin-top:8px;" id="aktAktivierenBtn">Wieder aktivieren</button>';
+  } else {
+    html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="aktStilllegenBtn">Stilllegen (keine Erinnerungen, bis reaktiviert)</button>';
+    html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="aktVerschiebenBtn">Prüfungen verschieben</button>';
+    html += '<div class="section-title" style="margin-top:18px;">Erweiterte Werkzeuge (Datenreparatur)</div>';
+    html += '<button type="button" class="btn block secondary" style="margin-top:6px;" id="aktKorrigierenBtn">Fälschlich "heute geprüft" korrigieren</button>';
+    html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="aktFehlendeBtn">Fehlende Termine nachtragen</button>';
+    html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="aktDoppelteBtn">Doppelte Termine bereinigen</button>';
+    html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="aktNummernBtn">Gerätenummern neu ordnen</button>';
+  }
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var b;
+  b = document.getElementById('aktEditBtn');
+  if(b) b.onclick = function(){ closeModal(); modalKundeBearbeiten(kundeId); };
+  b = document.getElementById('aktAktivierenBtn');
+  if(b) b.onclick = function(){
+    closeModal();
+    var kk = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+    if(!kk) return;
+    kk.stillgelegt = false;
+    kk.stillgelegtAm = null;
+    dbPut('kunden', kk, function(){ loadAll(function(){ render(); toast('Kunde wieder aktiviert'); }); });
+  };
+  b = document.getElementById('aktStilllegenBtn');
+  if(b) b.onclick = function(){
+    closeModal();
+    customConfirm('Kunde stilllegen? Er bleibt erhalten und sichtbar, taucht aber in keiner Erinnerung/Fälligkeitsliste mehr auf, bis du ihn wieder aktivierst.', function(){
+      var kk = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+      if(!kk) return;
+      kk.stillgelegt = true;
+      kk.stillgelegtAm = new Date().toISOString();
+      dbPut('kunden', kk, function(){ loadAll(function(){ render(); toast('Kunde stillgelegt'); }); });
+    });
+  };
+  b = document.getElementById('aktVerschiebenBtn');
+  if(b) b.onclick = function(){ closeModal(); modalPruefungenVerschieben(kundeId); };
+  b = document.getElementById('aktKorrigierenBtn');
+  if(b) b.onclick = function(){ closeModal(); modalPruefungenKorrigieren(kundeId); };
+  b = document.getElementById('aktFehlendeBtn');
+  if(b) b.onclick = function(){ closeModal(); fehlendeTermineNachtragen(kundeId); };
+  b = document.getElementById('aktDoppelteBtn');
+  if(b) b.onclick = function(){ closeModal(); doppelteTermineBereinigen(kundeId); };
+  b = document.getElementById('aktNummernBtn');
+  if(b) b.onclick = function(){ closeModal(); nummernNeuOrdnen(kundeId); };
+}
+
+function modalDatumHinweis(gid, typ){
+  var istAnschluss = typ === 'anschluss';
+  var html = '';
+  html += '<div class="modal-head"><h3>Hinweis</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + (istAnschluss ? 'Nur ändern, wenn ihr JETZT wirklich einen neuen Keg-Behälter anschließt (auch rückwirkend).' : 'Nur ändern, wenn ihr JETZT eine echte Prüfung eintragt (auch rückwirkend).') + '</div>';
+  html += '<button type="button" class="btn block secondary" style="margin-top:14px;" id="hinweisNurTerminBtn">' + (istAnschluss ? 'Nur den nächsten Termin verschieben (zählt nicht als Anschluss)' : 'Nur den nächsten Termin verschieben (zählt nicht als Prüfung)') + '</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('hinweisNurTerminBtn').onclick = function(){
+    closeModal();
+    var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
+    nurTerminVerschieben(gid, datumInput ? datumInput.value : null);
+  };
+}
+
 function modalMehrMenu(){
   var html = '';
   html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
@@ -6923,6 +7000,15 @@ function bindDynamic(){
       bindKundenCards(container);
     };
   }
+  var sortSelect = document.getElementById('kundenSortSelect');
+  if(sortSelect){
+    sortSelect.onchange = function(){
+      state.kundenSort = sortSelect.value;
+      var container = document.getElementById('kundenListContainer');
+      container.innerHTML = renderKundenListe(state.kundenSuche);
+      bindKundenCards(container);
+    };
+  }
 
   var pruefungSuchInput = document.getElementById('pruefungSuchInput');
   if(pruefungSuchInput){
@@ -7231,6 +7317,9 @@ function bindDynamic(){
     };
   }
 
+  var kundeAktionenBtn = document.getElementById('kundeAktionenBtn');
+  if(kundeAktionenBtn) kundeAktionenBtn.onclick = function(){ modalKundeAktionen(state.activeKundeId); };
+
   var editKunde = document.getElementById('editKundeBtn');
   if(editKunde) editKunde.onclick = function(){ modalKundeBearbeiten(state.activeKundeId); };
 
@@ -7303,6 +7392,13 @@ function bindDynamic(){
       var gid = el.getAttribute('data-gid');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
       nurTerminVerschieben(gid, datumInput ? datumInput.value : null);
+    };
+  });
+
+  document.querySelectorAll('.hinweisInfoBtn').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      modalDatumHinweis(el.getAttribute('data-gid'), el.getAttribute('data-typ'));
     };
   });
 
@@ -7452,6 +7548,23 @@ document.querySelectorAll('.tabbtn').forEach(function(b){
     render();
   });
 });
+
+(function(){
+  var mainEl = document.getElementById('main');
+  var fabEl = document.getElementById('fabBtn');
+  var letzterScrollTop = 0;
+  if(mainEl && fabEl){
+    mainEl.addEventListener('scroll', function(){
+      var st = mainEl.scrollTop;
+      if(st > letzterScrollTop && st > 40){
+        fabEl.classList.add('fab-hidden');
+      } else {
+        fabEl.classList.remove('fab-hidden');
+      }
+      letzterScrollTop = st <= 0 ? 0 : st;
+    }, { passive: true });
+  }
+})();
 
 document.getElementById('fabBtn').addEventListener('click', function(){
   if(!state.rolle) return;
