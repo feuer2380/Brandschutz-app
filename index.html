@@ -197,6 +197,10 @@ if('serviceWorker' in navigator){
   .filter-bar.segmented .filter-btn.active{background-color:var(--card); color:var(--ember-dark); box-shadow:0 1px 3px rgba(26,20,16,.12);}
   .icon-btn{background:none; border:1px solid var(--line); border-radius:8px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; color:var(--ink); flex-shrink:0;}
   .icon-btn svg{width:18px; height:18px;}
+  .stepper{display:flex; align-items:stretch; border:1px solid var(--line); border-radius:8px; overflow:hidden; flex:1;}
+  .stepper-btn{background:#f5f1ea; border:none; width:40px; font-size:19px; color:var(--ink); flex-shrink:0;}
+  .stepper-val{flex:1; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; padding:0 6px; border-left:1px solid var(--line); border-right:1px solid var(--line); background:#fff;}
+  .stepper-val.warn{color:var(--warn);}
   .info-i{width:17px; height:17px; border-radius:50%; background:var(--line); color:var(--muted); border:none; font-size:11px; font-weight:700; font-style:italic; font-family:Georgia,serif; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0;}
 
   .bericht-brief{background:#fff;}
@@ -1060,25 +1064,48 @@ var scannerLaeuft = false;
 // ---------- Lager ----------
 function renderLager(){
   var html = '';
-  html += '<div class="section-title">Lager</div>';
-  html += '<button class="btn block secondary no-print" id="lagerstandDruckenBtn" style="margin-bottom:10px;">Lagerstand drucken</button>';
-  html += '<button class="btn block secondary no-print" id="alleLagerQrDruckenBtn" style="margin-bottom:10px;">Alle QR-Codes drucken</button>';
+  html += '<div class="row" style="align-items:center; margin-bottom:10px;">';
+  html += '<div class="section-title" style="margin:0;">Lager</div>';
+  html += '<button type="button" class="icon-btn no-print" id="lagerDruckMenuBtn" title="Drucken"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1"/><path d="M6 17v4h12v-4"/></svg></button>';
+  html += '</div>';
+  html += '<input id="lagerSuchInput" type="text" placeholder="Suche nach Artikel oder Nummer..." value="' + escapeHtml(state.lagerSuche || '') + '" style="margin-bottom:14px;">';
+  html += '<div id="lagerListContainer">' + renderLagerListe(state.lagerSuche) + '</div>';
+  return html;
+}
+
+function renderLagerListe(query){
+  var q = (query || '').trim().toLowerCase();
+  var html = '';
   var liste = state.lagerartikel.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-  if(liste.length === 0){
-    html += '<div class="empty"><span class="ic">&#128230;</span>Noch keine Lagerartikel angelegt.<br>Tippe unten rechts auf + zum Hinzufügen.</div>';
-  } else {
-    liste.forEach(function(a){
-      var niedrig = (a.mindestbestand != null) && (a.bestand <= a.mindestbestand);
-      html += '<div class="card lager-card" data-id="' + a.id + '">';
-      html += '<div class="row"><h3>' + escapeHtml(a.name) + '</h3><span class="badge ' + (niedrig ? 'warn' : 'ok') + '">' + a.bestand + ' ' + escapeHtml(a.einheit || 'Stk') + '</span></div>';
-      html += '<div class="row" style="gap:8px; margin-top:8px;">';
-      html += '<button type="button" class="btn small secondary" data-lagerminus="' + a.id + '" style="flex:0 0 auto; padding:0 16px;">&minus;</button>';
-      html += '<button type="button" class="btn small secondary" data-lagerplus="' + a.id + '" style="flex:0 0 auto; padding:0 16px;">+</button>';
-      html += '<button type="button" class="btn small secondary qrLagerBtn" data-lagerqr="' + a.id + '" style="flex:1;">QR-Code</button>';
-      html += '</div>';
-      html += '</div>';
+  if(q){
+    liste = liste.filter(function(a){
+      var name = (a.name || '').toLowerCase();
+      var extid = (a.externeId || '').toLowerCase();
+      return name.indexOf(q) !== -1 || extid.indexOf(q) !== -1;
     });
   }
+  if(liste.length === 0){
+    if(q){
+      html += '<div class="empty">Kein Artikel gefunden</div>';
+    } else {
+      html += '<div class="empty"><span class="ic">&#128230;</span>Noch keine Lagerartikel angelegt.<br>Tippe unten rechts auf + zum Hinzufügen.</div>';
+    }
+    return html;
+  }
+  liste.forEach(function(a){
+    var niedrig = (a.mindestbestand != null) && (a.bestand <= a.mindestbestand);
+    html += '<div class="card lager-card" data-id="' + a.id + '">';
+    html += '<div class="row"><h3>' + escapeHtml(a.name) + '</h3>' + (niedrig ? '<span class="badge warn">Nachbestellen</span>' : '') + '</div>';
+    html += '<div class="row" style="gap:10px; margin-top:8px;">';
+    html += '<div class="stepper">';
+    html += '<button type="button" class="stepper-btn" data-lagerminus="' + a.id + '">&minus;</button>';
+    html += '<span class="stepper-val' + (niedrig ? ' warn' : '') + '">' + a.bestand + ' ' + escapeHtml(a.einheit || 'Stk') + '</span>';
+    html += '<button type="button" class="stepper-btn" data-lagerplus="' + a.id + '">+</button>';
+    html += '</div>';
+    html += '<button type="button" class="icon-btn qrLagerBtn" data-lagerqr="' + a.id + '" title="QR-Code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3M20 14v3M14 20h3M20 20v.01"/></svg></button>';
+    html += '</div>';
+    html += '</div>';
+  });
   return html;
 }
 
@@ -1095,6 +1122,41 @@ function buildLagerstandDruckHtml(){
   html += '</tbody></table>';
   html += '</div>';
   return html;
+}
+
+function lagerstandDrucken(){
+  var pa = document.getElementById('printArea');
+  pa.innerHTML = buildLagerstandDruckHtml();
+  setTimeout(function(){ window.print(); }, 120);
+}
+
+function alleLagerQrDrucken(){
+  var res = buildAlleLagerQrDruckHtml();
+  if(res.liste.length === 0){ toast('Keine Lagerartikel vorhanden'); return; }
+  var pa = document.getElementById('printArea');
+  pa.innerHTML = res.html;
+  res.liste.forEach(function(a){
+    try{
+      new QRCode(document.getElementById('druckqr_' + a.id), {
+        text: 'BSV-LAGER:' + a.id,
+        width: 140,
+        height: 140,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(e){}
+  });
+  setTimeout(function(){ window.print(); }, 150);
+}
+
+function modalLagerDrucken(){
+  var html = '';
+  html += '<div class="modal-head"><h3>Drucken</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<button type="button" class="btn block secondary" id="mLagerlisteBtn">Lagerliste drucken</button>';
+  html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="mAlleQrBtn">Alle QR-Codes drucken</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mLagerlisteBtn').onclick = function(){ closeModal(); lagerstandDrucken(); };
+  document.getElementById('mAlleQrBtn').onclick = function(){ closeModal(); alleLagerQrDrucken(); };
 }
 
 function lagerBestandAendern(artikelId, delta){
@@ -7220,36 +7282,25 @@ function bindDynamic(){
     b.onclick = function(e){ e.stopPropagation(); modalQrLagerartikel(b.getAttribute('data-lagerqr')); };
   });
   var lagerstandDruckenBtn = document.getElementById('lagerstandDruckenBtn');
-  if(lagerstandDruckenBtn) lagerstandDruckenBtn.onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildLagerstandDruckHtml();
-    setTimeout(function(){ window.print(); }, 120);
-  };
+  if(lagerstandDruckenBtn) lagerstandDruckenBtn.onclick = lagerstandDrucken;
   var lagerstandStatDruckBtn = document.getElementById('lagerstandStatDruckBtn');
-  if(lagerstandStatDruckBtn) lagerstandStatDruckBtn.onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildLagerstandDruckHtml();
-    setTimeout(function(){ window.print(); }, 120);
-  };
+  if(lagerstandStatDruckBtn) lagerstandStatDruckBtn.onclick = lagerstandDrucken;
 
   var alleLagerQrBtn = document.getElementById('alleLagerQrDruckenBtn');
-  if(alleLagerQrBtn) alleLagerQrBtn.onclick = function(){
-    var res = buildAlleLagerQrDruckHtml();
-    if(res.liste.length === 0){ toast('Keine Lagerartikel vorhanden'); return; }
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = res.html;
-    res.liste.forEach(function(a){
-      try{
-        new QRCode(document.getElementById('druckqr_' + a.id), {
-          text: 'BSV-LAGER:' + a.id,
-          width: 140,
-          height: 140,
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      } catch(e){}
-    });
-    setTimeout(function(){ window.print(); }, 150);
-  };
+  if(alleLagerQrBtn) alleLagerQrBtn.onclick = alleLagerQrDrucken;
+
+  var lagerDruckMenuBtn = document.getElementById('lagerDruckMenuBtn');
+  if(lagerDruckMenuBtn) lagerDruckMenuBtn.onclick = modalLagerDrucken;
+
+  var lagerSuchInput = document.getElementById('lagerSuchInput');
+  if(lagerSuchInput){
+    lagerSuchInput.oninput = function(){
+      state.lagerSuche = lagerSuchInput.value;
+      var container = document.getElementById('lagerListContainer');
+      container.innerHTML = renderLagerListe(state.lagerSuche);
+      bindDynamic();
+    };
+  }
 
   document.querySelectorAll('.filter-btn').forEach(function(b){
     b.onclick = function(){
