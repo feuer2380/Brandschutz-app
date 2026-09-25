@@ -5987,6 +5987,7 @@ function modalBrandschutzplanAnsicht(kundeId, planId, anfangsTreffer){
   html += '</div>';
 
   html += '<button class="btn block secondary" id="bsplanZurueckBtn" style="margin-top:16px;">Zurück zur Planliste</button>';
+  html += '<button class="btn block secondary" id="bsplanDiagBtn" style="margin-top:8px;">Erkannten Text dieser Seite anzeigen (Diagnose)</button>';
 
   openModal(html);
   document.getElementById('mClose').onclick = function(){
@@ -5996,6 +5997,9 @@ function modalBrandschutzplanAnsicht(kundeId, planId, anfangsTreffer){
   document.getElementById('bsplanZurueckBtn').onclick = function(){
     bsplanAktuellesPdf = null;
     modalBrandschutzplan(kundeId);
+  };
+  document.getElementById('bsplanDiagBtn').onclick = function(){
+    bsplanSeitentextAnzeigen();
   };
 
   bsplanPdfLaden(plan, function(pdfDoc){
@@ -6165,6 +6169,30 @@ function bsplanMarkierungZeichnen(ctx, viewport, markierung){
   ctx.restore();
 
   return { x: mitteX, y: mitteY };
+}
+
+function bsplanSeitentextAnzeigen(){
+  if(!bsplanAktuellesPdf) return;
+  var seitenNr = bsplanAktuelleSeite;
+  bsplanAktuellesPdf.getPage(seitenNr).then(function(page){
+    return page.getTextContent();
+  }).then(function(content){
+    var teile = [];
+    content.items.forEach(function(it){ teile.push(it.str); });
+    var html = '';
+    html += '<div class="modal-head"><h3>Erkannter Text (Seite ' + seitenNr + ')</h3><button class="close" id="mClose">&times;</button></div>';
+    if(teile.length === 0){
+      html += '<div class="meta">Auf dieser Seite wurde gar kein Text erkannt &ndash; die Beschriftungen sind hier vermutlich als Grafik/Linien gezeichnet, nicht als echter Text.</div>';
+    } else {
+      html += '<div class="meta">' + teile.length + ' Textstücke gefunden:</div>';
+      html += '<div class="meta" style="white-space:pre-wrap; word-break:break-word; margin-top:8px; max-height:50vh; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:10px;">' + escapeHtml(teile.join(' | ')) + '</div>';
+    }
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+  }).catch(function(err){
+    console.error('Diagnose-Fehler', err);
+    toast('Fehler beim Lesen der Seite');
+  });
 }
 
 function bsplanNormAlnum(s){
