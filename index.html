@@ -5868,6 +5868,7 @@ function bsplanSucheInListe(kundeId){
   }
   var sucheKlein = sucheRoh.toLowerCase();
   var sucheLocker = sucheRoh.replace(/\s+/g, '').toLowerCase();
+  var sucheFuzzy = bsplanNormAlnum(sucheRoh);
   var trefferGenau = [];
   var trefferLocker = [];
   var planIndex = 0;
@@ -5894,15 +5895,24 @@ function bsplanSucheInListe(kundeId){
           var gesamtText = '';
           content.items.forEach(function(it){
             var stueck = it.str || '';
-            if(!treffer && stueck.trim().toLowerCase() === sucheKlein){
-              treffer = { transform: it.transform, width: it.width, height: it.height };
+            if(!treffer){
+              var stueckKlein = stueck.trim().toLowerCase();
+              if(stueckKlein === sucheKlein){
+                treffer = { transform: it.transform, width: it.width, height: it.height };
+              } else if(sucheFuzzy.length > 0 && bsplanNormAlnum(stueck) === sucheFuzzy){
+                treffer = { transform: it.transform, width: it.width, height: it.height };
+              }
             }
             gesamtText += stueck;
           });
           if(treffer){
             trefferGenau.push({ planId: plan.id, planName: plan.name, seite: seitenNr, transform: treffer.transform, width: treffer.width, height: treffer.height });
-          } else if(gesamtText.replace(/\s+/g, '').toLowerCase().indexOf(sucheLocker) !== -1){
-            trefferLocker.push({ planId: plan.id, planName: plan.name, seite: seitenNr, transform: null });
+          } else {
+            var seiteLocker = gesamtText.replace(/\s+/g, '').toLowerCase();
+            var seiteFuzzy = bsplanNormAlnum(gesamtText);
+            if(seiteLocker.indexOf(sucheLocker) !== -1 || (sucheFuzzy.length > 0 && seiteFuzzy.indexOf(sucheFuzzy) !== -1)){
+              trefferLocker.push({ planId: plan.id, planName: plan.name, seite: seitenNr, transform: null });
+            }
           }
           seite++;
           naechsteSeite();
@@ -6157,6 +6167,10 @@ function bsplanMarkierungZeichnen(ctx, viewport, markierung){
   return { x: mitteX, y: mitteY };
 }
 
+function bsplanNormAlnum(s){
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function bsplanSuchen(){
   if(!bsplanAktuellesPdf) return;
   var feld = document.getElementById('bsplanSuche');
@@ -6171,6 +6185,7 @@ function bsplanSuchen(){
   var trefferLocker = [];
   var sucheKlein = sucheRoh.toLowerCase();
   var sucheLocker = sucheRoh.replace(/\s+/g, '').toLowerCase();
+  var sucheFuzzy = bsplanNormAlnum(sucheRoh);
   var i = 1;
 
   function naechsteSeite(){
@@ -6186,15 +6201,24 @@ function bsplanSuchen(){
       var gesamtText = '';
       content.items.forEach(function(it){
         var stueck = it.str || '';
-        if(!treffer && stueck.trim().toLowerCase() === sucheKlein){
-          treffer = { seite: seitenNr, transform: it.transform, width: it.width, height: it.height };
+        if(!treffer){
+          var stueckKlein = stueck.trim().toLowerCase();
+          if(stueckKlein === sucheKlein){
+            treffer = { seite: seitenNr, transform: it.transform, width: it.width, height: it.height };
+          } else if(sucheFuzzy.length > 0 && bsplanNormAlnum(stueck) === sucheFuzzy){
+            treffer = { seite: seitenNr, transform: it.transform, width: it.width, height: it.height };
+          }
         }
         gesamtText += stueck;
       });
       if(treffer){
         trefferGenau.push(treffer);
-      } else if(gesamtText.replace(/\s+/g, '').toLowerCase().indexOf(sucheLocker) !== -1){
-        trefferLocker.push({ seite: seitenNr, transform: null });
+      } else {
+        var seiteLocker = gesamtText.replace(/\s+/g, '').toLowerCase();
+        var seiteFuzzy = bsplanNormAlnum(gesamtText);
+        if(seiteLocker.indexOf(sucheLocker) !== -1 || (sucheFuzzy.length > 0 && seiteFuzzy.indexOf(sucheFuzzy) !== -1)){
+          trefferLocker.push({ seite: seitenNr, transform: null });
+        }
       }
       i++;
       naechsteSeite();
