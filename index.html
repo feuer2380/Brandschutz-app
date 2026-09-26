@@ -22,7 +22,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
@@ -5873,8 +5873,12 @@ function bsplanOcrSucheEinzel(suche){
     }
     if(ergebnis) ergebnis.textContent = 'Bilderkennung läuft... Seite ' + i + ' von ' + anzahlSeiten;
     var seitenNr = i;
-    bsplanSeiteOcrText(pdfDoc, seitenNr, function(text){
-      if(bsplanNormAlnum(text).indexOf(sucheFuzzy) !== -1 && sucheFuzzy.length > 0){
+    bsplanSeiteOcrText(pdfDoc, seitenNr, function(text, fehler){
+      if(fehler){
+        if(ergebnis) ergebnis.textContent = fehler;
+        return;
+      }
+      if(sucheFuzzy.length > 0 && bsplanNormAlnum(text).indexOf(sucheFuzzy) !== -1){
         if(ergebnis) ergebnis.textContent = 'Über Bilderkennung auf Seite ' + seitenNr + ' gefunden (ungefähre Position, ggf. selbst suchen)';
         bsplanSeiteAnzeigen(seitenNr, null, BSPLAN_ZOOM_STANDARD);
         return;
@@ -6019,7 +6023,11 @@ function bsplanOcrSucheListe(kundeId, suche){
         }
         if(ergebnis) ergebnis.textContent = 'Bilderkennung läuft... "' + escapeHtml(plan.name) + '", Seite ' + seite + ' von ' + pdfDoc.numPages;
         var seitenNr = seite;
-        bsplanSeiteOcrText(pdfDoc, seitenNr, function(text){
+        bsplanSeiteOcrText(pdfDoc, seitenNr, function(text, fehler){
+          if(fehler){
+            if(ergebnis) ergebnis.textContent = fehler;
+            return;
+          }
           if(sucheFuzzy.length > 0 && bsplanNormAlnum(text).indexOf(sucheFuzzy) !== -1){
             modalBrandschutzplanAnsicht(kundeId, plan.id, { seite: seitenNr, transform: null });
             return;
@@ -6275,14 +6283,18 @@ function bsplanSeitentextAnzeigen(){
 }
 
 function bsplanOcrWorkerHolen(cb){
-  if(bsplanOcrWorker){ cb(bsplanOcrWorker); return; }
-  if(!window.Tesseract){ cb(null); return; }
-  Tesseract.createWorker('eng').then(function(worker){
+  if(bsplanOcrWorker){ cb(bsplanOcrWorker, null); return; }
+  if(!window.Tesseract){ cb(null, 'Tesseract.js konnte nicht geladen werden (Skript fehlt)'); return; }
+  Tesseract.createWorker('eng', 1, {
+    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/worker.min.js',
+    corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0'
+  }).then(function(worker){
     bsplanOcrWorker = worker;
-    cb(worker);
+    cb(worker, null);
   }).catch(function(err){
     console.error('Tesseract Worker Fehler', err);
-    cb(null);
+    cb(null, 'Bilderkennung konnte nicht gestartet werden: ' + (err && err.message ? err.message : String(err)));
   });
 }
 
@@ -6300,13 +6312,13 @@ function bsplanSeiteOcrText(pdfDoc, seitenNr, cb){
     canvas.height = viewport.height;
     var ctx = canvas.getContext('2d');
     page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
-      bsplanOcrWorkerHolen(function(worker){
-        if(!worker){ cb(''); return; }
+      bsplanOcrWorkerHolen(function(worker, fehler){
+        if(!worker){ cb('', fehler); return; }
         worker.recognize(canvas).then(function(result){
-          cb(result.data.text || '');
+          cb(result.data.text || '', null);
         }).catch(function(err){
           console.error('OCR Fehler Seite ' + seitenNr, err);
-          cb('');
+          cb('', 'Fehler beim Lesen von Seite ' + seitenNr + ': ' + (err && err.message ? err.message : String(err)));
         });
       });
     });
