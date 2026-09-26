@@ -22,6 +22,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
@@ -5659,6 +5660,9 @@ function modalDokumenteListe(kundeId){
 var BSPLAN_ZOOM_STANDARD = 2.0;
 var BSPLAN_ZOOM_TREFFER = 4.5;
 var BSPLAN_MAX_CANVAS = 4000;
+var BSPLAN_OCR_SCALE = 2.5;
+var BSPLAN_OCR_MAX_DIM = 2600;
+var bsplanOcrWorker = null;
 var bsplanAktuellesPdf = null;
 var bsplanAktuelleSeite = 1;
 var bsplanAktuellerKundeId = null;
@@ -5854,6 +5858,34 @@ function modalBrandschutzplan(kundeId){
   });
 }
 
+function bsplanOcrSucheEinzel(suche){
+  if(!bsplanAktuellesPdf) return;
+  var ergebnis = document.getElementById('bsplanErgebnis');
+  var pdfDoc = bsplanAktuellesPdf;
+  var anzahlSeiten = pdfDoc.numPages;
+  var sucheFuzzy = bsplanNormAlnum(suche);
+  var i = 1;
+
+  function naechsteSeite(){
+    if(i > anzahlSeiten){
+      if(ergebnis) ergebnis.textContent = 'Auch mit Bilderkennung wurde "' + suche + '" nicht gefunden';
+      return;
+    }
+    if(ergebnis) ergebnis.textContent = 'Bilderkennung läuft... Seite ' + i + ' von ' + anzahlSeiten;
+    var seitenNr = i;
+    bsplanSeiteOcrText(pdfDoc, seitenNr, function(text){
+      if(bsplanNormAlnum(text).indexOf(sucheFuzzy) !== -1 && sucheFuzzy.length > 0){
+        if(ergebnis) ergebnis.textContent = 'Über Bilderkennung auf Seite ' + seitenNr + ' gefunden (ungefähre Position, ggf. selbst suchen)';
+        bsplanSeiteAnzeigen(seitenNr, null, BSPLAN_ZOOM_STANDARD);
+        return;
+      }
+      i++;
+      naechsteSeite();
+    });
+  }
+  naechsteSeite();
+}
+
 function bsplanSucheInListe(kundeId){
   var feld = document.getElementById('bsplanListSuche');
   var sucheRoh = feld ? feld.value.trim() : '';
@@ -5932,7 +5964,17 @@ function bsplanListeSucheFertig(kundeId, gefunden, suche){
   var ergebnis = document.getElementById('bsplanListErgebnis');
   if(!ergebnis) return;
   if(gefunden.length === 0){
-    ergebnis.textContent = 'Nummer "' + suche + '" wurde in keinem Plan gefunden';
+    ergebnis.innerHTML = '';
+    var txt = document.createElement('div');
+    txt.textContent = 'Nummer "' + suche + '" wurde in keinem Plan gefunden';
+    ergebnis.appendChild(txt);
+    var ocrBtn = document.createElement('button');
+    ocrBtn.type = 'button';
+    ocrBtn.className = 'btn small secondary';
+    ocrBtn.style.marginTop = '8px';
+    ocrBtn.textContent = 'Mit Bilderkennung suchen (langsamer)';
+    ocrBtn.onclick = function(){ bsplanOcrSucheListe(kundeId, suche); };
+    ergebnis.appendChild(ocrBtn);
     return;
   }
   if(gefunden.length === 1){
@@ -5953,6 +5995,43 @@ function bsplanListeSucheFertig(kundeId, gefunden, suche){
     btn.onclick = function(){ modalBrandschutzplanAnsicht(kundeId, t.planId, t); };
     ergebnis.appendChild(btn);
   });
+}
+
+function bsplanOcrSucheListe(kundeId, suche){
+  var ergebnis = document.getElementById('bsplanListErgebnis');
+  var plaene = state.brandschutzplaene.filter(function(p){ return p.kundeId === kundeId; });
+  var sucheFuzzy = bsplanNormAlnum(suche);
+  var planIndex = 0;
+
+  function naechsterPlan(){
+    if(planIndex >= plaene.length){
+      if(ergebnis) ergebnis.textContent = 'Auch mit Bilderkennung wurde "' + suche + '" in keinem Plan gefunden';
+      return;
+    }
+    var plan = plaene[planIndex];
+    bsplanPdfLaden(plan, function(pdfDoc){
+      var seite = 1;
+      function naechsteSeite(){
+        if(seite > pdfDoc.numPages){
+          planIndex++;
+          naechsterPlan();
+          return;
+        }
+        if(ergebnis) ergebnis.textContent = 'Bilderkennung läuft... "' + escapeHtml(plan.name) + '", Seite ' + seite + ' von ' + pdfDoc.numPages;
+        var seitenNr = seite;
+        bsplanSeiteOcrText(pdfDoc, seitenNr, function(text){
+          if(sucheFuzzy.length > 0 && bsplanNormAlnum(text).indexOf(sucheFuzzy) !== -1){
+            modalBrandschutzplanAnsicht(kundeId, plan.id, { seite: seitenNr, transform: null });
+            return;
+          }
+          seite++;
+          naechsteSeite();
+        });
+      }
+      naechsteSeite();
+    });
+  }
+  naechsterPlan();
 }
 
 function modalBrandschutzplanAnsicht(kundeId, planId, anfangsTreffer){
@@ -6195,6 +6274,45 @@ function bsplanSeitentextAnzeigen(){
   });
 }
 
+function bsplanOcrWorkerHolen(cb){
+  if(bsplanOcrWorker){ cb(bsplanOcrWorker); return; }
+  if(!window.Tesseract){ cb(null); return; }
+  Tesseract.createWorker('eng').then(function(worker){
+    bsplanOcrWorker = worker;
+    cb(worker);
+  }).catch(function(err){
+    console.error('Tesseract Worker Fehler', err);
+    cb(null);
+  });
+}
+
+function bsplanSeiteOcrText(pdfDoc, seitenNr, cb){
+  pdfDoc.getPage(seitenNr).then(function(page){
+    var viewport = page.getViewport({ scale: BSPLAN_OCR_SCALE });
+    var groesste = Math.max(viewport.width, viewport.height);
+    var skala = BSPLAN_OCR_SCALE;
+    if(groesste > BSPLAN_OCR_MAX_DIM){
+      skala = skala * (BSPLAN_OCR_MAX_DIM / groesste);
+      viewport = page.getViewport({ scale: skala });
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    var ctx = canvas.getContext('2d');
+    page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function(){
+      bsplanOcrWorkerHolen(function(worker){
+        if(!worker){ cb(''); return; }
+        worker.recognize(canvas).then(function(result){
+          cb(result.data.text || '');
+        }).catch(function(err){
+          console.error('OCR Fehler Seite ' + seitenNr, err);
+          cb('');
+        });
+      });
+    });
+  });
+}
+
 function bsplanNormAlnum(s){
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -6263,7 +6381,17 @@ function bsplanSucheFertig(gefunden, suche){
   var ergebnis = document.getElementById('bsplanErgebnis');
   if(!ergebnis) return;
   if(gefunden.length === 0){
-    ergebnis.textContent = 'Nummer "' + suche + '" wurde auf dem Plan nicht gefunden';
+    ergebnis.innerHTML = '';
+    var txt = document.createElement('div');
+    txt.textContent = 'Nummer "' + suche + '" wurde auf dem Plan nicht gefunden';
+    ergebnis.appendChild(txt);
+    var ocrBtn = document.createElement('button');
+    ocrBtn.type = 'button';
+    ocrBtn.className = 'btn small secondary';
+    ocrBtn.style.marginTop = '8px';
+    ocrBtn.textContent = 'Mit Bilderkennung suchen (langsamer)';
+    ocrBtn.onclick = function(){ bsplanOcrSucheEinzel(suche); };
+    ergebnis.appendChild(ocrBtn);
     return;
   }
   if(gefunden.length === 1){
