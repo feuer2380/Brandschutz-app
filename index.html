@@ -5987,17 +5987,38 @@ function bsplanListeSucheFertig(kundeId, gefunden, suche){
     return;
   }
   ergebnis.innerHTML = '';
-  var label = document.createElement('span');
-  label.textContent = 'Mehrere Treffer, bitte wählen: ';
+  var label = document.createElement('div');
+  label.textContent = 'Mehrere Treffer, bitte wählen:';
   ergebnis.appendChild(label);
   gefunden.forEach(function(t){
     var btn = document.createElement('button');
-    btn.className = 'btn small secondary';
-    btn.style.marginLeft = '6px';
-    btn.style.marginTop = '6px';
-    btn.textContent = escapeHtml(t.planName) + ' (Seite ' + t.seite + ')';
+    btn.type = 'button';
+    btn.className = 'btn secondary';
+    btn.style.cssText = 'display:flex; align-items:center; gap:10px; width:100%; margin-top:8px; text-align:left; justify-content:flex-start;';
+    var img = document.createElement('img');
+    img.style.cssText = 'width:56px; height:56px; object-fit:cover; border:1px solid var(--line); border-radius:6px; background:#f5f1ea; flex-shrink:0;';
+    btn.appendChild(img);
+    var label2 = document.createElement('span');
+    label2.textContent = t.planName + ' (Seite ' + t.seite + ')';
+    btn.appendChild(label2);
     btn.onclick = function(){ modalBrandschutzplanAnsicht(kundeId, t.planId, t); };
     ergebnis.appendChild(btn);
+
+    var planObj = state.brandschutzplaene.filter(function(p){ return p.id === t.planId; })[0];
+    if(planObj){
+      bsplanPdfLaden(planObj, function(pdfDoc){
+        pdfDoc.getPage(t.seite).then(function(page){
+          var vp = page.getViewport({ scale: 0.18 });
+          var c = document.createElement('canvas');
+          c.width = vp.width;
+          c.height = vp.height;
+          var ctx = c.getContext('2d');
+          page.render({ canvasContext: ctx, viewport: vp }).promise.then(function(){
+            img.src = c.toDataURL();
+          });
+        });
+      });
+    }
   });
 }
 
@@ -6417,18 +6438,37 @@ function bsplanSucheFertig(gefunden, suche){
     return;
   }
   ergebnis.innerHTML = '';
-  var label = document.createElement('span');
-  label.textContent = 'Mehrere Treffer, bitte Seite wählen: ';
+  var label = document.createElement('div');
+  label.textContent = 'Mehrere Treffer, bitte Seite wählen:';
   ergebnis.appendChild(label);
   gefunden.forEach(function(t){
     var btn = document.createElement('button');
-    btn.className = 'btn small secondary';
-    btn.style.marginLeft = '6px';
-    btn.textContent = 'Seite ' + t.seite;
+    btn.type = 'button';
+    btn.className = 'btn secondary';
+    btn.style.cssText = 'display:flex; align-items:center; gap:10px; width:100%; margin-top:8px; text-align:left; justify-content:flex-start;';
+    var img = document.createElement('img');
+    img.style.cssText = 'width:56px; height:56px; object-fit:cover; border:1px solid var(--line); border-radius:6px; background:#f5f1ea; flex-shrink:0;';
+    btn.appendChild(img);
+    var label2 = document.createElement('span');
+    label2.textContent = 'Seite ' + t.seite;
+    btn.appendChild(label2);
     btn.onclick = function(){
       bsplanSeiteAnzeigen(t.seite, t.transform ? t : null, t.transform ? BSPLAN_ZOOM_TREFFER : BSPLAN_ZOOM_STANDARD);
     };
     ergebnis.appendChild(btn);
+
+    if(bsplanAktuellesPdf){
+      bsplanAktuellesPdf.getPage(t.seite).then(function(page){
+        var vp = page.getViewport({ scale: 0.18 });
+        var c = document.createElement('canvas');
+        c.width = vp.width;
+        c.height = vp.height;
+        var ctx = c.getContext('2d');
+        page.render({ canvasContext: ctx, viewport: vp }).promise.then(function(){
+          img.src = c.toDataURL();
+        });
+      });
+    }
   });
 }
 
