@@ -5660,8 +5660,8 @@ function modalDokumenteListe(kundeId){
 var BSPLAN_ZOOM_STANDARD = 2.0;
 var BSPLAN_ZOOM_TREFFER = 4.5;
 var BSPLAN_MAX_CANVAS = 4000;
-var BSPLAN_OCR_SCALE = 2.5;
-var BSPLAN_OCR_MAX_DIM = 2600;
+var BSPLAN_OCR_SCALE = 4.0;
+var BSPLAN_OCR_MAX_DIM = 4000;
 var bsplanOcrWorker = null;
 var bsplanAktuellesPdf = null;
 var bsplanAktuelleSeite = 1;
@@ -6291,7 +6291,11 @@ function bsplanOcrWorkerHolen(cb){
     langPath: 'https://tessdata.projectnaptha.com/4.0.0'
   }).then(function(worker){
     bsplanOcrWorker = worker;
-    cb(worker, null);
+    worker.setParameters({ tessedit_pageseg_mode: '11' }).then(function(){
+      cb(worker, null);
+    }).catch(function(){
+      cb(worker, null);
+    });
   }).catch(function(err){
     console.error('Tesseract Worker Fehler', err);
     cb(null, 'Bilderkennung konnte nicht gestartet werden: ' + (err && err.message ? err.message : String(err)));
