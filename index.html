@@ -23,6 +23,8 @@
   }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
@@ -545,6 +547,94 @@ function loadAll(cb){
       });
     });
   });
+}
+
+function bsvDruckenOderTeilen(html, dateiname, cb){
+  var pa = document.getElementById('printArea');
+  if(!pa){ if(cb) cb(); return; }
+  if(html !== null && html !== undefined){
+    pa.innerHTML = html;
+  }
+
+  var eigenstaendig = !!window.navigator.standalone;
+
+  if(!eigenstaendig || !window.html2canvas || !window.jspdf){
+    setTimeout(function(){
+      window.print();
+      if(cb) cb();
+    }, 120);
+    return;
+  }
+
+  pa.style.display = 'block';
+  pa.style.position = 'fixed';
+  pa.style.left = '-9999px';
+  pa.style.top = '0';
+  pa.style.width = '780px';
+  pa.style.background = '#fff';
+  pa.style.zIndex = '-1';
+
+  function aufraeumen(){
+    pa.style.display = '';
+    pa.style.position = '';
+    pa.style.left = '';
+    pa.style.top = '';
+    pa.style.width = '';
+    pa.style.zIndex = '';
+    pa.style.background = '';
+  }
+
+  setTimeout(function(){
+    html2canvas(pa, { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(function(canvas){
+      aufraeumen();
+
+      var pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      var pageWidth = pdf.internal.pageSize.getWidth();
+      var pageHeight = pdf.internal.pageSize.getHeight();
+      var imgWidth = pageWidth;
+      var imgHeight = canvas.height * (imgWidth / canvas.width);
+      var imgData = canvas.toDataURL('image/jpeg', 0.92);
+      var heightLeft = imgHeight;
+      var positionY = 0;
+
+      pdf.addImage(imgData, 'JPEG', 0, positionY, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      while(heightLeft > 0){
+        positionY = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, positionY, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      var blob = pdf.output('blob');
+      var geteilt = false;
+
+      if(navigator.canShare && window.File){
+        try{
+          var datei = new File([blob], dateiname, { type: 'application/pdf' });
+          if(navigator.canShare({ files: [datei] })){
+            geteilt = true;
+            navigator.share({ files: [datei], title: dateiname }).catch(function(err){
+              console.error('Teilen abgebrochen', err);
+            }).then(function(){ if(cb) cb(); });
+          }
+        } catch(eShare){
+          console.error('Teilen-Fehler', eShare);
+        }
+      }
+
+      if(!geteilt){
+        var url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        if(cb) cb();
+      }
+    }).catch(function(err){
+      aufraeumen();
+      console.error('PDF-Erstellung fehlgeschlagen', err);
+      toast('PDF-Erstellung fehlgeschlagen: ' + (err && err.message ? err.message : String(err)));
+      if(cb) cb();
+    });
+  }, 60);
 }
 
 function toast(msg){
@@ -1134,9 +1224,7 @@ function buildLagerstandDruckHtml(){
 }
 
 function lagerstandDrucken(){
-  var pa = document.getElementById('printArea');
-  pa.innerHTML = buildLagerstandDruckHtml();
-  setTimeout(function(){ window.print(); }, 120);
+  bsvDruckenOderTeilen(buildLagerstandDruckHtml(), 'Lagerstand.pdf');
 }
 
 function alleLagerQrDrucken(){
@@ -1154,7 +1242,7 @@ function alleLagerQrDrucken(){
       });
     } catch(e){}
   });
-  setTimeout(function(){ window.print(); }, 150);
+  bsvDruckenOderTeilen(null, 'Lager-QR-Codes.pdf');
 }
 
 function modalLagerDrucken(){
@@ -2810,9 +2898,7 @@ function modalGeraeteuebersicht(kundeId){
       b.onclick = function(){ aktKat = b.getAttribute('data-alkat') || null; neuZeichnen(); };
     });
     document.getElementById('druckBtnAL').onclick = function(){
-      var pa = document.getElementById('printArea');
-      pa.innerHTML = buildGeraeteuebersichtHtml(kundeId, aktKat);
-      setTimeout(function(){ window.print(); }, 120);
+      bsvDruckenOderTeilen(buildGeraeteuebersichtHtml(kundeId, aktKat), 'Geraeteuebersicht.pdf');
     };
     document.getElementById('mailBtnAL').onclick = function(){
       var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
@@ -2846,9 +2932,7 @@ function modalTerminliste(){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('druckBtnTL').onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildTerminlisteHtml();
-    setTimeout(function(){ window.print(); }, 120);
+    bsvDruckenOderTeilen(buildTerminlisteHtml(), 'Terminliste.pdf');
   };
   document.getElementById('mailBtnTL').onclick = function(){
     var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
@@ -4176,7 +4260,7 @@ function modalQrGeraet(geraetId){
         correctLevel: QRCode.CorrectLevel.M
       });
     } catch(e){}
-    window.print();
+    bsvDruckenOderTeilen(null, 'QR-Etikett.pdf');
   };
   try{
     new QRCode(document.getElementById('qrTarget'), {
@@ -5132,9 +5216,7 @@ function modalBerichtAnsicht(pruefungId){
   document.getElementById('mClose').onclick = closeModal;
 
   document.getElementById('druckBtn').onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildBerichtHtml(p, k);
-    setTimeout(function(){ window.print(); }, 120);
+    bsvDruckenOderTeilen(buildBerichtHtml(p, k), 'Pruefbericht.pdf');
   };
 
   document.getElementById('mailBtn').onclick = function(){
@@ -5278,9 +5360,7 @@ function modalFuellhistorieListe(kundeId){
       b.onclick = function(){ neuZeichnen(suchtext, b.getAttribute('data-katfilter') || null); };
     });
     document.getElementById('fuellDruckenBtn').onclick = function(){
-      var pa = document.getElementById('printArea');
-      pa.innerHTML = buildFuellstatistikHtml(gefiltert, suchtext, katFilter);
-      setTimeout(function(){ window.print(); }, 120);
+      bsvDruckenOderTeilen(buildFuellstatistikHtml(gefiltert, suchtext, katFilter), 'Fuellstatistik.pdf');
     };
     document.querySelectorAll('[data-fuellhistoriedetail]').forEach(function(b){
       b.onclick = function(){ modalFuellhistorie(b.getAttribute('data-fuellhistoriedetail'), kundeId, suchtext); };
@@ -5541,9 +5621,7 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
   };
   var fuellhistorieDruckBtn = document.getElementById('fuellhistorieDruckBtn');
   if(fuellhistorieDruckBtn) fuellhistorieDruckBtn.onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildFuellhistorieEinzelDruckHtml(g, fuellungen);
-    setTimeout(function(){ window.print(); }, 120);
+    bsvDruckenOderTeilen(buildFuellhistorieEinzelDruckHtml(g, fuellungen), 'Fuellhistorie.pdf');
   };
   document.querySelectorAll('[data-fuellungloeschen]').forEach(function(b){
     b.onclick = function(){
@@ -6602,9 +6680,7 @@ function modalBegehungsberichtBearbeiten(kundeId, berichtId){
       druckBtn.onclick = function(){
         speichereKopfdaten();
         dbPut('begehungsberichte', bericht, function(){
-          var pa = document.getElementById('printArea');
-          pa.innerHTML = buildBegehungsberichtHtml(bericht, k);
-          setTimeout(function(){ window.print(); }, 120);
+          bsvDruckenOderTeilen(buildBegehungsberichtHtml(bericht, k), 'Begehungsbericht.pdf');
         });
       };
     }
@@ -7365,13 +7441,10 @@ function modalTagesberichtAnsicht(tbId){
     var btn = document.getElementById('druckBtnTb');
     btn.disabled = true;
     btn.textContent = 'Bereite vor...';
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildTagesberichtDruckHtml(tb, k);
-    setTimeout(function(){
+    bsvDruckenOderTeilen(buildTagesberichtDruckHtml(tb, k), 'Tagesbericht.pdf', function(){
       btn.disabled = false;
       btn.textContent = 'Drucken / Als PDF teilen';
-      window.print();
-    }, 150);
+    });
   };
 }
 
@@ -7438,7 +7511,7 @@ function tagesberichtLeerDrucken(kundeId){
     } catch(eQr){
       console.error('QR Fehler', eQr);
     }
-    window.print();
+    bsvDruckenOderTeilen(null, 'Tagesbericht-leer.pdf');
   } catch(err){
     console.error('Tagesbericht Leer-Druck Fehler', err);
     alert('Fehler beim Vorbereiten: ' + (err && err.message ? err.message : String(err)));
@@ -7471,15 +7544,10 @@ function modalSammelberichtAnsicht(sbId){
     druckBtnSbEl.disabled = true;
     druckBtnSbEl.textContent = 'Bereite vor...';
     try {
-      var pa = document.getElementById('printArea');
-      pa.innerHTML = buildSammelberichtHtml(sb, k);
-      var anzahlGeraete = (sb.geraeteSnapshot || []).length;
-      var wartezeit = Math.min(120 + anzahlGeraete * 15, 3000);
-      setTimeout(function(){
+      bsvDruckenOderTeilen(buildSammelberichtHtml(sb, k), (sb.berichtNr || 'Sammelbericht') + '.pdf', function(){
         druckBtnSbEl.disabled = false;
         druckBtnSbEl.textContent = 'Drucken / Als PDF teilen';
-        window.print();
-      }, wartezeit);
+      });
     } catch(err){
       druckBtnSbEl.disabled = false;
       druckBtnSbEl.textContent = 'Drucken / Als PDF teilen';
@@ -7780,9 +7848,7 @@ function bindDynamic(){
 
   var druckBtnStat = document.getElementById('druckBtnStat');
   if(druckBtnStat) druckBtnStat.onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildStatistikDruckHtml(state.statFilter || 'tag');
-    setTimeout(function(){ window.print(); }, 120);
+    bsvDruckenOderTeilen(buildStatistikDruckHtml(state.statFilter || 'tag'), 'Statistik.pdf');
   };
 
   var tagesprotokollDatumInput = document.getElementById('tagesprotokollDatum');
@@ -8056,9 +8122,7 @@ function bindDynamic(){
   if(terminlisteBtn) terminlisteBtn.onclick = modalTerminliste;
   var baldFaelligDruckBtn = document.getElementById('baldFaelligDruckBtn');
   if(baldFaelligDruckBtn) baldFaelligDruckBtn.onclick = function(){
-    var pa = document.getElementById('printArea');
-    pa.innerHTML = buildBaldFaelligDruckHtml();
-    setTimeout(function(){ window.print(); }, 120);
+    bsvDruckenOderTeilen(buildBaldFaelligDruckHtml(), 'Baldige-Termine.pdf');
   };
 
   document.querySelectorAll('.ausgeschiedenLoeschenBtn').forEach(function(b){
