@@ -329,7 +329,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte'];
 var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
@@ -503,6 +503,7 @@ var state = {
   portal_zugriffe: [],
   lagerartikel: [],
   brandschutzplaene: [],
+  tagesberichte: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
   pruefungOffenAufgeklappt: {},
@@ -531,7 +532,10 @@ function loadAll(cb){
                   state.lagerartikel = la;
                   dbGetAll('brandschutzplaene', function(bp){
                     state.brandschutzplaene = bp;
-                    cb();
+                    dbGetAll('tagesberichte', function(tb){
+                      state.tagesberichte = tb;
+                      cb();
+                    });
                   });
                 });
               });
@@ -2452,6 +2456,7 @@ function renderKundeDetail(kundeId){
   html += '<button class="btn block secondary" style="margin-top:10px;" id="begehungsberichtBtn">Begehungsbericht (Mängel, Fotos, Tätigkeiten)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="dokumenteBtn">Dokumente ablegen (fertige PDF-Berichte)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="brandschutzplanBtn">Brandschutzplan (Melder-Nummer suchen)</button>';
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="tagesberichtBtn">Tagesbericht</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="fuellhistorieKundeBtn">Füllhistorie (Perchtl Zisch / CO2-Flaschen)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="ausstattungBtn">Ausstattungsliste (was ist wo im Gebäude)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
@@ -7163,6 +7168,267 @@ function buildSammelberichtHtml(sb, k){
   return html;
 }
 
+// ---------- Tagesbericht ----------
+function modalTagesberichtListe(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var liste = state.tagesberichte.filter(function(t){ return t.kundeId === kundeId; })
+    .slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Tagesberichte</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<button type="button" class="btn block" id="tbNeuBtn">Neuer Tagesbericht (ausfüllen)</button>';
+  html += '<button type="button" class="btn block secondary" id="tbLeerDruckBtn" style="margin-top:8px;">Leeres Formular drucken (mit QR-Code)</button>';
+
+  html += '<div class="section-title" style="margin-top:20px;">Bisherige Tagesberichte</div>';
+  if(liste.length === 0){
+    html += '<div class="empty">Noch keine Tagesberichte gespeichert</div>';
+  } else {
+    liste.forEach(function(t){
+      html += '<div class="card">';
+      html += '<div class="row"><h3>' + fmtDate(t.datum) + '</h3></div>';
+      html += '<div class="meta">' + escapeHtml(t.techniker || '') + (t.anlageBereich ? ' &middot; ' + escapeHtml(t.anlageBereich) : '') + '</div>';
+      html += '<div style="display:flex; gap:8px; margin-top:8px;">';
+      html += '<button class="btn small secondary" data-tbansehen="' + t.id + '">Ansehen / Drucken</button>';
+      html += '<button class="btn small" style="background:#b02a2a; color:#fff;" data-tbloeschen="' + t.id + '">Löschen</button>';
+      html += '</div></div>';
+    });
+  }
+
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('tbNeuBtn').onclick = function(){ modalTagesberichtNeu(kundeId); };
+  document.getElementById('tbLeerDruckBtn').onclick = function(){ tagesberichtLeerDrucken(kundeId); };
+
+  document.querySelectorAll('[data-tbansehen]').forEach(function(b){
+    b.onclick = function(){ modalTagesberichtAnsicht(b.getAttribute('data-tbansehen')); };
+  });
+  document.querySelectorAll('[data-tbloeschen]').forEach(function(b){
+    b.onclick = function(){
+      var tid = b.getAttribute('data-tbloeschen');
+      if(!confirm('Diesen Tagesbericht wirklich löschen?')) return;
+      dbDelete('tagesberichte', tid, function(){
+        dbGetAll('tagesberichte', function(alle){
+          state.tagesberichte = alle;
+          modalTagesberichtListe(kundeId);
+        });
+      });
+    };
+  });
+}
+
+function modalTagesberichtNeu(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var heute = new Date().toISOString().substring(0,10);
+
+  var html = '';
+  html += '<div class="modal-head"><h3>Neuer Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  if(k.objekt) html += '<div class="meta">' + escapeHtml(k.objekt) + '</div>';
+
+  html += '<label style="margin-top:10px;">Datum</label><input type="date" id="tbDatum" value="' + heute + '">';
+  html += '<label>Techniker</label><input type="text" id="tbTechniker" placeholder="Name">';
+  html += '<div class="row" style="gap:8px;">';
+  html += '<div style="flex:1;"><label>Von</label><input type="time" id="tbVon"></div>';
+  html += '<div style="flex:1;"><label>Bis</label><input type="time" id="tbBis"></div>';
+  html += '</div>';
+  html += '<label>Anlage / Bereich</label><input type="text" id="tbAnlageBereich" placeholder="z.B. Küche, gesamtes Gebäude">';
+
+  html += '<label style="margin-top:10px;">1. Tätigkeiten laut Auftrag</label>';
+  html += '<textarea id="tbTaetigkeitenAuftrag" rows="2" placeholder="Welche Arbeiten sind laut Auftrag durchzuführen?"></textarea>';
+
+  html += '<label>2. Durchgeführte Tätigkeiten</label>';
+  html += '<textarea id="tbDurchgefuehrt" rows="3" placeholder="Was wurde tatsächlich durchgeführt?"></textarea>';
+
+  html += '<label>3. Verwendetes Material / Ersatzteile</label>';
+  html += '<textarea id="tbMaterial" rows="3" placeholder="Je Zeile z.B.: 2x Löscherplombe, Art.Nr. 123, ..."></textarea>';
+
+  html += '<label>4. Feststellungen / Hinweise / offene Punkte</label>';
+  html += '<textarea id="tbFeststellungen" rows="3" placeholder="z.B. Zelt in Gang, BS-Türen verkeilt..."></textarea>';
+
+  html += '<label style="margin-top:14px;">Unterschrift Techniker</label>';
+  html += '<canvas class="sig" id="sigPadTechnikerTb"></canvas>';
+  html += '<button class="btn secondary small" id="sigClearTechnikerTb" style="margin-top:8px;">Unterschrift löschen</button>';
+
+  html += '<label style="margin-top:14px;">Unterschrift Auftraggeber / Kunde</label>';
+  html += '<canvas class="sig" id="sigPadKundeTb"></canvas>';
+  html += '<button class="btn secondary small" id="sigClearKundeTb" style="margin-top:8px;">Unterschrift löschen</button>';
+
+  html += '<button type="button" class="btn block" id="tbSpeichernBtn" style="margin-top:18px;">Speichern &amp; Drucken</button>';
+
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+
+  var canvasTechniker = initSigPad('sigPadTechnikerTb');
+  var canvasKunde = initSigPad('sigPadKundeTb');
+  document.getElementById('sigClearTechnikerTb').onclick = function(){
+    if(canvasTechniker){ var ctx = canvasTechniker.getContext('2d'); ctx.clearRect(0,0,canvasTechniker.width,canvasTechniker.height); }
+  };
+  document.getElementById('sigClearKundeTb').onclick = function(){
+    if(canvasKunde){ var ctx = canvasKunde.getContext('2d'); ctx.clearRect(0,0,canvasKunde.width,canvasKunde.height); }
+  };
+
+  document.getElementById('tbSpeichernBtn').onclick = function(){
+    var tb = {
+      id: uid(),
+      kundeId: kundeId,
+      datum: document.getElementById('tbDatum').value || heute,
+      techniker: document.getElementById('tbTechniker').value.trim(),
+      von: document.getElementById('tbVon').value,
+      bis: document.getElementById('tbBis').value,
+      anlageBereich: document.getElementById('tbAnlageBereich').value.trim(),
+      taetigkeitenAuftrag: document.getElementById('tbTaetigkeitenAuftrag').value.trim(),
+      durchgefuehrt: document.getElementById('tbDurchgefuehrt').value.trim(),
+      material: document.getElementById('tbMaterial').value.trim(),
+      feststellungen: document.getElementById('tbFeststellungen').value.trim(),
+      unterschriftTechniker: canvasTechniker ? canvasTechniker.toDataURL('image/png') : null,
+      unterschriftKunde: canvasKunde ? canvasKunde.toDataURL('image/png') : null,
+      erstelltAm: new Date().toISOString()
+    };
+    dbPut('tagesberichte', tb, function(){
+      state.tagesberichte.push(tb);
+      toast('Tagesbericht gespeichert');
+      modalTagesberichtAnsicht(tb.id);
+    });
+  };
+}
+
+function buildTagesberichtDruckHtml(tb, k){
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Tagesbericht</h1></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+
+  html += '<div class="pb-kundenreihe">';
+  html += '<div class="pb-kundenbox">';
+  html += '<div class="knr">Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
+  html += '</div>';
+  html += '<div class="pb-kundenbox objektbox">';
+  html += '<div class="knr">Objekt / Anlage-Bereich</div>';
+  html += '<div style="font-weight:700; margin:2px 0;">' + (k && k.objekt ? escapeHtml(k.objekt) : '-') + '</div>';
+  html += '<div>' + escapeHtml(tb.anlageBereich || '') + '</div>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '<div class="meta" style="margin:10px 0;">Datum: ' + fmtDate(tb.datum) + (tb.techniker ? ' &middot; Techniker: ' + escapeHtml(tb.techniker) : '') + (tb.von ? ' &middot; Von: ' + escapeHtml(tb.von) : '') + (tb.bis ? ' Bis: ' + escapeHtml(tb.bis) : '') + '</div>';
+
+  function abschnitt(titel, inhalt){
+    return '<div style="margin-top:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">' + titel + '</div><div style="white-space:pre-wrap; border:1px solid #ccc; border-radius:6px; padding:8px; min-height:30px; font-size:13px;">' + escapeHtml(inhalt || '-') + '</div></div>';
+  }
+  html += abschnitt('1. Tätigkeiten laut Auftrag', tb.taetigkeitenAuftrag);
+  html += abschnitt('2. Durchgeführte Tätigkeiten', tb.durchgefuehrt);
+  html += abschnitt('3. Verwendetes Material / Ersatzteile', tb.material);
+  html += abschnitt('4. Feststellungen / Hinweise / offene Punkte', tb.feststellungen);
+
+  html += '<div class="pb-sig-row" style="margin-top:20px;">';
+  html += '<div class="pb-sig-col">';
+  if(tb.unterschriftTechniker) html += '<img src="' + tb.unterschriftTechniker + '">';
+  else html += '<div style="height:60px;"></div>';
+  html += '<div class="sig-label">Unterschrift Techniker</div>';
+  html += '</div>';
+  html += '<div class="pb-sig-col">';
+  if(tb.unterschriftKunde) html += '<img src="' + tb.unterschriftKunde + '">';
+  else html += '<div style="height:60px;"></div>';
+  html += '<div class="sig-label">Unterschrift Auftraggeber / Kunde' + (k ? ' (' + escapeHtml(k.name) + ')' : '') + '</div>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function modalTagesberichtAnsicht(tbId){
+  var tb = state.tagesberichte.filter(function(x){ return x.id === tbId; })[0];
+  if(!tb) return;
+  var k = state.kunden.filter(function(x){ return x.id === tb.kundeId; })[0];
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
+  html += buildTagesberichtDruckHtml(tb, k);
+  html += '<div class="no-print" style="margin-top:16px;">';
+  html += '<button class="btn block" id="druckBtnTb">Drucken / Als PDF teilen</button>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('druckBtnTb').onclick = function(){
+    var btn = document.getElementById('druckBtnTb');
+    btn.disabled = true;
+    btn.textContent = 'Bereite vor...';
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildTagesberichtDruckHtml(tb, k);
+    setTimeout(function(){
+      btn.disabled = false;
+      btn.textContent = 'Drucken / Als PDF teilen';
+      window.print();
+    }, 150);
+  };
+}
+
+function buildTagesberichtLeerDruckHtml(k, qrId){
+  var html = '';
+  html += '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Tagesbericht</h1></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+
+  html += '<div class="pb-kundenreihe">';
+  html += '<div class="pb-kundenbox">';
+  html += '<div class="knr">Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
+  html += '</div>';
+  html += '<div class="pb-kundenbox objektbox">';
+  html += '<div class="knr">Objekt</div>';
+  html += '<div style="font-weight:700; margin:2px 0;">' + (k && k.objekt ? escapeHtml(k.objekt) : '-') + '</div>';
+  html += '</div>';
+  html += '<div style="text-align:center; padding:4px;">';
+  html += '<div id="' + qrId + '"></div>';
+  html += '<div style="font-size:10px; margin-top:2px;">Kunde scannen</div>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '<div style="margin:10px 0; font-size:13px;">Datum: _______________&nbsp;&nbsp;&nbsp; Techniker: _______________&nbsp;&nbsp;&nbsp; Von: _______ Bis: _______</div>';
+  html += '<div style="font-size:13px;">Anlage / Bereich: _______________________________________________</div>';
+
+  function leererAbschnitt(titel, hoehe){
+    return '<div style="margin-top:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">' + titel + '</div><div style="border:1px solid #ccc; border-radius:6px; min-height:' + hoehe + 'px;"></div></div>';
+  }
+  html += leererAbschnitt('1. Tätigkeiten laut Auftrag', 50);
+  html += leererAbschnitt('2. Durchgeführte Tätigkeiten', 70);
+  html += leererAbschnitt('3. Verwendetes Material / Ersatzteile', 70);
+  html += leererAbschnitt('4. Feststellungen / Hinweise / offene Punkte', 70);
+
+  html += '<div class="pb-sig-row" style="margin-top:20px;">';
+  html += '<div class="pb-sig-col"><div style="height:60px;"></div><div class="sig-label">Unterschrift Techniker</div></div>';
+  html += '<div class="pb-sig-col"><div style="height:60px;"></div><div class="sig-label">Unterschrift Auftraggeber / Kunde</div></div>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function tagesberichtLeerDrucken(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var qrId = 'tbqr_' + k.id;
+  var pa = document.getElementById('printArea');
+  pa.innerHTML = buildTagesberichtLeerDruckHtml(k, qrId);
+  try{
+    new QRCode(document.getElementById(qrId), {
+      text: 'BSV-KUNDE:' + k.id,
+      width: 90,
+      height: 90,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e){}
+  setTimeout(function(){ window.print(); }, 150);
+}
+
 function modalSammelberichtAnsicht(sbId){
   var sb = state.sammelberichte.filter(function(x){ return x.id === sbId; })[0];
   if(!sb) return;
@@ -7753,6 +8019,9 @@ function bindDynamic(){
 
   var brandschutzplanBtn = document.getElementById('brandschutzplanBtn');
   if(brandschutzplanBtn) brandschutzplanBtn.onclick = function(){ modalBrandschutzplan(state.activeKundeId); };
+
+  var tagesberichtBtn = document.getElementById('tagesberichtBtn');
+  if(tagesberichtBtn) tagesberichtBtn.onclick = function(){ modalTagesberichtListe(state.activeKundeId); };
 
   var fuellhistorieKundeBtn = document.getElementById('fuellhistorieKundeBtn');
   if(fuellhistorieKundeBtn) fuellhistorieKundeBtn.onclick = function(){ modalFuellhistorieListe(state.activeKundeId); };
