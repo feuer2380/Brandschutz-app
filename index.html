@@ -5318,6 +5318,30 @@ function modalFuellhistorieListe(kundeId){
     return { tag: summenTag, monat: summenMonat, jahr: summenJahr };
   }
 
+  function summeProMonat(liste){
+    var monate = {};
+    var reihenfolge = [];
+    liste.forEach(function(e){
+      (e.g.fuellungen || []).forEach(function(f){
+        var info = fuellungLesen(f, e.g.kategorie, e.g.standort);
+        var d = new Date(f.datum);
+        if(isNaN(d.getTime())) return;
+        var key = d.getFullYear() + '-' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1);
+        if(!monate[key]){
+          monate[key] = { jahr: d.getFullYear(), monat: d.getMonth(), summen: {}, anzahl: 0 };
+          reihenfolge.push(key);
+        }
+        monate[key].anzahl++;
+        if(typeof info.menge === 'number' && !isNaN(info.menge)){
+          if(!monate[key].summen[info.einheit]) monate[key].summen[info.einheit] = 0;
+          monate[key].summen[info.einheit] += info.menge;
+        }
+      });
+    });
+    reihenfolge.sort(function(a, b){ return b.localeCompare(a); });
+    return reihenfolge.map(function(key){ return monate[key]; });
+  }
+
   function neuZeichnen(suchtext, katFilter){
     var q = (suchtext || '').trim().toLowerCase();
     var alle = alleGeraeteMitKunde();
@@ -5350,6 +5374,17 @@ function modalFuellhistorieListe(kundeId){
     html += '<div class="meta">Diesen Monat abgefüllt: ' + formatiereSummen(zeitraeume.monat) + '</div>';
     html += '<div class="meta">Dieses Jahr abgefüllt: ' + formatiereSummen(zeitraeume.jahr) + '</div>';
     html += '</div>';
+
+    var monatsListe = summeProMonat(gefiltert);
+    if(monatsListe.length > 0){
+      var monatNamenKurz = ['Jän','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+      html += '<div class="section-title" style="margin-top:16px;">Monatsübersicht</div>';
+      html += '<div class="card">';
+      monatsListe.forEach(function(m, idx){
+        html += '<div class="meta" style="display:flex; justify-content:space-between; padding:4px 0;' + (idx > 0 ? ' border-top:1px solid var(--line);' : '') + '"><span>' + monatNamenKurz[m.monat] + ' ' + m.jahr + '</span><span>' + formatiereSummen(m.summen) + ' &middot; ' + m.anzahl + ' Füll.</span></div>';
+      });
+      html += '</div>';
+    }
 
     html += '<button type="button" class="btn block" id="fuellDruckenBtn" style="margin-top:14px;">Statistik drucken / als PDF teilen</button>';
 
