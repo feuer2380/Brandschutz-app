@@ -7480,10 +7480,10 @@ function buildTagesberichtDruckHtml(tb, k, qrId){
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', escapeHtml(tb.anlageBereich || ''));
   html += '</table>';
 
-  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', '', escapeHtml(tb.taetigkeitenAuftrag || ''), 45);
-  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', '', escapeHtml(tb.durchgefuehrt || ''), 60);
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', '', escapeHtml(tb.taetigkeitenAuftrag || ''), 90);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', '', escapeHtml(tb.durchgefuehrt || ''), 110);
   html += tbMaterialTabelleAusgefuellt(tb.material);
-  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', escapeHtml(tb.feststellungen || ''), 60);
+  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', escapeHtml(tb.feststellungen || ''), 110);
   html += tbUnterschriftTabelle(tb.unterschriftTechniker, tb.unterschriftKunde, k ? k.name : null);
   html += tbFusszeile();
 
@@ -7546,10 +7546,10 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', '');
   html += '</table>';
 
-  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', 'Auftragsbeschreibung &ndash; welche Arbeiten sind laut Auftrag durchzuführen?', '', 45);
-  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Hier dokumentiert der Techniker kurz und nachvollziehbar, was tatsächlich durchgeführt wurde:', '', 60);
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', 'Auftragsbeschreibung &ndash; welche Arbeiten sind laut Auftrag durchzuführen?', '', 90);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Hier dokumentiert der Techniker kurz und nachvollziehbar, was tatsächlich durchgeführt wurde:', '', 110);
   html += tbMaterialTabelleLeer();
-  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', '', 60);
+  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', '', 110);
   html += tbUnterschriftTabelle(null, null, null);
   html += tbFusszeile();
 
