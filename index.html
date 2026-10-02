@@ -927,6 +927,12 @@ function renderDashboard(){
 
   var html = '';
   html += '<div class="row" style="margin-bottom:8px;"><span class="meta">Angemeldet als: ' + (state.rolle === 'chef' ? 'Chef' : escapeHtml(state.mitarbeiterName || 'Mitarbeiter')) + '</span><button class="btn small secondary" id="logoutBtn">Abmelden</button></div>';
+  if(ueberfaelligGeraete.length > 0){
+    html += '<button type="button" id="ueberfaelligBannerBtn" style="width:100%; text-align:left; background:#c23f12; color:#fff; border:none; border-radius:10px; padding:14px 16px; margin-bottom:12px; font-size:15px; font-weight:700; display:flex; align-items:center; gap:10px;">';
+    html += '<span style="font-size:22px;">&#9888;</span>';
+    html += '<span>' + ueberfaelligGeraete.length + ' Gerät' + (ueberfaelligGeraete.length === 1 ? '' : 'e') + ' überfällig &ndash; jetzt prüfen</span>';
+    html += '</button>';
+  }
   html += '<div class="statrow">';
   html += '<div class="stat"><div class="n">' + kundenSichtbar.length + '</div><div class="l">Kunden</div></div>';
   html += '<div class="stat"><div class="n">' + geraeteSichtbar.length + '</div><div class="l">Geräte</div></div>';
@@ -7951,6 +7957,13 @@ function bindDynamic(){
 
   var logoutBtn = document.getElementById('logoutBtn');
   if(logoutBtn) logoutBtn.onclick = function(){ state.rolle = null; state.mitarbeiterName = null; state.tab = 'dashboard'; render(); };
+
+  var ueberfaelligBannerBtn = document.getElementById('ueberfaelligBannerBtn');
+  if(ueberfaelligBannerBtn) ueberfaelligBannerBtn.onclick = function(){
+    state.pruefungFilter = 'warn';
+    state.tab = 'pruefungen';
+    render();
+  };
 
   var addGeraet = document.getElementById('addGeraetBtn');
   if(addGeraet) addGeraet.onclick = function(){ modalNeuesGeraet(state.activeKundeId); };
