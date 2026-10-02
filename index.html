@@ -7413,20 +7413,29 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
 }
 
 function tagesberichtLeerDrucken(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
-  if(!k) return;
-  var qrId = 'tbqr_' + k.id;
-  var pa = document.getElementById('printArea');
-  pa.innerHTML = buildTagesberichtLeerDruckHtml(k, qrId);
+  toast('Bereite Formular vor...');
   try{
-    new QRCode(document.getElementById(qrId), {
-      text: 'BSV-KUNDE:' + k.id,
-      width: 90,
-      height: 90,
-      correctLevel: QRCode.CorrectLevel.M
-    });
-  } catch(e){}
-  setTimeout(function(){ window.print(); }, 150);
+    var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+    if(!k){ toast('Kunde nicht gefunden'); return; }
+    var qrId = 'tbqr_' + k.id;
+    var pa = document.getElementById('printArea');
+    if(!pa){ toast('Fehler: Druckbereich nicht gefunden'); return; }
+    pa.innerHTML = buildTagesberichtLeerDruckHtml(k, qrId);
+    try{
+      new QRCode(document.getElementById(qrId), {
+        text: 'BSV-KUNDE:' + k.id,
+        width: 90,
+        height: 90,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(eQr){
+      console.error('QR Fehler', eQr);
+    }
+    setTimeout(function(){ window.print(); }, 150);
+  } catch(err){
+    console.error('Tagesbericht Leer-Druck Fehler', err);
+    toast('Fehler beim Vorbereiten: ' + (err && err.message ? err.message : String(err)));
+  }
 }
 
 function modalSammelberichtAnsicht(sbId){
