@@ -7438,10 +7438,7 @@ function tagesberichtLeerDrucken(kundeId){
     } catch(eQr){
       console.error('QR Fehler', eQr);
     }
-    setTimeout(function(){
-      alert('Rufe jetzt window.print() auf...');
-      window.print();
-    }, 150);
+    window.print();
   } catch(err){
     console.error('Tagesbericht Leer-Druck Fehler', err);
     alert('Fehler beim Vorbereiten: ' + (err && err.message ? err.message : String(err)));
