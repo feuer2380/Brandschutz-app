@@ -7197,7 +7197,14 @@ function modalTagesberichtListe(kundeId){
 
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
-  document.getElementById('tbNeuBtn').onclick = function(){ modalTagesberichtNeu(kundeId); };
+  document.getElementById('tbNeuBtn').onclick = function(){
+    try{
+      modalTagesberichtNeu(kundeId);
+    } catch(err){
+      console.error('Fehler beim Öffnen von Neuer Tagesbericht', err);
+      toast('Fehler: ' + (err && err.message ? err.message : String(err)));
+    }
+  };
   document.getElementById('tbLeerDruckBtn').onclick = function(){ tagesberichtLeerDrucken(kundeId); };
 
   document.querySelectorAll('[data-tbansehen]').forEach(function(b){
@@ -7431,10 +7438,13 @@ function tagesberichtLeerDrucken(kundeId){
     } catch(eQr){
       console.error('QR Fehler', eQr);
     }
-    setTimeout(function(){ window.print(); }, 150);
+    setTimeout(function(){
+      alert('Rufe jetzt window.print() auf...');
+      window.print();
+    }, 150);
   } catch(err){
     console.error('Tagesbericht Leer-Druck Fehler', err);
-    toast('Fehler beim Vorbereiten: ' + (err && err.message ? err.message : String(err)));
+    alert('Fehler beim Vorbereiten: ' + (err && err.message ? err.message : String(err)));
   }
 }
 
