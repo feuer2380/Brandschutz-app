@@ -585,7 +585,19 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   }
 
   setTimeout(function(){
-    html2canvas(pa, { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(function(canvas){
+    html2canvas(pa, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      width: pa.scrollWidth,
+      height: pa.scrollHeight,
+      windowWidth: pa.scrollWidth,
+      windowHeight: pa.scrollHeight
+    }).then(function(canvas){
       aufraeumen();
 
       var pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
