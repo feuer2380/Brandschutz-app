@@ -567,7 +567,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   }
 
   pa.style.display = 'block';
-  pa.style.position = 'fixed';
+  pa.style.position = 'absolute';
   pa.style.left = '-9999px';
   pa.style.top = '0';
   pa.style.width = '780px';
@@ -7377,71 +7377,145 @@ function modalTagesberichtNeu(kundeId){
   };
 }
 
-function buildTagesberichtDruckHtml(tb, k){
+function tbBriefkopf(qrId){
   var html = '';
-  html += '<div class="bericht-brief">';
-  html += '<div class="pb-kopfzeile">';
-  html += '<div class="pb-titel"><h1>Tagesbericht</h1></div>';
-  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
-  html += '</div>';
-
-  html += '<div class="pb-kundenreihe">';
-  html += '<div class="pb-kundenbox">';
-  html += '<div class="knr">Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-  html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
-  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
-  html += '</div>';
-  html += '<div class="pb-kundenbox objektbox">';
-  html += '<div class="knr">Objekt / Anlage-Bereich</div>';
-  html += '<div style="font-weight:700; margin:2px 0;">' + (k && k.objekt ? escapeHtml(k.objekt) : '-') + '</div>';
-  html += '<div>' + escapeHtml(tb.anlageBereich || '') + '</div>';
-  html += '</div>';
-  html += '</div>';
-
-  html += '<div class="meta" style="margin:10px 0;">Datum: ' + fmtDate(tb.datum) + (tb.techniker ? ' &middot; Techniker: ' + escapeHtml(tb.techniker) : '') + (tb.von ? ' &middot; Von: ' + escapeHtml(tb.von) : '') + (tb.bis ? ' Bis: ' + escapeHtml(tb.bis) : '') + '</div>';
-
-  function abschnitt(titel, inhalt){
-    return '<div style="margin-top:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">' + titel + '</div><div style="white-space:pre-wrap; border:1px solid #ccc; border-radius:6px; padding:8px; min-height:30px; font-size:13px;">' + escapeHtml(inhalt || '-') + '</div></div>';
+  html += '<table style="width:100%; border-collapse:collapse; margin-bottom:6px;"><tr>';
+  html += '<td style="vertical-align:top; width:150px;"><img src="' + LOGO_DATA + '" style="width:135px;"></td>';
+  html += '<td style="vertical-align:top; text-align:right; font-size:11px; color:#222; line-height:1.5;">Wolfgang Janiba<br>Brandschutztechnik GmbH<br><br>Ketzergasse 299, 2380 Perchtoldsdorf<br>www.loeschtechnik.at, 0676 / 305 83 98</td>';
+  if(qrId){
+    html += '<td style="vertical-align:top; text-align:right; width:100px; padding-left:10px;"><div id="' + qrId + '"></div><div style="font-size:9px; color:#777; margin-top:2px;">Kunde scannen</div></td>';
   }
-  html += abschnitt('1. Tätigkeiten laut Auftrag', tb.taetigkeitenAuftrag);
-  html += abschnitt('2. Durchgeführte Tätigkeiten', tb.durchgefuehrt);
-  html += abschnitt('3. Verwendetes Material / Ersatzteile', tb.material);
-  html += abschnitt('4. Feststellungen / Hinweise / offene Punkte', tb.feststellungen);
+  html += '</tr></table>';
+  html += '<div style="text-align:center; font-size:20px; font-weight:700; margin:8px 0 14px;">TAGESBERICHT</div>';
+  return html;
+}
 
-  html += '<div class="pb-sig-row" style="margin-top:20px;">';
-  html += '<div class="pb-sig-col">';
-  if(tb.unterschriftTechniker) html += '<img src="' + tb.unterschriftTechniker + '">';
-  else html += '<div style="height:60px;"></div>';
-  html += '<div class="sig-label">Unterschrift Techniker</div>';
-  html += '</div>';
-  html += '<div class="pb-sig-col">';
-  if(tb.unterschriftKunde) html += '<img src="' + tb.unterschriftKunde + '">';
-  else html += '<div style="height:60px;"></div>';
-  html += '<div class="sig-label">Unterschrift Auftraggeber / Kunde' + (k ? ' (' + escapeHtml(k.name) + ')' : '') + '</div>';
-  html += '</div>';
-  html += '</div>';
+function tbKopfzeile(labelA, wertA, labelB, wertB){
+  var labelZelle = function(label){
+    return '<td style="border:1px solid #333; background:#eee; padding:6px 8px; width:15%; font-weight:700; font-size:11px; vertical-align:middle;">' + label + '</td>';
+  };
+  var wertZelle = function(wert){
+    return '<td style="border:1px solid #333; padding:6px 8px; width:35%; font-size:12px; vertical-align:middle;">' + (wert || '&nbsp;') + '</td>';
+  };
+  return '<tr>' + labelZelle(labelA) + wertZelle(wertA) + labelZelle(labelB) + wertZelle(wertB) + '</tr>';
+}
+
+function tbAbschnitt(titel, hinweistext, inhalt, hoehe){
+  var html = '<div style="margin-top:14px;">';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">' + titel + '</div>';
+  html += '<div style="border:1px solid #333; min-height:' + hoehe + 'px; padding:6px 8px;">';
+  if(hinweistext) html += '<div style="font-weight:700; font-size:11px; margin-bottom:4px;">' + hinweistext + '</div>';
+  if(inhalt) html += '<div style="white-space:pre-wrap; font-size:12px; line-height:1.6;">' + inhalt + '</div>';
+  html += '</div></div>';
+  return html;
+}
+
+function tbMaterialTabelleLeer(){
+  var html = '<div style="margin-top:14px;">';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">3. Verwendetes Material / Ersatzteile</div>';
+  html += '<table style="width:100%; border-collapse:collapse; font-size:10px;">';
+  html += '<tr><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700; width:12%;">MENGE</td><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700; width:38%;">MATERIAL / ERSATZTEIL</td><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700; width:25%;">ART.-NR. / TYP</td><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700;">BEMERKUNG</td></tr>';
+  for(var i = 0; i < 3; i++){
+    html += '<tr><td style="border:1px solid #333; padding:11px 6px;">&nbsp;</td><td style="border:1px solid #333; padding:11px 6px;">&nbsp;</td><td style="border:1px solid #333; padding:11px 6px;">&nbsp;</td><td style="border:1px solid #333; padding:11px 6px;">&nbsp;</td></tr>';
+  }
+  html += '</table></div>';
+  return html;
+}
+
+function tbMaterialTabelleAusgefuellt(text){
+  var html = '<div style="margin-top:14px;">';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">3. Verwendetes Material / Ersatzteile</div>';
+  html += '<table style="width:100%; border-collapse:collapse; font-size:11px;">';
+  html += '<tr><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700;">Material / Ersatzteil &amp; Details</td></tr>';
+  var zeilen = (text || '').split('\n').filter(function(z){ return z.trim().length > 0; });
+  if(zeilen.length === 0){
+    html += '<tr><td style="border:1px solid #333; padding:8px 6px; color:#999;">&ndash;</td></tr>';
+  } else {
+    zeilen.forEach(function(z){
+      html += '<tr><td style="border:1px solid #333; padding:6px;">' + escapeHtml(z) + '</td></tr>';
+    });
+  }
+  html += '</table></div>';
+  return html;
+}
+
+function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName){
+  var html = '<div style="margin-top:18px;">';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">5. Bestätigung</div>';
+  html += '<table style="width:100%; border-collapse:collapse; font-size:11px;">';
+  html += '<tr><td style="border:1px solid #333; background:#eee; padding:6px 8px; font-weight:700; width:50%;">Techniker &ndash; Name / Unterschrift</td><td style="border:1px solid #333; background:#eee; padding:6px 8px; font-weight:700; width:50%;">Auftraggeber / Kunde' + (kundeName ? ' (' + escapeHtml(kundeName) + ')' : '') + ' &ndash; Unterschrift</td></tr>';
+  html += '<tr>';
+  html += '<td style="border:1px solid #333; padding:6px; height:55px; text-align:center; vertical-align:middle;">' + (bildTechniker ? '<img src="' + bildTechniker + '" style="max-height:50px;">' : '') + '</td>';
+  html += '<td style="border:1px solid #333; padding:6px; height:55px; text-align:center; vertical-align:middle;">' + (bildKunde ? '<img src="' + bildKunde + '" style="max-height:50px;">' : '') + '</td>';
+  html += '</tr>';
+  html += '</table></div>';
+  return html;
+}
+
+function tbFusszeile(){
+  return '<div style="margin-top:20px; text-align:center; font-size:9px; color:#999;">&copy; Wolfgang Janiba &middot; Brandschutztechnik &middot; Tagesbericht</div>';
+}
+
+function buildTagesberichtDruckHtml(tb, k, qrId){
+  var html = '';
+  html += '<div class="bericht-brief" style="font-family:-apple-system,Arial,sans-serif;">';
+  html += tbBriefkopf(k ? qrId : null);
+
+  html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
+  html += tbKopfzeile('Datum', fmtDate(tb.datum), 'Techniker', escapeHtml(tb.techniker || ''));
+  html += tbKopfzeile('Von', escapeHtml(tb.von || ''), 'Bis', escapeHtml(tb.bis || ''));
+  html += tbKopfzeile('Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : ''), k ? escapeHtml(k.name) : '-', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
+  html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', escapeHtml(tb.anlageBereich || ''));
+  html += '</table>';
+
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', '', escapeHtml(tb.taetigkeitenAuftrag || ''), 45);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', '', escapeHtml(tb.durchgefuehrt || ''), 60);
+  html += tbMaterialTabelleAusgefuellt(tb.material);
+  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', escapeHtml(tb.feststellungen || ''), 60);
+  html += tbUnterschriftTabelle(tb.unterschriftTechniker, tb.unterschriftKunde, k ? k.name : null);
+  html += tbFusszeile();
 
   html += '</div>';
   return html;
+}
+
+function tbQrEinfuegen(qrId, k){
+  if(!k) return;
+  try{
+    new QRCode(document.getElementById(qrId), {
+      text: 'BSV-KUNDE:' + k.id,
+      width: 90,
+      height: 90,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e){
+    console.error('QR Fehler', e);
+  }
 }
 
 function modalTagesberichtAnsicht(tbId){
   var tb = state.tagesberichte.filter(function(x){ return x.id === tbId; })[0];
   if(!tb) return;
   var k = state.kunden.filter(function(x){ return x.id === tb.kundeId; })[0];
+  var qrIdAnsicht = 'tbqr_ansicht_' + tb.id;
   var html = '';
   html += '<div class="modal-head no-print"><h3>Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
-  html += buildTagesberichtDruckHtml(tb, k);
+  html += buildTagesberichtDruckHtml(tb, k, qrIdAnsicht);
   html += '<div class="no-print" style="margin-top:16px;">';
   html += '<button class="btn block" id="druckBtnTb">Drucken / Als PDF teilen</button>';
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  tbQrEinfuegen(qrIdAnsicht, k);
   document.getElementById('druckBtnTb').onclick = function(){
     var btn = document.getElementById('druckBtnTb');
     btn.disabled = true;
     btn.textContent = 'Bereite vor...';
-    bsvDruckenOderTeilen(buildTagesberichtDruckHtml(tb, k), 'Tagesbericht.pdf', function(){
+    var qrIdDruck = 'tbqr_druck_' + tb.id;
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildTagesberichtDruckHtml(tb, k, qrIdDruck);
+    tbQrEinfuegen(qrIdDruck, k);
+    bsvDruckenOderTeilen(null, 'Tagesbericht.pdf', function(){
       btn.disabled = false;
       btn.textContent = 'Drucken / Als PDF teilen';
     });
@@ -7450,43 +7524,22 @@ function modalTagesberichtAnsicht(tbId){
 
 function buildTagesberichtLeerDruckHtml(k, qrId){
   var html = '';
-  html += '<div class="bericht-brief">';
-  html += '<div class="pb-kopfzeile">';
-  html += '<div class="pb-titel"><h1>Tagesbericht</h1></div>';
-  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
-  html += '</div>';
+  html += '<div class="bericht-brief" style="font-family:-apple-system,Arial,sans-serif;">';
+  html += tbBriefkopf(qrId);
 
-  html += '<div class="pb-kundenreihe">';
-  html += '<div class="pb-kundenbox">';
-  html += '<div class="knr">Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-  html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
-  html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
-  html += '</div>';
-  html += '<div class="pb-kundenbox objektbox">';
-  html += '<div class="knr">Objekt</div>';
-  html += '<div style="font-weight:700; margin:2px 0;">' + (k && k.objekt ? escapeHtml(k.objekt) : '-') + '</div>';
-  html += '</div>';
-  html += '<div style="text-align:center; padding:4px;">';
-  html += '<div id="' + qrId + '"></div>';
-  html += '<div style="font-size:10px; margin-top:2px;">Kunde scannen</div>';
-  html += '</div>';
-  html += '</div>';
+  html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
+  html += tbKopfzeile('Datum', '', 'Techniker', '');
+  html += tbKopfzeile('Von', '', 'Bis', '');
+  html += tbKopfzeile('Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : ''), k ? escapeHtml(k.name) : '', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
+  html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', '');
+  html += '</table>';
 
-  html += '<div style="margin:10px 0; font-size:13px;">Datum: _______________&nbsp;&nbsp;&nbsp; Techniker: _______________&nbsp;&nbsp;&nbsp; Von: _______ Bis: _______</div>';
-  html += '<div style="font-size:13px;">Anlage / Bereich: _______________________________________________</div>';
-
-  function leererAbschnitt(titel, hoehe){
-    return '<div style="margin-top:12px;"><div style="font-weight:700; font-size:13px; margin-bottom:4px;">' + titel + '</div><div style="border:1px solid #ccc; border-radius:6px; min-height:' + hoehe + 'px;"></div></div>';
-  }
-  html += leererAbschnitt('1. Tätigkeiten laut Auftrag', 50);
-  html += leererAbschnitt('2. Durchgeführte Tätigkeiten', 70);
-  html += leererAbschnitt('3. Verwendetes Material / Ersatzteile', 70);
-  html += leererAbschnitt('4. Feststellungen / Hinweise / offene Punkte', 70);
-
-  html += '<div class="pb-sig-row" style="margin-top:20px;">';
-  html += '<div class="pb-sig-col"><div style="height:60px;"></div><div class="sig-label">Unterschrift Techniker</div></div>';
-  html += '<div class="pb-sig-col"><div style="height:60px;"></div><div class="sig-label">Unterschrift Auftraggeber / Kunde</div></div>';
-  html += '</div>';
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', 'Welche Arbeiten sind laut Auftrag durchzuführen?', '', 45);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Was wurde tatsächlich durchgeführt?', '', 60);
+  html += tbMaterialTabelleLeer();
+  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', '', 60);
+  html += tbUnterschriftTabelle(null, null, null);
+  html += tbFusszeile();
 
   html += '</div>';
   return html;
