@@ -7414,7 +7414,7 @@ function tbKopfzeile(labelA, wertA, labelB, wertB){
 
 function tbAbschnitt(titel, hinweistext, inhalt, hoehe){
   var html = '<div style="margin-top:14px;">';
-  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">' + titel + '</div>';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; text-transform:uppercase; margin-bottom:6px;">' + titel + '</div>';
   html += '<div style="border:1px solid #333; min-height:' + hoehe + 'px; padding:6px 8px;">';
   if(hinweistext) html += '<div style="font-weight:700; font-size:11px; margin-bottom:4px;">' + hinweistext + '</div>';
   if(inhalt) html += '<div style="white-space:pre-wrap; font-size:12px; line-height:1.6;">' + inhalt + '</div>';
@@ -7424,7 +7424,7 @@ function tbAbschnitt(titel, hinweistext, inhalt, hoehe){
 
 function tbMaterialTabelleLeer(){
   var html = '<div style="margin-top:14px;">';
-  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">3. Verwendetes Material / Ersatzteile</div>';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; text-transform:uppercase; margin-bottom:6px;">3. Verwendetes Material / Ersatzteile</div>';
   html += '<table style="width:100%; border-collapse:collapse; font-size:10px;">';
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700; width:12%;">MENGE</td><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700; width:38%;">MATERIAL / ERSATZTEIL</td><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700; width:25%;">ART.-NR. / TYP</td><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700;">BEMERKUNG</td></tr>';
   for(var i = 0; i < 3; i++){
@@ -7436,7 +7436,7 @@ function tbMaterialTabelleLeer(){
 
 function tbMaterialTabelleAusgefuellt(text){
   var html = '<div style="margin-top:14px;">';
-  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">3. Verwendetes Material / Ersatzteile</div>';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; text-transform:uppercase; margin-bottom:6px;">3. Verwendetes Material / Ersatzteile</div>';
   html += '<table style="width:100%; border-collapse:collapse; font-size:11px;">';
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:5px 6px; font-weight:700;">Material / Ersatzteil &amp; Details</td></tr>';
   var zeilen = (text || '').split('\n').filter(function(z){ return z.trim().length > 0; });
@@ -7453,7 +7453,7 @@ function tbMaterialTabelleAusgefuellt(text){
 
 function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName){
   var html = '<div style="margin-top:18px;">';
-  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; margin-bottom:6px;">5. Bestätigung</div>';
+  html += '<div style="font-weight:700; font-size:13px; text-decoration:underline; text-transform:uppercase; margin-bottom:6px;">5. Bestätigung</div>';
   html += '<table style="width:100%; border-collapse:collapse; font-size:11px;">';
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:6px 8px; font-weight:700; width:50%;">Techniker &ndash; Name / Unterschrift</td><td style="border:1px solid #333; background:#eee; padding:6px 8px; font-weight:700; width:50%;">Auftraggeber / Kunde' + (kundeName ? ' (' + escapeHtml(kundeName) + ')' : '') + ' &ndash; Unterschrift</td></tr>';
   html += '<tr>';
@@ -7546,8 +7546,8 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', '');
   html += '</table>';
 
-  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', 'Welche Arbeiten sind laut Auftrag durchzuführen?', '', 45);
-  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Was wurde tatsächlich durchgeführt?', '', 60);
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', 'Auftragsbeschreibung &ndash; welche Arbeiten sind laut Auftrag durchzuführen?', '', 45);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Hier dokumentiert der Techniker kurz und nachvollziehbar, was tatsächlich durchgeführt wurde:', '', 60);
   html += tbMaterialTabelleLeer();
   html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', '', 60);
   html += tbUnterschriftTabelle(null, null, null);
