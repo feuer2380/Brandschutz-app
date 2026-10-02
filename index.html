@@ -2590,6 +2590,8 @@ function renderPruefungen(){
   var html = '';
   var sorted = state.pruefungen.slice().sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
 
+  sorted = sorted.filter(function(p){ return kundeIstAktiv(p.kundeId); });
+
   if(state.rolle === 'mitarbeiter'){
     sorted = sorted.filter(function(p){
       var k = kundeFuerPruefung(p);
