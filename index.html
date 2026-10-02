@@ -2489,7 +2489,8 @@ function renderKundeDetail(kundeId){
       var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
-      html += '<div><strong>Nr. ' + katNr + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      var katBadgeZeigen = g.kategorie && g.kategorie !== 'Feuerlöscher' && state.kundeGeraeteKatFilter !== katKey;
+      html += '<div><strong>Nr. ' + katNr + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (katBadgeZeigen ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
       html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
       if(bj) html += '<span class="badge ' + bj.cls + '">' + bj.label + '</span>';
@@ -2542,20 +2543,22 @@ function renderKundeDetail(kundeId){
         var farbeSchnell = function(key){ return key === 'in_ordnung' ? 'var(--ok)' : (key === 'reparatur' ? '#c98a1c' : '#c23f12'); };
         var stilSchnell = function(key){ return 'flex:1;' + (aktErgSchnell === key ? ' background:' + farbeSchnell(key) + '; color:#fff;' : ''); };
         var klasseSchnell = function(key){ return aktErgSchnell === key ? 'btn small' : 'btn small secondary'; };
-        html += '<div style="display:flex; gap:6px; margin-top:8px;">';
-        html += '<button type="button" class="' + klasseSchnell('in_ordnung') + '" style="' + stilSchnell('in_ordnung') + '" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">' + (istKegAnschluss ? 'Angeschlossen' : 'In Ordnung') + '</button>';
-        if(!istKegAnschluss){
-          html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
-          html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
-        }
-        html += '</div>';
         if(istKegAnschluss){
-          html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px; background:#1d5fa8; color:#fff; border-color:#1d5fa8;" data-nurAbfuellBtn="' + g.id + '">&#128167; Abgefüllt (Wasser/CO2 neu befüllt)</button>';
+          html += '<div style="display:flex; gap:5px; margin-top:8px;">';
+          html += '<button type="button" class="' + klasseSchnell('in_ordnung') + '" style="' + stilSchnell('in_ordnung') + ' padding:7px 4px; font-size:11px;" data-schnellcheck="' + g.id + '" data-erg="in_ordnung" title="Angeschlossen">&#10003; Angeschl.</button>';
+          html += '<button type="button" class="btn small secondary" style="flex:1; padding:7px 4px; font-size:11px; background:#1d5fa8; color:#fff; border-color:#1d5fa8;" data-nurAbfuellBtn="' + g.id + '" title="Abgefüllt (Wasser/CO2 neu befüllt)">&#128167; Abgefüllt</button>';
+          html += '<button type="button" class="btn small secondary" style="flex:1; padding:7px 4px; font-size:11px;' + (g.leer ? ' background:#c98a1c; color:#fff; border-color:#c98a1c;' : '') + '" data-leerToggleBtn="' + g.id + '" title="' + (g.leer ? 'Wieder voll melden' : 'Behälter ist leer melden') + '">' + (g.leer ? '&#10003; Leer' : '&#128683; Leer') + '</button>';
+          html += '</div>';
           if(g.leer && g.leerSeit){
             var tageBisLeerSchnell = g.letzterAnschluss ? Math.round((new Date(g.leerSeit) - new Date(g.letzterAnschluss)) / 86400000) : null;
             html += '<div class="meta" style="margin-top:6px; color:#c23f12; font-weight:600;">Leer seit ' + escapeHtml(fmtDatumZeitLokal(g.leerSeit)) + (tageBisLeerSchnell !== null ? ' &middot; ' + tageBisLeerSchnell + ' Tag' + (tageBisLeerSchnell === 1 ? '' : 'e') + ' im Einsatz ab Anschluss' : '') + '</div>';
           }
-          html += '<button type="button" class="btn small secondary" style="width:100%; margin-top:6px;' + (g.leer ? ' background:#c98a1c; color:#fff; border-color:#c98a1c;' : '') + '" data-leerToggleBtn="' + g.id + '">' + (g.leer ? '&#10003; Als leer markiert &ndash; wieder voll melden' : '&#128683; Behälter ist leer melden') + '</button>';
+        } else {
+        html += '<div style="display:flex; gap:6px; margin-top:8px;">';
+        html += '<button type="button" class="' + klasseSchnell('in_ordnung') + '" style="' + stilSchnell('in_ordnung') + '" data-schnellcheck="' + g.id + '" data-erg="in_ordnung">In Ordnung</button>';
+        html += '<button type="button" class="' + klasseSchnell('reparatur') + '" style="' + stilSchnell('reparatur') + '" data-schnellcheck="' + g.id + '" data-erg="reparatur">Reparatur</button>';
+        html += '<button type="button" class="' + klasseSchnell('ausscheiden') + '" style="' + stilSchnell('ausscheiden') + '" data-schnellcheck="' + g.id + '" data-erg="ausscheiden">Ausscheiden</button>';
+        html += '</div>';
         }
         }
       }
