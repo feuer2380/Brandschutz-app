@@ -366,6 +366,14 @@ function escapeHtmlSafe(s){
   return d.innerHTML;
 }
 
+var dbLadeFehlerToastGezeigt = false;
+function dbLadeFehlerWarnen(){
+  if(dbLadeFehlerToastGezeigt) return;
+  dbLadeFehlerToastGezeigt = true;
+  toast('Keine Verbindung – Daten konnten nicht geladen werden. Bitte Internet prüfen und neu laden.');
+  setTimeout(function(){ dbLadeFehlerToastGezeigt = false; }, 5000);
+}
+
 function dbGetAll(store, cb){
   db.collection(store).get().then(function(snap){
     var ergebnisse = [];
@@ -373,6 +381,7 @@ function dbGetAll(store, cb){
     cb(ergebnisse);
   }).catch(function(err){
     console.error('dbGetAll Fehler', err);
+    dbLadeFehlerWarnen();
     cb([]);
   });
 }
@@ -7407,10 +7416,10 @@ function tbBriefkopf(qrId){
 
 function tbKopfzeile(labelA, wertA, labelB, wertB){
   var labelZelle = function(label){
-    return '<td style="border:1px solid #333; background:#eee; padding:4px 6px; width:15%; font-weight:700; font-size:9px; vertical-align:middle;">' + label + '</td>';
+    return '<td style="border:1px solid #333; background:#eee; padding:14px 8px; width:15%; font-weight:700; font-size:11px; vertical-align:middle;">' + label + '</td>';
   };
   var wertZelle = function(wert){
-    return '<td style="border:1px solid #333; padding:4px 6px; width:35%; font-size:10px; vertical-align:middle;">' + (wert || '&nbsp;') + '</td>';
+    return '<td style="border:1px solid #333; padding:14px 8px; width:35%; font-size:12px; vertical-align:middle;">' + (wert || '&nbsp;') + '</td>';
   };
   return '<tr>' + labelZelle(labelA) + wertZelle(wertA) + labelZelle(labelB) + wertZelle(wertB) + '</tr>';
 }
@@ -7431,7 +7440,7 @@ function tbMaterialTabelleLeer(){
   html += '<table style="width:100%; border-collapse:collapse; font-size:8px;">';
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:4px 5px; font-weight:700; width:12%;">MENGE</td><td style="border:1px solid #333; background:#eee; padding:4px 5px; font-weight:700; width:38%;">MATERIAL / ERSATZTEIL</td><td style="border:1px solid #333; background:#eee; padding:4px 5px; font-weight:700; width:25%;">ART.-NR. / TYP</td><td style="border:1px solid #333; background:#eee; padding:4px 5px; font-weight:700;">BEMERKUNG</td></tr>';
   for(var i = 0; i < 3; i++){
-    html += '<tr><td style="border:1px solid #333; padding:8px 5px;">&nbsp;</td><td style="border:1px solid #333; padding:8px 5px;">&nbsp;</td><td style="border:1px solid #333; padding:8px 5px;">&nbsp;</td><td style="border:1px solid #333; padding:8px 5px;">&nbsp;</td></tr>';
+    html += '<tr><td style="border:1px solid #333; padding:18px 5px;">&nbsp;</td><td style="border:1px solid #333; padding:18px 5px;">&nbsp;</td><td style="border:1px solid #333; padding:18px 5px;">&nbsp;</td><td style="border:1px solid #333; padding:18px 5px;">&nbsp;</td></tr>';
   }
   html += '</table></div>';
   return html;
@@ -7460,8 +7469,8 @@ function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName){
   html += '<table style="width:100%; border-collapse:collapse; font-size:9px;">';
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:4px 6px; font-weight:700; width:50%;">Techniker &ndash; Name / Unterschrift</td><td style="border:1px solid #333; background:#eee; padding:4px 6px; font-weight:700; width:50%;">Auftraggeber / Kunde' + (kundeName ? ' (' + escapeHtml(kundeName) + ')' : '') + ' &ndash; Unterschrift</td></tr>';
   html += '<tr>';
-  html += '<td style="border:1px solid #333; padding:5px; height:45px; text-align:center; vertical-align:middle;">' + (bildTechniker ? '<img src="' + bildTechniker + '" style="max-height:40px;">' : '') + '</td>';
-  html += '<td style="border:1px solid #333; padding:5px; height:45px; text-align:center; vertical-align:middle;">' + (bildKunde ? '<img src="' + bildKunde + '" style="max-height:40px;">' : '') + '</td>';
+  html += '<td style="border:1px solid #333; padding:5px; height:80px; text-align:center; vertical-align:middle;">' + (bildTechniker ? '<img src="' + bildTechniker + '" style="max-height:75px;">' : '') + '</td>';
+  html += '<td style="border:1px solid #333; padding:5px; height:80px; text-align:center; vertical-align:middle;">' + (bildKunde ? '<img src="' + bildKunde + '" style="max-height:75px;">' : '') + '</td>';
   html += '</tr>';
   html += '</table></div>';
   return html;
@@ -7483,10 +7492,10 @@ function buildTagesberichtDruckHtml(tb, k, qrId){
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', escapeHtml(tb.anlageBereich || ''));
   html += '</table>';
 
-  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', '', escapeHtml(tb.taetigkeitenAuftrag || ''), 55);
-  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', '', escapeHtml(tb.durchgefuehrt || ''), 70);
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', '', escapeHtml(tb.taetigkeitenAuftrag || ''), 100);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', '', escapeHtml(tb.durchgefuehrt || ''), 150);
   html += tbMaterialTabelleAusgefuellt(tb.material);
-  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', escapeHtml(tb.feststellungen || ''), 70);
+  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', escapeHtml(tb.feststellungen || ''), 150);
   html += tbUnterschriftTabelle(tb.unterschriftTechniker, tb.unterschriftKunde, k ? k.name : null);
   html += tbFusszeile();
 
@@ -7549,10 +7558,10 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', '');
   html += '</table>';
 
-  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', 'Auftragsbeschreibung &ndash; welche Arbeiten sind laut Auftrag durchzuführen?', '', 55);
-  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Hier dokumentiert der Techniker kurz und nachvollziehbar, was tatsächlich durchgeführt wurde:', '', 70);
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', 'Auftragsbeschreibung &ndash; welche Arbeiten sind laut Auftrag durchzuführen?', '', 100);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Hier dokumentiert der Techniker kurz und nachvollziehbar, was tatsächlich durchgeführt wurde:', '', 150);
   html += tbMaterialTabelleLeer();
-  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', '', 70);
+  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', '', 150);
   html += tbUnterschriftTabelle(null, null, null);
   html += tbFusszeile();
 
