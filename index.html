@@ -900,7 +900,7 @@ function renderDashboard(){
   });
 
   var geraeteAktiv = state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); });
-  var ueberfaelligGeraete = geraeteAktiv.filter(function(g){ return statusForDate(g.naechstePruefung).cls === 'warn'; });
+  var ueberfaelligGeraete = offen.filter(function(p){ return statusForDate(p.datum).cls === 'warn'; });
 
   var jetzt = new Date();
   var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
