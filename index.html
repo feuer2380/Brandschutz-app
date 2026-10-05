@@ -7952,9 +7952,20 @@ function bindDynamic(){
     btnBegehungStarten.onclick = function(){
       var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
       if(!g) return;
+      var checkDatumElVorStart = document.getElementById('checkDatum');
+      var gewaehltesDatum = checkDatumElVorStart ? checkDatumElVorStart.value : null;
+      var checkBemerkungElVorStart = document.getElementById('checkBemerkung');
+      var gewaehlteBemerkung = checkBemerkungElVorStart ? checkBemerkungElVorStart.value : null;
       g.begehungStart = new Date().toISOString();
       dbPut('geraete', g, function(){
-        loadAll(function(){ render(); toast('Begehung gestartet um ' + fmtZeit(g.begehungStart) + ' Uhr'); });
+        loadAll(function(){
+          render();
+          var checkDatumElNachStart = document.getElementById('checkDatum');
+          if(checkDatumElNachStart && gewaehltesDatum) checkDatumElNachStart.value = gewaehltesDatum;
+          var checkBemerkungElNachStart = document.getElementById('checkBemerkung');
+          if(checkBemerkungElNachStart && gewaehlteBemerkung) checkBemerkungElNachStart.value = gewaehlteBemerkung;
+          toast('Begehung gestartet um ' + fmtZeit(g.begehungStart) + ' Uhr');
+        });
       });
     };
   }
