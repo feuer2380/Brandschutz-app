@@ -2301,7 +2301,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
         }
         dbPut('geraete', g, function(){
           neuenOffenenTerminAnlegen(g, function(){
-            nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
+            nachAbschluss('Prüfung abgeschlossen: ' + ergebnisLabel + ' am ' + fmtDate(g.letztePruefung) + ' (nächster Termin: ' + fmtDate(g.naechstePruefung) + ')');
           });
         });
       } else {
