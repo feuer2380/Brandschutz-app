@@ -1813,6 +1813,12 @@ function renderGeraetCheck(geraetId){
 
   if(!g.ausgeschieden){
     var istBegehungCheck = (g.kategorie === 'Brandschutzbegehung');
+    if(!istPerchtlZisch){
+      var heuteKurzCheck = new Date().toISOString().substring(0,10);
+      html += '<label style="margin-top:10px;">Datum der Prüfung</label>';
+      html += '<input type="date" id="checkDatum" value="' + heuteKurzCheck + '">';
+      html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr rückwirkend eine Prüfung eintragt.</div>';
+    }
     if(istPerchtlZisch){
       html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
       html += '<button type="button" class="btn block" id="btnAbgefuellt" style="background:#1d5fa8; margin-top:16px;">&#128167; Abgefüllt (heute) &ndash; Wasser/CO2 neu befüllt</button>';
@@ -2209,6 +2215,13 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
   var sigTechnikerCanvas = document.getElementById('checkSigTechniker');
   var offenePruefung = state.pruefungen.filter(function(p){ return p.geraetId === g.id && !p.erledigt; })[0];
   var jetztIso = new Date().toISOString();
+  var checkDatumEl = document.getElementById('checkDatum');
+  if(checkDatumEl && checkDatumEl.value){
+    var heuteKurzAbschluss = new Date().toISOString().substring(0,10);
+    if(checkDatumEl.value !== heuteKurzAbschluss){
+      jetztIso = checkDatumEl.value + 'T' + jetztIso.substring(11);
+    }
+  }
   var ergebnisLabel = ergebnis === 'in_ordnung' ? (istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) ? 'Angeschlossen' : 'In Ordnung') : (ergebnis === 'begehung' ? 'Begehung durchgeführt' : (ergebnis === 'reparatur' ? 'Reparatur nötig' : 'Ausgeschieden'));
   if(ergebnis === 'begehung' && g.begehungStart){
     var startZeit = fmtZeit(g.begehungStart) + ' Uhr';
