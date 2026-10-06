@@ -28,13 +28,17 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function(reg){ try{ reg.update(); }catch(e){} }).catch(function(err){
-      console.warn('Service Worker Registrierung fehlgeschlagen', err);
+// Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
+try {
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){ r.unregister(); });
     });
-  });
-}
+  }
+  if(window.caches){
+    caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); });
+  }
+} catch(e){}
 </script>
 <style>
   :root{
