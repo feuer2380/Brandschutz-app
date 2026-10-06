@@ -1,50 +1,32 @@
-// Service Worker für Brandschutzverwaltung - ermöglicht Öffnen der App ohne Internetverbindung
-var CACHE_NAME = 'brandschutz-app-v1';
-var APP_SHELL = [
-  './',
-  './index.html'
-];
+// Service Worker Brandschutzverwaltung – immer zuerst die neueste Version laden
+var CACHE = 'bsv-cache-v20261006';
 
-self.addEventListener('install', function(event){
+self.addEventListener('install', function(e){
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache){
-      return cache.addAll(APP_SHELL);
-    })
-  );
 });
 
-self.addEventListener('activate', function(event){
-  event.waitUntil(
-    caches.keys().then(function(namen){
-      return Promise.all(
-        namen.filter(function(n){ return n !== CACHE_NAME; })
-             .map(function(n){ return caches.delete(n); })
-      );
+self.addEventListener('activate', function(e){
+  e.waitUntil(
+    caches.keys().then(function(keys){
+      return Promise.all(keys.filter(function(k){ return k !== CACHE; }).map(function(k){ return caches.delete(k); }));
     }).then(function(){ return self.clients.claim(); })
   );
 });
 
-self.addEventListener('fetch', function(event){
-  var req = event.request;
-
-  // Nur eigene Seite (index.html) cachen/aus Cache bedienen - externe Bibliotheken (Firebase etc.)
-  // und die Firestore-Datenverbindung selbst laufen normal übers Netz weiter.
-  if(req.method !== 'GET' || req.url.indexOf(self.location.origin) !== 0){
-    return;
-  }
-
-  event.respondWith(
-    fetch(req).then(function(antwort){
-      // Beim Erfolg: aktuelle Version im Cache aktualisieren, für's nächste Mal offline
-      var kopie = antwort.clone();
-      caches.open(CACHE_NAME).then(function(cache){ cache.put(req, kopie); });
-      return antwort;
+self.addEventListener('fetch', function(e){
+  var req = e.request;
+  if(req.method !== 'GET') return;
+  var url = new URL(req.url);
+  // Firebase/Firestore und fremde Server nicht anfassen
+  if(url.origin !== self.location.origin) return;
+  // Netzwerk zuerst, Zwischenspeicher nur als Notlösung ohne Internet
+  e.respondWith(
+    fetch(req, { cache: 'no-cache' }).then(function(res){
+      var kopie = res.clone();
+      caches.open(CACHE).then(function(c){ c.put(req, kopie); });
+      return res;
     }).catch(function(){
-      // Kein Netz: aus dem Cache bedienen, sonst notfalls die gecachte index.html zeigen
-      return caches.match(req).then(function(treffer){
-        return treffer || caches.match('./index.html');
-      });
+      return caches.match(req).then(function(r){ return r || caches.match('index.html'); });
     })
   );
 });
