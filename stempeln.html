@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stempeln">
+<title>Stempeln</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{--ink:#1a1410;--paper:#faf6f0;--ember:#e8541f;--amber:#d98a00;--red:#b02a2a;--line:#e4dcd0;--muted:#8a7f6f;--ok:#2f7a4f;--card:#fff;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+  header{background:#1a1410;color:#fff;padding:16px;border-bottom:3px solid var(--ember);}
+  header b{font-size:18px;display:block;} header span{font-size:11px;letter-spacing:.12em;color:#f5a623;text-transform:uppercase;}
+  main{padding:16px;max-width:520px;margin:0 auto;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;}
+  h2{margin:0 0 6px;font-size:20px;} .meta{color:var(--muted);font-size:13px;margin:3px 0;}
+  button,select,input{font:inherit;} 
+  .btn{display:block;width:100%;border:0;border-radius:12px;padding:18px;font-size:18px;font-weight:600;color:#fff;background:var(--ember);margin-top:10px;}
+  .btn.amber{background:var(--amber);} .btn.red{background:var(--red);} .btn.grey{background:#fff;color:var(--ink);border:1px solid var(--line);padding:12px;font-size:15px;}
+  .btn:disabled{opacity:.5;}
+  select,input[type=text],input[type=password],input[type=date],input[type=time]{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:16px;margin-top:4px;}
+  label{display:block;font-size:13px;color:var(--muted);margin-top:10px;}
+  .status{font-weight:700;} table{width:100%;border-collapse:collapse;font-size:13px;} th{text-align:left;border-bottom:1px solid #999;padding:4px 2px;} td{padding:6px 2px;border-bottom:1px solid #ddd;vertical-align:top;}
+  .chip{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin:2px;font-size:11px;background:#fff;}
+  .row{display:flex;gap:8px;align-items:center;} .row>*{flex:1;}
+  #toast{position:fixed;left:16px;right:16px;bottom:24px;background:#1a1410;color:#fff;padding:14px;border-radius:12px;display:none;text-align:center;z-index:9;}
+  .tabs{display:flex;gap:8px;margin-bottom:12px;} .tabs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;font-size:15px;} .tabs button.on{background:var(--ember);color:#fff;border-color:var(--ember);}
+</style>
+</head>
+<body>
+<header><b>Zeiterfassung</b><span>Wolfgang Janiba Brandschutztechnik GmbH</span></header>
+<main id="app"><div class="card">Lade …</div></main>
+<div id="toast"></div>
+<script>
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBLcQlXeHcwN-4XXL6Wx7dcpN_bZQhK3_o",
+  authDomain: "brandschutz-janiba.firebaseapp.com",
+  projectId: "brandschutz-janiba",
+  storageBucket: "brandschutz-janiba.firebasestorage.app",
+  messagingSenderId: "466445019724",
+  appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
+};
+var CHEF_PIN = '0239';
+var MITARBEITER = [{name:'Mitarbeiter 1',pin:'8276'},{name:'Mitarbeiter 2',pin:'8277'},{name:'Mitarbeiter 3',pin:'8278'}];
+var TYPEN = {kommen:'Kommen',pause_start:'Pause Beginn',pause_ende:'Pause Ende',gehen:'Gehen'};
+var MONATE = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+var db, zeiten = [], kunden = [], me = null, ansicht = 'heute', zielName = null, mJahr, mMonat, geladen = false;
+var jetztD = new Date(); mJahr = jetztD.getFullYear(); mMonat = jetztD.getMonth();
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function toast(t){ var e = $('toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(function(){ e.style.display = 'none'; }, 3500); }
+function uid(){ return 'id_' + Date.now() + '_' + Math.floor(Math.random() * 10000); }
+function tagKey(iso){ var d = new Date(iso); var m = d.getMonth() + 1, t = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (t < 10 ? '0' : '') + t; }
+function uhr(iso){ var d = new Date(iso); var h = d.getHours(), m = d.getMinutes(); return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
+function dauer(ms){ if(!ms || ms < 0) ms = 0; var min = Math.round(ms / 60000); var m = min % 60; return Math.floor(min / 60) + ':' + (m < 10 ? '0' : '') + m + ' h'; }
+function namen(){ return ['Chef'].concat(MITARBEITER.map(function(m){ return m.name; })); }
+function eintraege(name, key){ return zeiten.filter(function(z){ return z.mitarbeiter === name && (!key || tagKey(z.zeit) === key); }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); }); }
+
+function berechne(liste, bisJetzt){
+  var arbeit = 0, pause = 0, arzt = 0, start = null, pS = null, pA = false, jetzt = new Date();
+  liste.forEach(function(z){
+    var t = new Date(z.zeit);
+    if(z.typ === 'kommen'){ start = t; pS = null; }
+    else if(z.typ === 'pause_start'){ if(start){ arbeit += t - start; start = null; } pS = t; pA = (z.ort === 'Arzt'); }
+    else if(z.typ === 'pause_ende'){ if(pS){ pause += t - pS; if(pA) arzt += t - pS; pS = null; } start = t; }
+    else if(z.typ === 'gehen'){ if(start){ arbeit += t - start; start = null; } if(pS){ pause += t - pS; if(pA) arzt += t - pS; pS = null; } }
+  });
+  var offen = !!(start || pS);
+  if(bisJetzt){ if(start) arbeit += jetzt - start; if(pS) pause += jetzt - pS; }
+  return {arbeit: arbeit, pause: pause, arzt: arzt, offen: offen};
+}
+function status(name){
+  var l = eintraege(name, tagKey(new Date().toISOString()));
+  if(!l.length) return {key:'ab', label:'Nicht eingestempelt', farbe:'#888', liste:l};
+  var t = l[l.length - 1].typ;
+  if(t === 'gehen') return {key:'ge', label:'Feierabend', farbe:'#888', liste:l};
+  if(t === 'pause_start') return {key:'pa', label:'In Pause', farbe:'#d98a00', liste:l};
+  return {key:'ar', label:'Bei der Arbeit', farbe:'#2f7a4f', liste:l};
+}
+function ortText(z){
+  if(!z || !z.ort) return '';
+  if(z.ort === 'Kunde'){ var k = kunden.filter(function(x){ return x.id === z.kundeId; })[0]; return k ? k.name : 'Kunde'; }
+  return z.ort;
+}
+function ortOptionen(vor){
+  var h = '<option value="">– nicht angegeben –</option><option value="lager"' + (vor === 'lager' ? ' selected' : '') + '>Lager</option><option value="arzt"' + (vor === 'arzt' ? ' selected' : '') + '>Arzt</option><option value="sonst"' + (vor === 'sonst' ? ' selected' : '') + '>Sonstiges</option>';
+  var ks = kunden.filter(function(k){ return !k.geloescht && !k.stillgelegt; }).sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); });
+  if(ks.length){ h += '<optgroup label="Kunde">'; ks.forEach(function(k){ h += '<option value="k:' + esc(k.id) + '"' + (vor === 'k:' + k.id ? ' selected' : '') + '>' + esc(k.name || 'Kunde') + '</option>'; }); h += '</optgroup>'; }
+  return h;
+}
+function ortAus(w){
+  if(!w) return {ort:null, kundeId:null};
+  if(w === 'lager') return {ort:'Lager', kundeId:null};
+  if(w === 'arzt') return {ort:'Arzt', kundeId:null};
+  if(w === 'sonst') return {ort:'Sonstiges', kundeId:null};
+  if(w.indexOf('k:') === 0) return {ort:'Kunde', kundeId:w.substring(2)};
+  return {ort:null, kundeId:null};
+}
+function speichern(z, cb){
+  db.collection('zeiten').doc(z.id).set(z).then(function(){
+    if(!zeiten.some(function(x){ return x.id === z.id; })) zeiten.push(z);
+    cb && cb();
+  }).catch(function(e){ toast('Speichern fehlgeschlagen: ' + (e && e.message ? e.message : e)); render(); });
+}
+function stempeln(name, typ, ortWert){
+  var o = ortAus(ortWert);
+  var z = {id: uid(), mitarbeiter: name, typ: typ, zeit: new Date().toISOString(), ort: o.ort, kundeId: o.kundeId, erstelltVon: me.name};
+  speichern(z, function(){ toast(name + ': ' + TYPEN[typ] + ' ' + uhr(z.zeit)); render(); });
+}
+
+function renderLogin(){
+  $('app').innerHTML = '<div class="card"><h2>PIN eingeben</h2><div class="meta">Version 06.10. 13:30 &middot; Stempeln</div>' +
+    '<input type="password" id="pin" inputmode="numeric" placeholder="PIN" autocomplete="off">' +
+    '<button class="btn" id="ok">Anmelden</button></div>';
+  $('ok').onclick = function(){
+    var p = $('pin').value.trim();
+    if(p === CHEF_PIN){ me = {name:'Chef', chef:true}; }
+    else { var m = MITARBEITER.filter(function(x){ return x.pin === p; })[0]; if(m) me = {name:m.name, chef:false}; }
+    if(!me){ toast('PIN falsch'); return; }
+    zielName = me.name; render();
+  };
+  $('pin').onkeydown = function(e){ if(e.key === 'Enter') $('ok').click(); };
+}
+
+function aktionen(name, st){
+  var l = st.liste.length ? st.liste[st.liste.length - 1] : null;
+  var vor = l && l.ort ? (l.ort === 'Kunde' ? 'k:' + l.kundeId : (l.ort === 'Lager' ? 'lager' : (l.ort === 'Arzt' ? 'arzt' : 'sonst'))) : '';
+  var h = '<label>Wo? (Kunde / Lager / Arzt)</label><select id="ort">' + ortOptionen(vor) + '</select>';
+  var b = function(t, c){ return '<button class="btn ' + (c || '') + '" data-st="' + t + '">' + TYPEN[t] + '</button>'; };
+  if(st.key === 'ab' || st.key === 'ge') h += b('kommen');
+  else if(st.key === 'ar') h += b('pause_start', 'amber') + b('gehen', 'red');
+  else h += b('pause_ende') + b('gehen', 'red');
+  return h;
+}
+
+function zeitenHeute(){
+  var name = zielName, st = status(name), b = berechne(st.liste, true);
+  var h = '<div class="card"><h2>' + esc(name) + '</h2><div class="status" style="color:' + st.farbe + ';">' + st.label + '</div>';
+  if(st.liste.length){
+    h += '<div class="meta">' + st.liste.map(function(z){ return uhr(z.zeit) + ' ' + TYPEN[z.typ] + (z.ort ? ' (' + esc(ortText(z)) + ')' : ''); }).join(' &middot; ') + '</div>';
+    h += '<div class="meta"><b>Arbeitszeit heute: ' + dauer(b.arbeit) + '</b> &middot; Pause: ' + dauer(b.pause) + '</div>';
+  }
+  h += aktionen(name, st) + '</div>';
+  if(me.chef){
+    h += '<div class="card"><div class="meta" style="margin-bottom:6px;">Alle Mitarbeiter heute</div>';
+    namen().forEach(function(n){ var s = status(n); var bb = berechne(s.liste, true); h += '<div class="row" style="padding:5px 0;border-bottom:1px solid #eee;"><div>' + esc(n) + '</div><div style="color:' + s.farbe + ';text-align:right;">' + s.label + ' &middot; ' + dauer(bb.arbeit) + '</div></div>'; });
+    h += '</div>';
+  }
+  return h;
+}
+
+function monat(){
+  var name = zielName;
+  var tage = {}; zeiten.forEach(function(z){ if(z.mitarbeiter !== name) return; var d = new Date(z.zeit); if(d.getFullYear() !== mJahr || d.getMonth() !== mMonat) return; var k = tagKey(z.zeit); (tage[k] = tage[k] || []).push(z); });
+  var keys = Object.keys(tage).sort(), sum = 0, sp = 0, sa = 0, heute = tagKey(new Date().toISOString());
+  var h = '<div class="card"><div class="row" style="margin-bottom:8px;"><button class="btn grey" id="mz" style="margin:0;">&lsaquo;</button><div style="text-align:center;font-weight:700;flex:3;">' + MONATE[mMonat] + ' ' + mJahr + '</div><button class="btn grey" id="mv" style="margin:0;">&rsaquo;</button></div>';
+  if(!keys.length) h += '<div class="meta">Keine Stempelzeiten in diesem Monat</div>';
+  else {
+    h += '<table><tr><th>Tag</th><th>Kommen</th><th>Gehen</th><th>Pause</th><th>Netto</th></tr>';
+    keys.forEach(function(k){
+      var l = tage[k].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); }), b = berechne(l, k === heute);
+      sum += b.arbeit; sp += b.pause; sa += b.arzt;
+      var ko = l.filter(function(z){ return z.typ === 'kommen'; })[0], ge = l.filter(function(z){ return z.typ === 'gehen'; }).pop();
+      var orte = []; l.forEach(function(z){ var t = ortText(z); if(t && orte.indexOf(t) < 0) orte.push(t); });
+      var d = new Date(k + 'T12:00:00'), wt = ['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
+      h += '<tr><td>' + wt + ' ' + k.substring(8) + '.' + k.substring(5, 7) + '.' + (orte.length ? '<div class="meta">' + orte.map(esc).join(', ') + '</div>' : '') + '</td><td>' + (ko ? uhr(ko.zeit) : '-') + '</td><td>' + (ge ? uhr(ge.zeit) : ((b.offen && k !== heute) ? '<span style="color:#b02a2a;">fehlt</span>' : '-')) + '</td><td>' + dauer(b.pause) + '</td><td><b>' + dauer(b.arbeit) + '</b></td></tr>';
+      if(me.chef){ h += '<tr><td colspan="5">'; l.forEach(function(z){ h += '<span class="chip" data-del="' + z.id + '">' + uhr(z.zeit) + ' ' + TYPEN[z.typ] + (z.ort ? ' (' + esc(ortText(z)) + ')' : '') + ' &times;</span>'; }); h += '</td></tr>'; }
+    });
+    h += '<tr><td colspan="3"><b>Summe</b></td><td><b>' + dauer(sp) + '</b></td><td><b>' + dauer(sum) + '</b></td></tr></table>';
+    if(sa > 0) h += '<div class="meta">davon Arzt (in der Pause enthalten): ' + dauer(sa) + '</div>';
+  }
+  h += '<button class="btn grey" id="druck">Drucken / PDF</button></div>';
+  if(me.chef) h += nachtragenHtml();
+  return h;
+}
+
+function nachtragenHtml(){
+  var heute = new Date().toISOString().substring(0, 10);
+  return '<div class="card"><h2 style="font-size:17px;">Zeiten nachtragen</h2><div class="meta">für ' + esc(zielName) + '</div>' +
+    '<label>Datum</label><input type="date" id="nDat" value="' + heute + '">' +
+    '<div class="row"><div><label>Kommen</label><input type="time" id="nK"></div><div><label>Gehen</label><input type="time" id="nG"></div></div>' +
+    '<label>Wo gearbeitet?</label><select id="nOrt">' + ortOptionen('') + '</select>' +
+    '<div class="row"><div><label>Pause von</label><input type="time" id="nPV"></div><div><label>Pause bis</label><input type="time" id="nPB"></div></div>' +
+    '<label>Pause für</label><select id="nPG"><option value="">Normale Pause</option><option value="arzt">Arzt</option></select>' +
+    '<button class="btn" id="nSave">Speichern</button></div>';
+}
+
+function render(){
+  if(!me){ renderLogin(); return; }
+  var h = '<div class="row" style="margin-bottom:8px;"><div class="meta">Angemeldet: <b>' + esc(me.name) + '</b></div><button class="btn grey" id="out" style="margin:0;padding:8px;">Abmelden</button></div>';
+  if(me.chef){ h += '<select id="wer" style="margin-bottom:10px;">' + namen().map(function(n){ return '<option' + (n === zielName ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>'; }
+  h += '<div class="tabs"><button data-an="heute" class="' + (ansicht === 'heute' ? 'on' : '') + '">Stempeln</button><button data-an="monat" class="' + (ansicht === 'monat' ? 'on' : '') + '">Monatsliste</button></div>';
+  h += ansicht === 'heute' ? zeitenHeute() : monat();
+  $('app').innerHTML = h;
+  $('out').onclick = function(){ me = null; render(); };
+  var w = $('wer'); if(w) w.onchange = function(){ zielName = w.value; render(); };
+  document.querySelectorAll('[data-an]').forEach(function(b){ b.onclick = function(){ ansicht = b.getAttribute('data-an'); render(); }; });
+  document.querySelectorAll('[data-st]').forEach(function(b){ b.onclick = function(){ b.disabled = true; stempeln(zielName, b.getAttribute('data-st'), $('ort').value); }; });
+  if(ansicht === 'monat'){
+    $('mz').onclick = function(){ mMonat--; if(mMonat < 0){ mMonat = 11; mJahr--; } render(); };
+    $('mv').onclick = function(){ mMonat++; if(mMonat > 11){ mMonat = 0; mJahr++; } render(); };
+    $('druck').onclick = function(){ window.print(); };
+    document.querySelectorAll('[data-del]').forEach(function(c){ c.onclick = function(){
+      if(!confirm('Stempel wirklich löschen?')) return;
+      var id = c.getAttribute('data-del');
+      db.collection('zeiten').doc(id).delete().then(function(){ zeiten = zeiten.filter(function(z){ return z.id !== id; }); render(); }).catch(function(e){ toast('Löschen fehlgeschlagen'); });
+    }; });
+    var s = $('nSave'); if(s) s.onclick = nachtragen;
+  }
+}
+
+function nachtragen(){
+  var dat = $('nDat').value;
+  if(!dat){ toast('Datum angeben'); return; }
+  var f = {kommen:$('nK').value, pause_start:$('nPV').value, pause_ende:$('nPB').value, gehen:$('nG').value};
+  var o = ortAus($('nOrt').value), pg = $('nPG').value, neu = [];
+  ['kommen','pause_start','pause_ende','gehen'].forEach(function(t){
+    if(!f[t]) return;
+    var oo = (t === 'pause_start' && pg === 'arzt') ? {ort:'Arzt', kundeId:null} : o;
+    neu.push({id: uid(), mitarbeiter: zielName, typ: t, zeit: new Date(dat + 'T' + f[t] + ':00').toISOString(), ort: oo.ort, kundeId: oo.kundeId, erstelltVon: 'Chef (nachgetragen)'});
+  });
+  if(!neu.length){ toast('Bitte mindestens eine Uhrzeit eingeben'); return; }
+  $('nSave').disabled = true; var fertig = 0;
+  neu.forEach(function(z){ speichern(z, function(){ fertig++; if(fertig === neu.length){ var d = new Date(neu[0].zeit); mJahr = d.getFullYear(); mMonat = d.getMonth(); toast(fertig + ' Eintrag/Einträge gespeichert'); render(); } }); });
+}
+
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+  db.collection('zeiten').onSnapshot(function(snap){ var a = []; snap.forEach(function(d){ a.push(d.data()); }); zeiten = a; geladen = true; if(me) render(); }, function(e){ toast('Zeiten laden fehlgeschlagen: ' + (e && e.message ? e.message : e)); });
+  db.collection('kunden').onSnapshot(function(snap){ var a = []; snap.forEach(function(d){ a.push(d.data()); }); kunden = a; });
+  render();
+} catch(e){ $('app').innerHTML = '<div class="card">Fehler beim Start: ' + esc(e.message) + '</div>'; }
+</script>
+</body>
+</html>
