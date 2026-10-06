@@ -6291,7 +6291,7 @@ function zeitMonatDaten(name, jahr, monat){
   var summe = 0, summePause = 0, summeArzt = 0;
   var zeilen = keys.map(function(key){
     var liste = tage[key].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
-    var b = zeitBerechne(liste, false);
+    var b = zeitBerechne(liste, key === zeitTagKey(new Date().toISOString()));
     summe += b.arbeit; summePause += b.pause; summeArzt += b.arzt;
     var kommen = liste.filter(function(z){ return z.typ === 'kommen'; })[0];
     var gehen = liste.filter(function(z){ return z.typ === 'gehen'; }).pop();
