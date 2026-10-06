@@ -3567,6 +3567,8 @@ function renderStatistik(){
       if(t.indexOf('schaum') >= 0) return 'Schaumlöscher';
       if(t.indexOf('pulver') >= 0) return 'Pulverlöscher';
       if(t.indexOf('co2') >= 0 || t.indexOf('co₂') >= 0) return 'CO2-Löscher';
+      if(t.indexOf('fettbrand') >= 0) return 'Fettbrandlöscher';
+      if(t.indexOf('metallbrand') >= 0) return 'Metallbrandlöscher';
       if(t.indexOf('wasser') >= 0) return 'Wasserlöscher';
       return 'Sonstige';
     };
@@ -4788,7 +4790,7 @@ function baujahrStatus(baujahr, letzteInnenrevision){
   return { cls:'ok', label:'Innenrevision: ' + naechstes, ausscheideJahr: ausscheideJahr, faelligJahr: naechstes };
 }
 
-var TYP_STANDARD = ['Pulverlöscher 6kg','Pulverlöscher 12kg','CO2-Löscher','Schaumlöscher','Wandhydrant','Rauchmelder',"Wolfi's Blubber-Gas",'Sonstiges'];
+var TYP_STANDARD = ['Pulverlöscher 6kg','Pulverlöscher 12kg','CO2-Löscher','Schaumlöscher','Wasserlöscher','Schaumlöscher frostsicher','Wasserlöscher frostsicher','Fettbrandlöscher','Metallbrandlöscher','Wandhydrant','Rauchmelder',"Wolfi's Blubber-Gas",'Sonstiges'];
 
 function typListeAlle(){
   return TYP_STANDARD;
