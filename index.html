@@ -331,7 +331,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten'];
 var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
@@ -515,6 +515,7 @@ var state = {
   lagerartikel: [],
   brandschutzplaene: [],
   tagesberichte: [],
+  zeiten: [],
   kundenSuche: '',
   pruefungFilter: 'alle',
   pruefungOffenAufgeklappt: {},
@@ -545,7 +546,10 @@ function loadAll(cb){
                     state.brandschutzplaene = bp;
                     dbGetAll('tagesberichte', function(tb){
                       state.tagesberichte = tb;
-                      cb();
+                      dbGetAll('zeiten', function(ze){
+                        state.zeiten = ze;
+                        cb();
+                      });
                     });
                   });
                 });
@@ -820,12 +824,12 @@ function renderInner(){
   }
   if(tabsEl) tabsEl.style.display = '';
   if(fabEl){
-    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte') ? 'none' : '';
+    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte' || state.tab === 'zeit') ? 'none' : '';
     fabEl.classList.remove('fab-hidden');
   }
   document.querySelectorAll('.tabbtn').forEach(function(b){
     var dt = b.getAttribute('data-tab');
-    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager'));
+    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit'));
     b.className = 'tabbtn' + (istAktiv ? ' active' : '');
   });
   if(state.tab === 'dashboard') m.innerHTML = renderDashboard();
@@ -837,9 +841,11 @@ function renderInner(){
   else if(state.tab === 'scan') m.innerHTML = renderScan();
   else if(state.tab === 'geraetCheck') m.innerHTML = renderGeraetCheck(state.activeGeraetId);
   else if(state.tab === 'lager') m.innerHTML = renderLager();
+  else if(state.tab === 'zeit') m.innerHTML = renderZeit();
 
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
+  if(state.tab === 'zeit') bindZeit();
   if(state.tab === 'scan') startScanner();
   if(fabEl && m.scrollHeight > m.clientHeight + 30){
     fabEl.classList.add('fab-hidden');
@@ -1589,6 +1595,15 @@ function verarbeiteScan(text){
   var id = text.trim();
   var portalMatch = id.match(/kunde\.html\?id=([^&\s]+)/i);
   if(portalMatch) id = decodeURIComponent(portalMatch[1]);
+  if(id.indexOf('BSV-STEMPEL:') === 0){
+    var stName = id.substring('BSV-STEMPEL:'.length);
+    if(zeitMitarbeiterNamen().indexOf(stName) >= 0){
+      modalStempeln(stName);
+    } else {
+      toast('Mitarbeiter nicht gefunden');
+    }
+    return;
+  }
   if(id.indexOf('BSV-LAGER:') === 0){
     var lid = id.substring('BSV-LAGER:'.length);
     var lExists = state.lagerartikel.filter(function(x){ return x.id === lid; })[0];
@@ -5975,12 +5990,385 @@ function modalDatumHinweis(gid, typ){
   };
 }
 
+// ---------- Zeiterfassung (Stempeln) ----------
+var ZEIT_TYPEN = {
+  kommen: 'Kommen',
+  pause_start: 'Pause Beginn',
+  pause_ende: 'Pause Ende',
+  gehen: 'Gehen'
+};
+
+function zeitMitarbeiterNamen(){
+  var n = ['Chef'];
+  MITARBEITER_LISTE.forEach(function(m){ n.push(m.name); });
+  return n;
+}
+
+function zeitTagKey(iso){
+  var d = new Date(iso);
+  var mm = d.getMonth() + 1; if(mm < 10) mm = '0' + mm;
+  var dd = d.getDate(); if(dd < 10) dd = '0' + dd;
+  return d.getFullYear() + '-' + mm + '-' + dd;
+}
+
+function zeitUhr(iso){
+  var d = new Date(iso);
+  var h = d.getHours(); if(h < 10) h = '0' + h;
+  var m = d.getMinutes(); if(m < 10) m = '0' + m;
+  return h + ':' + m;
+}
+
+function zeitDauer(ms){
+  if(!ms || ms < 0) ms = 0;
+  var min = Math.round(ms / 60000);
+  var h = Math.floor(min / 60);
+  var m = min % 60; if(m < 10) m = '0' + m;
+  return h + ':' + m + ' h';
+}
+
+function zeitEintraege(name, tagKey){
+  return (state.zeiten || []).filter(function(z){
+    return z.mitarbeiter === name && (!tagKey || zeitTagKey(z.zeit) === tagKey);
+  }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
+}
+
+// Berechnet Arbeits- und Pausenzeit aus einer Liste Stempel eines Tages
+function zeitBerechne(liste, bisJetzt){
+  var arbeit = 0, pause = 0, start = null, pStart = null, offen = false;
+  var jetzt = new Date();
+  liste.forEach(function(z){
+    var t = new Date(z.zeit);
+    if(z.typ === 'kommen'){ start = t; pStart = null; }
+    else if(z.typ === 'pause_start'){
+      if(start){ arbeit += t - start; start = null; }
+      pStart = t;
+    } else if(z.typ === 'pause_ende'){
+      if(pStart){ pause += t - pStart; pStart = null; }
+      start = t;
+    } else if(z.typ === 'gehen'){
+      if(start){ arbeit += t - start; start = null; }
+      if(pStart){ pause += t - pStart; pStart = null; }
+    }
+  });
+  if(start || pStart) offen = true;
+  if(bisJetzt){
+    if(start) arbeit += jetzt - start;
+    if(pStart) pause += jetzt - pStart;
+  }
+  return { arbeit: arbeit, pause: pause, offen: offen };
+}
+
+function zeitStatus(name){
+  var heute = zeitTagKey(new Date().toISOString());
+  var liste = zeitEintraege(name, heute);
+  if(liste.length === 0) return { key: 'abwesend', label: 'Nicht eingestempelt', farbe: 'var(--muted, #888)', liste: liste };
+  var last = liste[liste.length - 1].typ;
+  if(last === 'gehen') return { key: 'gegangen', label: 'Feierabend', farbe: 'var(--muted, #888)', liste: liste };
+  if(last === 'pause_start') return { key: 'pause', label: 'In Pause', farbe: '#d98a00', liste: liste };
+  return { key: 'arbeit', label: 'Bei der Arbeit', farbe: 'var(--ok)', liste: liste };
+}
+
+function zeitStempeln(name, typ, cb){
+  var z = {
+    id: uid(),
+    mitarbeiter: name,
+    typ: typ,
+    zeit: new Date().toISOString(),
+    erstelltVon: (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'))
+  };
+  dbPut('zeiten', z, function(){
+    if(!state.zeiten) state.zeiten = [];
+    if(!state.zeiten.some(function(x){ return x.id === z.id; })) state.zeiten.push(z);
+    toast(name + ': ' + ZEIT_TYPEN[typ] + ' ' + zeitUhr(z.zeit));
+    if(cb) cb();
+  });
+}
+
+function zeitAktionenHtml(name, st){
+  var h = '';
+  var btn = function(typ, farbe){
+    return '<button class="btn block" data-zeitstempel="' + typ + '" data-zeitname="' + escapeHtml(name) + '" style="margin-top:8px; padding:16px; font-size:17px;' + (farbe ? ' background:' + farbe + ';' : '') + '">' + ZEIT_TYPEN[typ] + '</button>';
+  };
+  if(st.key === 'abwesend' || st.key === 'gegangen'){
+    h += btn('kommen');
+  } else if(st.key === 'arbeit'){
+    h += btn('pause_start', '#d98a00');
+    h += btn('gehen', '#b02a2a');
+  } else if(st.key === 'pause'){
+    h += btn('pause_ende');
+    h += btn('gehen', '#b02a2a');
+  }
+  return h;
+}
+
+function zeitTagesZeilenHtml(liste){
+  var h = '';
+  liste.forEach(function(z){
+    h += '<div class="meta">' + zeitUhr(z.zeit) + ' &middot; ' + ZEIT_TYPEN[z.typ] + '</div>';
+  });
+  return h;
+}
+
+function modalStempeln(name){
+  var st = zeitStatus(name);
+  var b = zeitBerechne(st.liste, true);
+  var html = '';
+  html += '<div class="modal-head"><h3>Stempeln</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="font-size:20px; font-weight:700; margin-top:4px;">' + escapeHtml(name) + '</div>';
+  html += '<div style="margin:6px 0 10px; font-weight:600; color:' + st.farbe + ';">' + st.label + '</div>';
+  html += zeitAktionenHtml(name, st);
+  if(st.liste.length > 0){
+    html += '<div class="section-title" style="margin-top:16px;">Heute</div>';
+    html += zeitTagesZeilenHtml(st.liste);
+    html += '<div class="meta" style="margin-top:6px;"><b>Arbeitszeit: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + '</div>';
+  }
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('[data-zeitstempel]').forEach(function(btn){
+    btn.onclick = function(){
+      btn.disabled = true;
+      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), function(){
+        closeModal();
+        render();
+      });
+    };
+  });
+}
+
+function renderZeit(){
+  var html = '';
+  var istChef = state.rolle === 'chef';
+  var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div></div>';
+  if(istChef){
+    html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
+    html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
+    html += '<button class="btn small secondary" id="zeitMonatBtn">Monatsliste</button>';
+    html += '</div>';
+  } else {
+    html += '<div style="margin-bottom:12px;"><button class="btn small secondary" id="zeitMonatBtn">Meine Monatsliste</button></div>';
+  }
+  html += '<div class="meta" style="margin-bottom:10px;">Stempeln per Knopf oder durch Scannen des persönlichen Stempel-QR-Codes im Reiter „Scan".</div>';
+  namen.forEach(function(name){
+    var st = zeitStatus(name);
+    var b = zeitBerechne(st.liste, true);
+    html += '<div class="card">';
+    html += '<div class="row"><h3>' + escapeHtml(name) + '</h3><span style="font-weight:600; color:' + st.farbe + ';">' + st.label + '</span></div>';
+    if(st.liste.length > 0){
+      html += '<div class="meta">' + st.liste.map(function(z){ return zeitUhr(z.zeit) + ' ' + ZEIT_TYPEN[z.typ]; }).join(' &middot; ') + '</div>';
+      html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + '</div>';
+    }
+    html += '<div style="margin-top:6px;">' + zeitAktionenHtml(name, st) + '</div>';
+    html += '</div>';
+  });
+  return html;
+}
+
+function bindZeit(){
+  document.querySelectorAll('[data-zeitstempel]').forEach(function(btn){
+    btn.onclick = function(){
+      btn.disabled = true;
+      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), function(){ render(); });
+    };
+  });
+  var q = document.getElementById('zeitQrBtn');
+  if(q) q.onclick = modalStempelQr;
+  var m = document.getElementById('zeitMonatBtn');
+  if(m) m.onclick = function(){
+    modalZeitMonat(state.rolle === 'chef' ? zeitMitarbeiterNamen()[0] : (state.mitarbeiterName || 'Mitarbeiter'), null, null);
+  };
+}
+
+function modalStempelQr(){
+  var namen = zeitMitarbeiterNamen();
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>Stempel-QR</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div id="zeitQrInhalt">';
+  namen.forEach(function(n, i){
+    html += '<div style="display:inline-block; width:46%; margin:2%; padding:12px; border:1px solid #333; border-radius:8px; text-align:center; vertical-align:top;">';
+    html += '<div style="font-size:16px; font-weight:700; margin-bottom:8px;">' + escapeHtml(n) + '</div>';
+    html += '<div id="zeitqr_' + i + '" style="display:inline-block;"></div>';
+    html += '<div style="font-size:11px; margin-top:6px;">Stempeln: Kommen / Pause / Gehen</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div class="no-print" style="margin-top:16px;"><button class="btn block" id="zeitQrDruckBtn">Drucken / Als PDF teilen</button></div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var qrErzeugen = function(prefix){
+    namen.forEach(function(n, i){
+      try{
+        new QRCode(document.getElementById(prefix + i), {
+          text: 'BSV-STEMPEL:' + n,
+          width: 130,
+          height: 130,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e){ console.error('QR Fehler', e); }
+    });
+  };
+  qrErzeugen('zeitqr_');
+  document.getElementById('zeitQrDruckBtn').onclick = function(){
+    var btn = document.getElementById('zeitQrDruckBtn');
+    btn.disabled = true;
+    var pa = document.getElementById('printArea');
+    var inh = '<div style="font-family:Arial,sans-serif; padding:10px;"><h2 style="margin:0 0 12px;">Stempel-QR-Codes &ndash; Wolfgang Janiba Brandschutztechnik GmbH</h2>';
+    namen.forEach(function(n, i){
+      inh += '<div style="display:inline-block; width:44%; margin:2%; padding:14px; border:1px solid #333; text-align:center; vertical-align:top;">';
+      inh += '<div style="font-size:18px; font-weight:700; margin-bottom:8px;">' + escapeHtml(n) + '</div>';
+      inh += '<div id="zeitqrd_' + i + '" style="display:inline-block;"></div>';
+      inh += '<div style="font-size:12px; margin-top:6px;">Im Scan-Reiter scannen: Kommen / Pause / Gehen</div></div>';
+    });
+    inh += '</div>';
+    pa.innerHTML = inh;
+    qrErzeugen('zeitqrd_');
+    bsvDruckenOderTeilen(null, 'Stempel-QR.pdf', function(){ btn.disabled = false; });
+  };
+}
+
+function zeitMonatDaten(name, jahr, monat){
+  var tage = {};
+  (state.zeiten || []).forEach(function(z){
+    if(z.mitarbeiter !== name) return;
+    var d = new Date(z.zeit);
+    if(d.getFullYear() !== jahr || d.getMonth() !== monat) return;
+    var key = zeitTagKey(z.zeit);
+    (tage[key] = tage[key] || []).push(z);
+  });
+  var keys = Object.keys(tage).sort();
+  var summe = 0, summePause = 0;
+  var zeilen = keys.map(function(key){
+    var liste = tage[key].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
+    var b = zeitBerechne(liste, false);
+    summe += b.arbeit; summePause += b.pause;
+    var kommen = liste.filter(function(z){ return z.typ === 'kommen'; })[0];
+    var gehen = liste.filter(function(z){ return z.typ === 'gehen'; }).pop();
+    return { key: key, liste: liste, kommen: kommen, gehen: gehen, arbeit: b.arbeit, pause: b.pause, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
+  });
+  return { zeilen: zeilen, summe: summe, summePause: summePause };
+}
+
+function modalZeitMonat(name, jahr, monat){
+  var jetzt = new Date();
+  if(jahr === null || jahr === undefined) jahr = jetzt.getFullYear();
+  if(monat === null || monat === undefined) monat = jetzt.getMonth();
+  var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var istChef = state.rolle === 'chef';
+  var daten = zeitMonatDaten(name, jahr, monat);
+  var html = '';
+  html += '<div class="modal-head"><h3>Zeitliste</h3><button class="close" id="mClose">&times;</button></div>';
+  if(istChef){
+    html += '<select id="zmName" style="margin-bottom:8px;">';
+    zeitMitarbeiterNamen().forEach(function(n){
+      html += '<option value="' + escapeHtml(n) + '"' + (n === name ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+    });
+    html += '</select>';
+  } else {
+    html += '<div style="font-weight:700; margin-bottom:8px;">' + escapeHtml(name) + '</div>';
+  }
+  html += '<div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">';
+  html += '<button class="btn small secondary" id="zmZurueck">&lsaquo;</button>';
+  html += '<div style="flex:1; text-align:center; font-weight:700;">' + monatNamen[monat] + ' ' + jahr + '</div>';
+  html += '<button class="btn small secondary" id="zmVor">&rsaquo;</button>';
+  html += '</div>';
+  html += '<div id="zeitMonatInhalt">' + zeitMonatTabelleHtml(name, jahr, monat, daten, istChef) + '</div>';
+  html += '<div style="margin-top:14px; display:flex; gap:8px;">';
+  html += '<button class="btn" id="zmDruck" style="flex:1;">Drucken / PDF</button>';
+  if(istChef) html += '<button class="btn secondary" id="zmNeu" style="flex:1;">Eintrag nachtragen</button>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var neu = function(n, j, m){ modalZeitMonat(n, j, m); };
+  document.getElementById('zmZurueck').onclick = function(){ var m2 = monat - 1, j2 = jahr; if(m2 < 0){ m2 = 11; j2--; } neu(name, j2, m2); };
+  document.getElementById('zmVor').onclick = function(){ var m2 = monat + 1, j2 = jahr; if(m2 > 11){ m2 = 0; j2++; } neu(name, j2, m2); };
+  var sel = document.getElementById('zmName');
+  if(sel) sel.onchange = function(){ neu(sel.value, jahr, monat); };
+  document.getElementById('zmDruck').onclick = function(){
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = '<div style="font-family:Arial,sans-serif; padding:10px;"><h2 style="margin:0 0 4px;">Arbeitszeitliste</h2><div style="margin-bottom:10px;">' + escapeHtml(name) + ' &ndash; ' + monatNamen[monat] + ' ' + jahr + '<br>Wolfgang Janiba Brandschutztechnik GmbH</div>' + zeitMonatTabelleHtml(name, jahr, monat, daten, false) + '</div>';
+    bsvDruckenOderTeilen(null, 'Arbeitszeit_' + name.replace(/\s+/g, '_') + '_' + (monat + 1) + '-' + jahr + '.pdf');
+  };
+  var nb = document.getElementById('zmNeu');
+  if(nb) nb.onclick = function(){ modalZeitNachtragen(name, jahr, monat); };
+  document.querySelectorAll('[data-zeitloeschen]').forEach(function(b){
+    b.onclick = function(){
+      var zid = b.getAttribute('data-zeitloeschen');
+      customConfirm('Stempel wirklich löschen?', function(){
+        dbDelete('zeiten', zid, function(){
+          state.zeiten = (state.zeiten || []).filter(function(z){ return z.id !== zid; });
+          modalZeitMonat(name, jahr, monat);
+        });
+      });
+    };
+  });
+}
+
+function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen){
+  var h = '';
+  if(daten.zeilen.length === 0) return '<div class="empty">Keine Stempelzeiten in diesem Monat</div>';
+  var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+  h += '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
+  h += '<tr style="text-align:left; border-bottom:1px solid #999;"><th>Tag</th><th>Kommen</th><th>Gehen</th><th>Pause</th><th>Netto</th></tr>';
+  daten.zeilen.forEach(function(z){
+    var d = new Date(z.key + 'T12:00:00');
+    h += '<tr style="border-bottom:1px solid #ddd; vertical-align:top;">';
+    h += '<td style="padding:6px 2px;">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + '</td>';
+    h += '<td>' + (z.kommen ? zeitUhr(z.kommen.zeit) : '-') + '</td>';
+    h += '<td>' + (z.gehen ? zeitUhr(z.gehen.zeit) : (z.offen ? '<span style="color:#b02a2a;">fehlt</span>' : '-')) + '</td>';
+    h += '<td>' + zeitDauer(z.pause) + '</td>';
+    h += '<td><b>' + zeitDauer(z.arbeit) + '</b></td></tr>';
+    if(mitLoeschen){
+      h += '<tr><td colspan="5" style="padding-bottom:6px;">';
+      z.liste.forEach(function(s){
+        h += '<button class="btn small secondary" style="margin:2px; font-size:11px;" data-zeitloeschen="' + s.id + '">' + zeitUhr(s.zeit) + ' ' + ZEIT_TYPEN[s.typ] + ' &times;</button>';
+      });
+      h += '</td></tr>';
+    }
+  });
+  h += '<tr style="font-weight:700;"><td colspan="3" style="padding-top:8px;">Summe</td><td style="padding-top:8px;">' + zeitDauer(daten.summePause) + '</td><td style="padding-top:8px;">' + zeitDauer(daten.summe) + '</td></tr>';
+  h += '</table>';
+  return h;
+}
+
+function modalZeitNachtragen(name, jahr, monat){
+  var heute = new Date().toISOString().substring(0, 10);
+  var html = '';
+  html += '<div class="modal-head"><h3>Eintrag nachtragen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="font-weight:700;">' + escapeHtml(name) + '</div>';
+  html += '<label>Datum</label><input type="date" id="znDatum" value="' + heute + '">';
+  html += '<label>Uhrzeit</label><input type="time" id="znUhr" value="08:00">';
+  html += '<label>Art</label><select id="znTyp">';
+  Object.keys(ZEIT_TYPEN).forEach(function(t){ html += '<option value="' + t + '">' + ZEIT_TYPEN[t] + '</option>'; });
+  html += '</select>';
+  html += '<button class="btn block" id="znSpeichern" style="margin-top:14px;">Speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ modalZeitMonat(name, jahr, monat); };
+  document.getElementById('znSpeichern').onclick = function(){
+    var dat = document.getElementById('znDatum').value;
+    var uhr = document.getElementById('znUhr').value;
+    if(!dat || !uhr){ toast('Datum und Uhrzeit angeben'); return; }
+    var z = {
+      id: uid(), mitarbeiter: name, typ: document.getElementById('znTyp').value,
+      zeit: new Date(dat + 'T' + uhr + ':00').toISOString(),
+      erstelltVon: 'Chef (nachgetragen)'
+    };
+    dbPut('zeiten', z, function(){
+      if(!state.zeiten) state.zeiten = [];
+      state.zeiten.push(z);
+      toast('Eintrag gespeichert');
+      var d = new Date(z.zeit);
+      modalZeitMonat(name, d.getFullYear(), d.getMonth());
+    });
+  };
+}
+
 function modalMehrMenu(){
   var html = '';
   html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
   var eintraege = [
     { tab:'berichte', label:'Berichte', svg:'<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>' },
     { tab:'statistik', label:'Statistik', svg:'<path d="M4 20V10M12 20V4M20 20v-7"/>' },
+    { tab:'zeit', label:'Zeiterfassung', svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' },
     { tab:'lager', label:'Lager', svg:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' }
   ];
   eintraege.forEach(function(e){
