@@ -6191,7 +6191,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 06.10. 12:15</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
