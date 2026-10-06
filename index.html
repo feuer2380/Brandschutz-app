@@ -3231,6 +3231,7 @@ function renderStatistik(){
   var subTabs = [
     {key:'pruefungen', label:'Prüfungen'},
     {key:'bestand', label:'Gerätebestand'},
+    {key:'neukauf', label:'Neukauf'},
     {key:'portal', label:'Kundenportal'},
     {key:'fuellungen', label:'Füllungen'},
     {key:'lager', label:'Lager'}
@@ -3536,6 +3537,65 @@ function renderStatistik(){
         html += '</div>';
       });
       html += '</div>';
+    }
+  }
+
+  if(subTab === 'neukauf'){
+    var nkJetzt = new Date().getFullYear();
+    var nkStart = 2026;
+    var nkJahre = [];
+    for(var nkJ = nkStart; nkJ <= Math.max(nkJetzt, nkStart); nkJ++) nkJahre.push(nkJ);
+    var nkAuswahl = state.neukaufJahr || 'alle';
+    html += '<div class="meta" style="margin-bottom:10px;">Neugeräte = Feuerlöscher mit Baujahr ab ' + nkStart + ' (ohne Baujahr: Anlagedatum in der App). Ausgeschiedene Geräte sind nicht enthalten.</div>';
+    html += '<div class="filter-bar segmented" style="margin-bottom:12px;">';
+    html += '<button class="filter-btn' + (nkAuswahl === 'alle' ? ' active' : '') + '" data-neukaufjahr="alle">Alle</button>';
+    nkJahre.forEach(function(j){
+      html += '<button class="filter-btn' + (String(nkAuswahl) === String(j) ? ' active' : '') + '" data-neukaufjahr="' + j + '">' + j + '</button>';
+    });
+    html += '</div>';
+    var nkGeraete = state.geraete.filter(function(g){
+      if(g.ausgeschieden) return false;
+      if((g.kategorie || 'Feuerlöscher').trim() !== 'Feuerlöscher') return false;
+      var jahr = g.baujahr ? parseInt(g.baujahr, 10) : (g.erstelltAm ? new Date(g.erstelltAm).getFullYear() : 0);
+      g._nkJahr = jahr;
+      if(jahr < nkStart) return false;
+      if(nkAuswahl !== 'alle' && String(jahr) !== String(nkAuswahl)) return false;
+      return true;
+    });
+    var nkArt = function(g){
+      var t = (g.typ || '').toLowerCase();
+      if(t.indexOf('schaum') >= 0) return 'Schaumlöscher';
+      if(t.indexOf('pulver') >= 0) return 'Pulverlöscher';
+      if(t.indexOf('co2') >= 0 || t.indexOf('co₂') >= 0) return 'CO2-Löscher';
+      if(t.indexOf('wasser') >= 0) return 'Wasserlöscher';
+      return 'Sonstige';
+    };
+    html += '<div class="statrow">';
+    html += '<div class="stat"><div class="n">' + nkGeraete.length + '</div><div class="l">Neugeräte' + (nkAuswahl === 'alle' ? '' : ' ' + nkAuswahl) + '</div></div>';
+    var nkSchaum = nkGeraete.filter(function(g){ return nkArt(g) === 'Schaumlöscher'; }).length;
+    var nkPulver = nkGeraete.filter(function(g){ return nkArt(g) === 'Pulverlöscher'; }).length;
+    html += '<div class="stat"><div class="n">' + nkSchaum + '</div><div class="l">Schaumlöscher</div></div>';
+    html += '<div class="stat"><div class="n">' + nkPulver + '</div><div class="l">Pulverlöscher</div></div>';
+    html += '</div>';
+    if(nkGeraete.length === 0){
+      html += '<div class="empty">Keine Neugeräte in diesem Zeitraum</div>';
+    } else {
+      var nkJahrListe = {};
+      nkGeraete.forEach(function(g){ (nkJahrListe[g._nkJahr] = nkJahrListe[g._nkJahr] || []).push(g); });
+      Object.keys(nkJahrListe).sort(function(a,b){ return b - a; }).forEach(function(j){
+        var liste = nkJahrListe[j];
+        var proArt = {};
+        liste.forEach(function(g){ var a = nkArt(g); proArt[a] = (proArt[a] || 0) + 1; });
+        var zus = Object.keys(proArt).map(function(a){ return proArt[a] + '× ' + a; }).join(', ');
+        html += '<div class="section-title" style="margin-top:16px;">' + j + ' &middot; ' + liste.length + ' Stück</div>';
+        html += '<div class="meta" style="margin-bottom:6px;">' + escapeHtml(zus) + '</div>';
+        liste.sort(function(a,b){ return nkArt(a).localeCompare(nkArt(b)); });
+        liste.forEach(function(g){
+          var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+          html += '<div class="card"><div class="row"><h3>' + escapeHtml(g.typ || 'Feuerlöscher') + '</h3><span class="badge blau">' + escapeHtml(nkArt(g)) + '</span></div>';
+          html += '<div class="meta">' + escapeHtml(k ? k.name : 'Unbekannter Kunde') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div></div>';
+        });
+      });
     }
   }
 
@@ -8050,6 +8110,8 @@ function bindDynamic(){
         state.geraeteFilter = b.getAttribute('data-geraetefilter');
       } else if(b.hasAttribute('data-statfilter')){
         state.statFilter = b.getAttribute('data-statfilter');
+      } else if(b.hasAttribute('data-neukaufjahr')){
+        state.neukaufJahr = b.getAttribute('data-neukaufjahr');
       } else if(b.hasAttribute('data-statsubtab')){
         state.statSubTab = b.getAttribute('data-statsubtab');
       } else {
