@@ -5998,6 +5998,41 @@ var ZEIT_TYPEN = {
   gehen: 'Gehen'
 };
 
+function zeitOrtOptionenHtml(auswahl){
+  var h = '';
+  h += '<option value="lager"' + (auswahl === 'lager' ? ' selected' : '') + '>Lager</option>';
+  h += '<option value="arzt"' + (auswahl === 'arzt' ? ' selected' : '') + '>Arzt</option>';
+  h += '<option value="sonst"' + (auswahl === 'sonst' ? ' selected' : '') + '>Sonstiges</option>';
+  var ks = state.kunden.filter(function(k){ return !k.geloescht && kundeIstAktiv(k.id); })
+    .sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); });
+  if(ks.length){
+    h += '<optgroup label="Kunde">';
+    ks.forEach(function(k){
+      h += '<option value="k:' + escapeHtml(k.id) + '"' + (auswahl === 'k:' + k.id ? ' selected' : '') + '>' + escapeHtml(k.name || 'Kunde') + '</option>';
+    });
+    h += '</optgroup>';
+  }
+  return h;
+}
+
+function zeitOrtAusWert(wert){
+  if(!wert) return {};
+  if(wert === 'lager') return { ort: 'Lager' };
+  if(wert === 'arzt') return { ort: 'Arzt' };
+  if(wert === 'sonst') return { ort: 'Sonstiges' };
+  if(wert.indexOf('k:') === 0) return { ort: 'Kunde', kundeId: wert.substring(2) };
+  return {};
+}
+
+function zeitOrtText(z){
+  if(!z || !z.ort) return '';
+  if(z.ort === 'Kunde'){
+    var k = state.kunden.filter(function(x){ return x.id === z.kundeId; })[0];
+    return k ? k.name : 'Kunde';
+  }
+  return z.ort;
+}
+
 function zeitMitarbeiterNamen(){
   var n = ['Chef'];
   MITARBEITER_LISTE.forEach(function(m){ n.push(m.name); });
@@ -6034,20 +6069,20 @@ function zeitEintraege(name, tagKey){
 
 // Berechnet Arbeits- und Pausenzeit aus einer Liste Stempel eines Tages
 function zeitBerechne(liste, bisJetzt){
-  var arbeit = 0, pause = 0, start = null, pStart = null, offen = false;
+  var arbeit = 0, pause = 0, arzt = 0, start = null, pStart = null, pArzt = false, offen = false;
   var jetzt = new Date();
   liste.forEach(function(z){
     var t = new Date(z.zeit);
     if(z.typ === 'kommen'){ start = t; pStart = null; }
     else if(z.typ === 'pause_start'){
       if(start){ arbeit += t - start; start = null; }
-      pStart = t;
+      pStart = t; pArzt = (z.ort === 'Arzt');
     } else if(z.typ === 'pause_ende'){
-      if(pStart){ pause += t - pStart; pStart = null; }
+      if(pStart){ pause += t - pStart; if(pArzt) arzt += t - pStart; pStart = null; }
       start = t;
     } else if(z.typ === 'gehen'){
       if(start){ arbeit += t - start; start = null; }
-      if(pStart){ pause += t - pStart; pStart = null; }
+      if(pStart){ pause += t - pStart; if(pArzt) arzt += t - pStart; pStart = null; }
     }
   });
   if(start || pStart) offen = true;
@@ -6055,7 +6090,7 @@ function zeitBerechne(liste, bisJetzt){
     if(start) arbeit += jetzt - start;
     if(pStart) pause += jetzt - pStart;
   }
-  return { arbeit: arbeit, pause: pause, offen: offen };
+  return { arbeit: arbeit, pause: pause, arzt: arzt, offen: offen };
 }
 
 function zeitStatus(name){
@@ -6068,12 +6103,15 @@ function zeitStatus(name){
   return { key: 'arbeit', label: 'Bei der Arbeit', farbe: 'var(--ok)', liste: liste };
 }
 
-function zeitStempeln(name, typ, cb){
+function zeitStempeln(name, typ, ortWert, cb){
+  var o = zeitOrtAusWert(ortWert);
   var z = {
     id: uid(),
     mitarbeiter: name,
     typ: typ,
     zeit: new Date().toISOString(),
+    ort: o.ort || null,
+    kundeId: o.kundeId || null,
     erstelltVon: (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'))
   };
   dbPut('zeiten', z, function(){
@@ -6089,6 +6127,12 @@ function zeitAktionenHtml(name, st){
   var btn = function(typ, farbe){
     return '<button class="btn block" data-zeitstempel="' + typ + '" data-zeitname="' + escapeHtml(name) + '" style="margin-top:8px; padding:16px; font-size:17px;' + (farbe ? ' background:' + farbe + ';' : '') + '">' + ZEIT_TYPEN[typ] + '</button>';
   };
+  if(st.key !== 'gegangen' || true){
+    var letzteOrt = st.liste.length ? st.liste[st.liste.length - 1] : null;
+    var vorwahl = letzteOrt && letzteOrt.ort ? (letzteOrt.ort === 'Kunde' ? 'k:' + letzteOrt.kundeId : (letzteOrt.ort === 'Lager' ? 'lager' : (letzteOrt.ort === 'Arzt' ? 'arzt' : 'sonst'))) : '';
+    h += '<label style="margin-top:8px;">Wo? (Kunde / Lager / Arzt)</label>';
+    h += '<select data-zeitort="' + escapeHtml(name) + '"><option value="">– nicht angegeben –</option>' + zeitOrtOptionenHtml(vorwahl) + '</select>';
+  }
   if(st.key === 'abwesend' || st.key === 'gegangen'){
     h += btn('kommen');
   } else if(st.key === 'arbeit'){
@@ -6101,10 +6145,18 @@ function zeitAktionenHtml(name, st){
   return h;
 }
 
+function zeitOrtWertLesen(name){
+  var sels = document.querySelectorAll('select[data-zeitort]');
+  for(var i = 0; i < sels.length; i++){
+    if(sels[i].getAttribute('data-zeitort') === name) return sels[i].value;
+  }
+  return '';
+}
+
 function zeitTagesZeilenHtml(liste){
   var h = '';
   liste.forEach(function(z){
-    h += '<div class="meta">' + zeitUhr(z.zeit) + ' &middot; ' + ZEIT_TYPEN[z.typ] + '</div>';
+    h += '<div class="meta">' + zeitUhr(z.zeit) + ' &middot; ' + ZEIT_TYPEN[z.typ] + (z.ort ? ' &middot; ' + escapeHtml(zeitOrtText(z)) : '') + '</div>';
   });
   return h;
 }
@@ -6127,7 +6179,7 @@ function modalStempeln(name){
   document.querySelectorAll('[data-zeitstempel]').forEach(function(btn){
     btn.onclick = function(){
       btn.disabled = true;
-      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), function(){
+      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), zeitOrtWertLesen(btn.getAttribute('data-zeitname')), function(){
         closeModal();
         render();
       });
@@ -6155,7 +6207,7 @@ function renderZeit(){
     html += '<div class="card">';
     html += '<div class="row"><h3>' + escapeHtml(name) + '</h3><span style="font-weight:600; color:' + st.farbe + ';">' + st.label + '</span></div>';
     if(st.liste.length > 0){
-      html += '<div class="meta">' + st.liste.map(function(z){ return zeitUhr(z.zeit) + ' ' + ZEIT_TYPEN[z.typ]; }).join(' &middot; ') + '</div>';
+      html += '<div class="meta">' + st.liste.map(function(z){ return zeitUhr(z.zeit) + ' ' + ZEIT_TYPEN[z.typ] + (z.ort ? ' (' + escapeHtml(zeitOrtText(z)) + ')' : ''); }).join(' &middot; ') + '</div>';
       html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + '</div>';
     }
     html += '<div style="margin-top:6px;">' + zeitAktionenHtml(name, st) + '</div>';
@@ -6168,7 +6220,7 @@ function bindZeit(){
   document.querySelectorAll('[data-zeitstempel]').forEach(function(btn){
     btn.onclick = function(){
       btn.disabled = true;
-      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), function(){ render(); });
+      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), zeitOrtWertLesen(btn.getAttribute('data-zeitname')), function(){ render(); });
     };
   });
   var q = document.getElementById('zeitQrBtn');
@@ -6236,16 +6288,17 @@ function zeitMonatDaten(name, jahr, monat){
     (tage[key] = tage[key] || []).push(z);
   });
   var keys = Object.keys(tage).sort();
-  var summe = 0, summePause = 0;
+  var summe = 0, summePause = 0, summeArzt = 0;
   var zeilen = keys.map(function(key){
     var liste = tage[key].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
     var b = zeitBerechne(liste, false);
-    summe += b.arbeit; summePause += b.pause;
+    summe += b.arbeit; summePause += b.pause; summeArzt += b.arzt;
     var kommen = liste.filter(function(z){ return z.typ === 'kommen'; })[0];
     var gehen = liste.filter(function(z){ return z.typ === 'gehen'; }).pop();
-    return { key: key, liste: liste, kommen: kommen, gehen: gehen, arbeit: b.arbeit, pause: b.pause, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
+    var orte = []; liste.forEach(function(z){ var t = zeitOrtText(z); if(t && orte.indexOf(t) < 0) orte.push(t); });
+    return { key: key, liste: liste, kommen: kommen, gehen: gehen, orte: orte, arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
   });
-  return { zeilen: zeilen, summe: summe, summePause: summePause };
+  return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt };
 }
 
 function modalZeitMonat(name, jahr, monat){
@@ -6312,7 +6365,7 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen){
   daten.zeilen.forEach(function(z){
     var d = new Date(z.key + 'T12:00:00');
     h += '<tr style="border-bottom:1px solid #ddd; vertical-align:top;">';
-    h += '<td style="padding:6px 2px;">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + '</td>';
+    h += '<td style="padding:6px 2px;">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + (z.orte.length ? '<div style="font-size:11px; color:#666;">' + z.orte.map(escapeHtml).join(', ') + '</div>' : '') + '</td>';
     h += '<td>' + (z.kommen ? zeitUhr(z.kommen.zeit) : '-') + '</td>';
     h += '<td>' + (z.gehen ? zeitUhr(z.gehen.zeit) : (z.offen ? '<span style="color:#b02a2a;">fehlt</span>' : '-')) + '</td>';
     h += '<td>' + zeitDauer(z.pause) + '</td>';
@@ -6320,12 +6373,13 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen){
     if(mitLoeschen){
       h += '<tr><td colspan="5" style="padding-bottom:6px;">';
       z.liste.forEach(function(s){
-        h += '<button class="btn small secondary" style="margin:2px; font-size:11px;" data-zeitloeschen="' + s.id + '">' + zeitUhr(s.zeit) + ' ' + ZEIT_TYPEN[s.typ] + ' &times;</button>';
+        h += '<button class="btn small secondary" style="margin:2px; font-size:11px;" data-zeitloeschen="' + s.id + '">' + zeitUhr(s.zeit) + ' ' + ZEIT_TYPEN[s.typ] + (s.ort ? ' (' + escapeHtml(zeitOrtText(s)) + ')' : '') + ' &times;</button>';
       });
       h += '</td></tr>';
     }
   });
   h += '<tr style="font-weight:700;"><td colspan="3" style="padding-top:8px;">Summe</td><td style="padding-top:8px;">' + zeitDauer(daten.summePause) + '</td><td style="padding-top:8px;">' + zeitDauer(daten.summe) + '</td></tr>';
+  if(daten.summeArzt > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Arzt (in der Pause enthalten): ' + zeitDauer(daten.summeArzt) + '</td></tr>';
   h += '</table>';
   return h;
 }
@@ -6333,31 +6387,59 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen){
 function modalZeitNachtragen(name, jahr, monat){
   var heute = new Date().toISOString().substring(0, 10);
   var html = '';
-  html += '<div class="modal-head"><h3>Eintrag nachtragen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="modal-head"><h3>Zeiten nachtragen</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div style="font-weight:700;">' + escapeHtml(name) + '</div>';
   html += '<label>Datum</label><input type="date" id="znDatum" value="' + heute + '">';
-  html += '<label>Uhrzeit</label><input type="time" id="znUhr" value="08:00">';
-  html += '<label>Art</label><select id="znTyp">';
-  Object.keys(ZEIT_TYPEN).forEach(function(t){ html += '<option value="' + t + '">' + ZEIT_TYPEN[t] + '</option>'; });
-  html += '</select>';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Kommen</label><input type="time" id="znKommen"></div>';
+  html += '<div style="flex:1;"><label>Gehen</label><input type="time" id="znGehen"></div></div>';
+  html += '<label>Wo gearbeitet? (Kunde / Lager / Arzt)</label>';
+  html += '<select id="znOrt"><option value="">– nicht angegeben –</option>' + zeitOrtOptionenHtml('') + '</select>';
+  html += '<div class="section-title" style="margin-top:14px;">Pause (optional)</div>';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Pause von</label><input type="time" id="znPVon"></div>';
+  html += '<div style="flex:1;"><label>Pause bis</label><input type="time" id="znPBis"></div></div>';
+  html += '<label>Pause für</label><select id="znPGrund"><option value="">Normale Pause</option><option value="arzt">Arzt</option></select>';
   html += '<button class="btn block" id="znSpeichern" style="margin-top:14px;">Speichern</button>';
   openModal(html);
   document.getElementById('mClose').onclick = function(){ modalZeitMonat(name, jahr, monat); };
   document.getElementById('znSpeichern').onclick = function(){
     var dat = document.getElementById('znDatum').value;
-    var uhr = document.getElementById('znUhr').value;
-    if(!dat || !uhr){ toast('Datum und Uhrzeit angeben'); return; }
-    var z = {
-      id: uid(), mitarbeiter: name, typ: document.getElementById('znTyp').value,
-      zeit: new Date(dat + 'T' + uhr + ':00').toISOString(),
-      erstelltVon: 'Chef (nachgetragen)'
+    var f = {
+      kommen: document.getElementById('znKommen').value,
+      pause_start: document.getElementById('znPVon').value,
+      pause_ende: document.getElementById('znPBis').value,
+      gehen: document.getElementById('znGehen').value
     };
-    dbPut('zeiten', z, function(){
-      if(!state.zeiten) state.zeiten = [];
-      state.zeiten.push(z);
-      toast('Eintrag gespeichert');
-      var d = new Date(z.zeit);
-      modalZeitMonat(name, d.getFullYear(), d.getMonth());
+    if(!dat){ toast('Datum angeben'); return; }
+    var o = zeitOrtAusWert(document.getElementById('znOrt').value);
+    var pGrund = document.getElementById('znPGrund').value;
+    var neueEintraege = [];
+    ['kommen','pause_start','pause_ende','gehen'].forEach(function(typ){
+      if(!f[typ]) return;
+      var istPause = (typ === 'pause_start');
+      var ort = o;
+      if(istPause && pGrund === 'arzt') ort = { ort: 'Arzt' };
+      neueEintraege.push({
+        id: uid(), mitarbeiter: name, typ: typ,
+        zeit: new Date(dat + 'T' + f[typ] + ':00').toISOString(),
+        ort: ort.ort || null, kundeId: ort.kundeId || null,
+        erstelltVon: 'Chef (nachgetragen)'
+      });
+    });
+    if(neueEintraege.length === 0){ toast('Bitte mindestens eine Uhrzeit eingeben'); return; }
+    var btn = document.getElementById('znSpeichern');
+    btn.disabled = true;
+    var fertig = 0;
+    neueEintraege.forEach(function(z){
+      dbPut('zeiten', z, function(){
+        if(!state.zeiten) state.zeiten = [];
+        if(!state.zeiten.some(function(x){ return x.id === z.id; })) state.zeiten.push(z);
+        fertig++;
+        if(fertig === neueEintraege.length){
+          toast(fertig + ' Eintrag/Einträge gespeichert');
+          var d = new Date(neueEintraege[0].zeit);
+          modalZeitMonat(name, d.getFullYear(), d.getMonth());
+        }
+      });
     });
   };
 }
