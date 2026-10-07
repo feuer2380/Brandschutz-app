@@ -794,7 +794,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 13:25</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 19:55</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6080,25 +6080,25 @@ function zeitBerechne(liste, bisJetzt){
     var t = new Date(z.zeit);
     if(z.typ === 'kommen'){
       // Kommen nach "Gehen (Arzt)": die Zeit dazwischen zählt als Arztzeit
-      if(gArzt){ pause += t - gArzt; arzt += t - gArzt; gArzt = null; }
+      if(gArzt){ arbeit += t - gArzt; arzt += t - gArzt; gArzt = null; }
       start = t; pStart = null;
     }
     else if(z.typ === 'pause_start'){
       if(start){ arbeit += t - start; start = null; }
       pStart = t; pArzt = (z.ort === 'Arzt');
     } else if(z.typ === 'pause_ende'){
-      if(pStart){ pause += t - pStart; if(pArzt) arzt += t - pStart; pStart = null; }
+      if(pStart){ if(pArzt){ arbeit += t - pStart; arzt += t - pStart; } else { pause += t - pStart; } pStart = null; }
       start = t;
     } else if(z.typ === 'gehen'){
       gArzt = (z.ort === 'Arzt') ? t : null;
       if(start){ arbeit += t - start; start = null; }
-      if(pStart){ pause += t - pStart; if(pArzt) arzt += t - pStart; pStart = null; }
+      if(pStart){ if(pArzt){ arbeit += t - pStart; arzt += t - pStart; } else { pause += t - pStart; } pStart = null; }
     }
   });
   if(start || pStart) offen = true;
   if(bisJetzt){
     if(start) arbeit += jetzt - start;
-    if(pStart) pause += jetzt - pStart;
+    if(pStart){ if(pArzt){ arbeit += jetzt - pStart; arzt += jetzt - pStart; } else { pause += jetzt - pStart; } }
   }
   return { arbeit: arbeit, pause: pause, arzt: arzt, offen: offen };
 }
@@ -6116,13 +6116,19 @@ function zeitStatus(name){
   return { key: 'arbeit', label: 'Bei der Arbeit', farbe: 'var(--ok)', liste: liste };
 }
 
-function zeitStempeln(name, typ, ortWert, notiz, cb){
+function zeitStempeln(name, typ, ortWert, notiz, cb, uhrzeit){
   var o = zeitOrtAusWert(ortWert);
+  var jetztD = new Date();
+  var zeitD = jetztD;
+  if(uhrzeit && /^\d{1,2}:\d{2}$/.test(uhrzeit)){
+    var tp = uhrzeit.split(':');
+    zeitD = new Date(jetztD.getFullYear(), jetztD.getMonth(), jetztD.getDate(), parseInt(tp[0], 10), parseInt(tp[1], 10), 0);
+  }
   var z = {
     id: uid(),
     mitarbeiter: name,
     typ: typ,
-    zeit: new Date().toISOString(),
+    zeit: zeitD.toISOString(),
     ort: o.ort || null,
     kundeId: o.kundeId || null,
     notiz: ((notiz || '').trim()) || null,
@@ -6168,7 +6174,9 @@ function zeitAktionenHtml(name, st){
   var letzteOrt = st.liste.length ? st.liste[st.liste.length - 1] : null;
   var vorwahl = letzteOrt && letzteOrt.ort ? (letzteOrt.ort === 'Kunde' ? 'k:' + letzteOrt.kundeId : (letzteOrt.ort === 'Lager' ? 'lager' : (letzteOrt.ort === 'Arzt' ? 'arzt' : 'sonst'))) : '';
   if(vorwahl === 'arzt') vorwahl = '';
-  h += '<details style="margin-top:12px;"><summary class="meta" style="cursor:pointer; padding:6px 0;">Wo war ich? / Notiz (optional)</summary>';
+  h += '<details style="margin-top:12px;"><summary class="meta" style="cursor:pointer; padding:6px 0;">Uhrzeit ändern / Wo war ich? / Notiz (optional)</summary>';
+  h += '<label style="margin-top:8px;">Uhrzeit (nur ausfüllen, wenn du das Stempeln vergessen hast)</label>';
+  h += '<input type="time" data-zeitzeit="' + escapeHtml(name) + '">';
   h += '<label style="margin-top:8px;">Wo? (Kunde / Lager / Arzt)</label>';
   h += '<select data-zeitort="' + escapeHtml(name) + '"><option value="">– nicht angegeben –</option>' + zeitOrtOptionenHtml(vorwahl) + '</select>';
   h += '<label style="margin-top:8px;">Notiz: wo war ich? (frei eintragen)</label>';
@@ -6181,7 +6189,10 @@ function zeitKlick(btn, cb){
   btn.disabled = true;
   var name = btn.getAttribute('data-zeitname');
   var ort = btn.getAttribute('data-zeitarzt') ? 'arzt' : zeitOrtWertLesen(name);
-  zeitStempeln(name, btn.getAttribute('data-zeitstempel'), ort, zeitNotizLesen(name), cb);
+  var uz = '';
+  var uels = document.querySelectorAll('input[data-zeitzeit]');
+  for(var i = 0; i < uels.length; i++){ if(uels[i].getAttribute('data-zeitzeit') === name) uz = uels[i].value; }
+  zeitStempeln(name, btn.getAttribute('data-zeitstempel'), ort, zeitNotizLesen(name), cb, uz);
 }
 
 function zeitNotizLesen(name){
@@ -6248,7 +6259,7 @@ function renderZeit(){
     html += '<div class="row"><h3>' + escapeHtml(name) + '</h3><span style="font-weight:600; color:' + st.farbe + ';">' + st.label + '</span></div>';
     if(st.liste.length > 0){
       html += '<div class="meta">' + zeitZeilenText(st.liste).join(' &middot; ') + '</div>';
-      html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + (b.arzt ? ' &middot; Arzt: ' + zeitDauer(b.arzt) : '') + '</div>';
+      html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + (b.arzt ? ' &middot; davon Arzt: ' + zeitDauer(b.arzt) : '') + '</div>';
     }
     html += '<div style="margin-top:6px;">' + zeitAktionenHtml(name, st) + '</div>';
     html += '</div>';
@@ -6431,7 +6442,7 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen, bearbeiten)
     }
   });
   h += '<tr style="font-weight:700;"><td colspan="3" style="padding-top:8px;">Summe</td><td style="padding-top:8px;">' + zeitDauer(daten.summePause) + '</td><td style="padding-top:8px;">' + zeitDauer(daten.summe) + '</td></tr>';
-  if(daten.summeArzt > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Arzt (in der Pause enthalten): ' + zeitDauer(daten.summeArzt) + '</td></tr>';
+  if(daten.summeArzt > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Arzt (als Arbeitszeit gerechnet): ' + zeitDauer(daten.summeArzt) + '</td></tr>';
   h += '</table>';
   return h;
 }
@@ -6464,7 +6475,7 @@ function zeitDruckHtml(name, jahr, monat, daten){
     h += '<td style="' + zelle + ' font-weight:700;">' + zeitDauer(z.arbeit) + '</td>';
     h += '<td style="' + zelle + '">' + (wo || '&nbsp;') + '</td></tr>';
   });
-  h += '<tr><td colspan="3" style="' + kopf + '">Summe</td><td style="' + kopf + '">' + zeitDauer(daten.summePause) + '</td><td style="' + kopf + '">' + zeitDauer(daten.summe) + '</td><td style="' + kopf + '">' + (daten.summeArzt > 0 ? 'davon Arzt (in der Pause): ' + zeitDauer(daten.summeArzt) : '&nbsp;') + '</td></tr>';
+  h += '<tr><td colspan="3" style="' + kopf + '">Summe</td><td style="' + kopf + '">' + zeitDauer(daten.summePause) + '</td><td style="' + kopf + '">' + zeitDauer(daten.summe) + '</td><td style="' + kopf + '">' + (daten.summeArzt > 0 ? 'davon Arzt (als Arbeitszeit): ' + zeitDauer(daten.summeArzt) : '&nbsp;') + '</td></tr>';
   h += '</table>';
   h += '<table style="width:100%; border-collapse:collapse; margin-top:26px;"><tr>';
   h += '<td style="width:46%; border-top:1px solid #333; padding-top:4px; font-size:10px;">Datum, Unterschrift Mitarbeiter</td><td style="width:8%;"></td>';
