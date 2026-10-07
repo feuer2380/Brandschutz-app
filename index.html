@@ -794,7 +794,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 06.10. 20:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 08:45</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6207,11 +6207,12 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 06.10. 20:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 08:45</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
     html += '<button class="btn small secondary" id="zeitMonatBtn">Monatsliste</button>';
+    html += '<button class="btn small" id="zeitNachtragBtn">Tag nachtragen</button>';
     html += '</div>';
   } else {
     html += '<div style="margin-bottom:12px;"><button class="btn small secondary" id="zeitMonatBtn">Meine Monatsliste</button></div>';
@@ -6241,6 +6242,11 @@ function bindZeit(){
   });
   var q = document.getElementById('zeitQrBtn');
   if(q) q.onclick = modalStempelQr;
+  var nt = document.getElementById('zeitNachtragBtn');
+  if(nt) nt.onclick = function(){
+    var d = new Date();
+    modalZeitNachtragen(zeitMitarbeiterNamen()[0], d.getFullYear(), d.getMonth());
+  };
   var m = document.getElementById('zeitMonatBtn');
   if(m) m.onclick = function(){
     modalZeitMonat(state.rolle === 'chef' ? zeitMitarbeiterNamen()[0] : (state.mitarbeiterName || 'Mitarbeiter'), null, null);
@@ -6482,8 +6488,12 @@ function modalZeitNachtragen(name, jahr, monat){
   var heute = new Date().toISOString().substring(0, 10);
   var html = '';
   html += '<div class="modal-head"><h3>Zeiten nachtragen</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div style="font-weight:700;">' + escapeHtml(name) + '</div>';
-  html += '<label>Datum</label><input type="date" id="znDatum" value="' + heute + '">';
+  html += '<label>Mitarbeiter</label><select id="znWer">';
+  zeitMitarbeiterNamen().forEach(function(n){
+    html += '<option value="' + escapeHtml(n) + '"' + (n === name ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+  });
+  html += '</select>';
+  html += '<label>Datum (vergessener Tag)</label><input type="date" id="znDatum" value="' + heute + '">';
   html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Kommen</label><input type="time" id="znKommen"></div>';
   html += '<div style="flex:1;"><label>Gehen</label><input type="time" id="znGehen"></div></div>';
   html += '<label>Wo gearbeitet? (Kunde / Lager / Arzt)</label>';
@@ -6498,6 +6508,7 @@ function modalZeitNachtragen(name, jahr, monat){
   document.getElementById('mClose').onclick = function(){ modalZeitMonat(name, jahr, monat); };
   document.getElementById('znSpeichern').onclick = function(){
     var dat = document.getElementById('znDatum').value;
+    var wer = document.getElementById('znWer').value || name;
     var f = {
       kommen: document.getElementById('znKommen').value,
       pause_start: document.getElementById('znPVon').value,
@@ -6514,7 +6525,7 @@ function modalZeitNachtragen(name, jahr, monat){
       var ort = o;
       if(istPause && pGrund === 'arzt') ort = { ort: 'Arzt' };
       neueEintraege.push({
-        id: uid(), mitarbeiter: name, typ: typ,
+        id: uid(), mitarbeiter: wer, typ: typ,
         zeit: new Date(dat + 'T' + f[typ] + ':00').toISOString(),
         ort: ort.ort || null, kundeId: ort.kundeId || null,
         notiz: (document.getElementById('znNotiz').value || '').trim() || null,
@@ -6533,7 +6544,7 @@ function modalZeitNachtragen(name, jahr, monat){
         if(fertig === neueEintraege.length){
           toast(fertig + ' Eintrag/Einträge gespeichert');
           var d = new Date(neueEintraege[0].zeit);
-          modalZeitMonat(name, d.getFullYear(), d.getMonth());
+          modalZeitMonat(wer, d.getFullYear(), d.getMonth());
         }
       });
     });
