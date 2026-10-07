@@ -794,7 +794,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 10:55</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 13:05</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6074,11 +6074,15 @@ function zeitEintraege(name, tagKey){
 
 // Berechnet Arbeits- und Pausenzeit aus einer Liste Stempel eines Tages
 function zeitBerechne(liste, bisJetzt){
-  var arbeit = 0, pause = 0, arzt = 0, start = null, pStart = null, pArzt = false, offen = false;
+  var arbeit = 0, pause = 0, arzt = 0, start = null, pStart = null, pArzt = false, gArzt = null, offen = false;
   var jetzt = new Date();
   liste.forEach(function(z){
     var t = new Date(z.zeit);
-    if(z.typ === 'kommen'){ start = t; pStart = null; }
+    if(z.typ === 'kommen'){
+      // Kommen nach "Gehen (Arzt)": die Zeit dazwischen zählt als Arztzeit
+      if(gArzt){ pause += t - gArzt; arzt += t - gArzt; gArzt = null; }
+      start = t; pStart = null;
+    }
     else if(z.typ === 'pause_start'){
       if(start){ arbeit += t - start; start = null; }
       pStart = t; pArzt = (z.ort === 'Arzt');
@@ -6086,6 +6090,7 @@ function zeitBerechne(liste, bisJetzt){
       if(pStart){ pause += t - pStart; if(pArzt) arzt += t - pStart; pStart = null; }
       start = t;
     } else if(z.typ === 'gehen'){
+      gArzt = (z.ort === 'Arzt') ? t : null;
       if(start){ arbeit += t - start; start = null; }
       if(pStart){ pause += t - pStart; if(pArzt) arzt += t - pStart; pStart = null; }
     }
@@ -6225,7 +6230,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 10:55</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 13:05</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
