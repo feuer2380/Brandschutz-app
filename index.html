@@ -794,7 +794,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 20:15</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 20:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6355,9 +6355,27 @@ function zeitMonatDaten(name, jahr, monat){
     var notizen = [];
     if(tagesNotizen[key] && tagesNotizen[key].text) notizen.push(tagesNotizen[key].text);
     liste.forEach(function(z){ if(z.notiz && notizen.indexOf(z.notiz) < 0) notizen.push(z.notiz); });
+    // Arbeitsblöcke für die Anzeige: Arztzeit und Doppelstempel werden zusammengefasst
+    var segs = [], cur = null, lastEnd = null, lastBridge = false;
+    var offenKommen = function(t, darfBruecke){
+      if(cur) return;
+      if(darfBruecke && segs.length && lastEnd && (lastBridge || (t - lastEnd) < 120000)){ cur = segs.pop(); cur.bis = null; }
+      else cur = { von: t, bis: null };
+    };
+    liste.forEach(function(z){
+      var t = new Date(z.zeit);
+      if(z.typ === 'kommen') offenKommen(t, true);
+      else if(z.typ === 'pause_ende'){ if(!(lastBridge && !cur)) offenKommen(t, false); else offenKommen(t, true); }
+      else if(z.typ === 'pause_start' && z.ort !== 'Arzt'){ if(cur){ cur.bis = t; segs.push(cur); cur = null; lastEnd = t; lastBridge = false; } }
+      else if(z.typ === 'pause_start' && z.ort === 'Arzt'){ /* Arztzeit = Arbeitszeit, Block läuft weiter */ }
+      else if(z.typ === 'gehen'){ if(cur){ cur.bis = t; segs.push(cur); cur = null; lastEnd = t; lastBridge = (z.ort === 'Arzt'); } }
+    });
+    if(cur) segs.push(cur);
+    var segKommen = segs.map(function(g){ return zeitUhr(g.von.toISOString()); });
+    var segGehen = segs.filter(function(g){ return g.bis; }).map(function(g){ return zeitUhr(g.bis.toISOString()); });
     var uniq = function(typ){ var r = []; liste.forEach(function(z){ if(z.typ === typ){ var u = zeitUhr(z.zeit); if(r.indexOf(u) < 0) r.push(u); } }); return r; };
     var heuteKey = zeitTagKey(new Date().toISOString());
-    return { key: key, liste: liste, kommen: kommen, gehen: gehen, kommenListe: uniq('kommen'), gehenListe: uniq('gehen'), laeuft: b.offen && key === heuteKey, orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
+    return { key: key, liste: liste, kommen: kommen, gehen: gehen, kommenListe: segKommen, gehenListe: segGehen, laeuft: b.offen && key === heuteKey, orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
   });
   return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt };
 }
