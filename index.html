@@ -794,7 +794,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 08:45</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 10:55</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6104,7 +6104,10 @@ function zeitStatus(name){
   if(liste.length === 0) return { key: 'abwesend', label: 'Nicht eingestempelt', farbe: 'var(--muted, #888)', liste: liste };
   var last = liste[liste.length - 1].typ;
   if(last === 'gehen') return { key: 'gegangen', label: 'Feierabend', farbe: 'var(--muted, #888)', liste: liste };
-  if(last === 'pause_start') return { key: 'pause', label: 'In Pause', farbe: '#d98a00', liste: liste };
+  if(last === 'pause_start'){
+    var beimArzt = liste[liste.length - 1].ort === 'Arzt';
+    return { key: 'pause', arzt: beimArzt, label: beimArzt ? 'Beim Arzt' : 'In Pause', farbe: beimArzt ? '#2a6fb0' : '#d98a00', liste: liste };
+  }
   return { key: 'arbeit', label: 'Bei der Arbeit', farbe: 'var(--ok)', liste: liste };
 }
 
@@ -6128,29 +6131,52 @@ function zeitStempeln(name, typ, ortWert, notiz, cb){
   });
 }
 
+function zeitTypText(z, vorher){
+  if(z.typ === 'pause_start' && z.ort === 'Arzt') return 'Zum Arzt';
+  if(z.typ === 'pause_ende' && vorher && vorher.typ === 'pause_start' && vorher.ort === 'Arzt') return 'Vom Arzt zurück';
+  return ZEIT_TYPEN[z.typ];
+}
+
+function zeitZeilenText(liste){
+  return liste.map(function(z, i){
+    var t = zeitTypText(z, i > 0 ? liste[i - 1] : null);
+    var zeigeOrt = z.ort && !(z.typ === 'pause_start' && z.ort === 'Arzt');
+    return zeitUhr(z.zeit) + ' ' + t + (zeigeOrt ? ' (' + escapeHtml(zeitOrtText(z)) + ')' : '');
+  });
+}
+
 function zeitAktionenHtml(name, st){
   var h = '';
-  var btn = function(typ, farbe){
-    return '<button class="btn block" data-zeitstempel="' + typ + '" data-zeitname="' + escapeHtml(name) + '" style="margin-top:8px; padding:16px; font-size:17px;' + (farbe ? ' background:' + farbe + ';' : '') + '">' + ZEIT_TYPEN[typ] + '</button>';
+  var btn = function(typ, text, farbe, arzt){
+    return '<button class="btn block" data-zeitstempel="' + typ + '"' + (arzt ? ' data-zeitarzt="1"' : '') + ' data-zeitname="' + escapeHtml(name) + '" style="margin-top:8px; padding:18px; font-size:19px;' + (farbe ? ' background:' + farbe + ';' : '') + '">' + text + '</button>';
   };
-  if(st.key !== 'gegangen' || true){
-    var letzteOrt = st.liste.length ? st.liste[st.liste.length - 1] : null;
-    var vorwahl = letzteOrt && letzteOrt.ort ? (letzteOrt.ort === 'Kunde' ? 'k:' + letzteOrt.kundeId : (letzteOrt.ort === 'Lager' ? 'lager' : (letzteOrt.ort === 'Arzt' ? 'arzt' : 'sonst'))) : '';
-    h += '<label style="margin-top:8px;">Wo? (Kunde / Lager / Arzt)</label>';
-    h += '<select data-zeitort="' + escapeHtml(name) + '"><option value="">– nicht angegeben –</option>' + zeitOrtOptionenHtml(vorwahl) + '</select>';
-    h += '<label style="margin-top:8px;">Notiz: wo war ich? (frei eintragen)</label>';
-    h += '<input type="text" data-zeitnotiz="' + escapeHtml(name) + '" placeholder="z.B. Brandschutzbegehung Schule Mödling">';
-  }
   if(st.key === 'abwesend' || st.key === 'gegangen'){
-    h += btn('kommen');
+    h += btn('kommen', 'Kommen', '#2e7d4f');
   } else if(st.key === 'arbeit'){
-    h += btn('pause_start', '#d98a00');
-    h += btn('gehen', '#b02a2a');
+    h += btn('pause_start', 'Zum Arzt', '#2a6fb0', true);
+    h += btn('pause_start', 'Pause', '#d98a00');
+    h += btn('gehen', 'Gehen', '#b02a2a');
   } else if(st.key === 'pause'){
-    h += btn('pause_ende');
-    h += btn('gehen', '#b02a2a');
+    h += btn('pause_ende', st.arzt ? 'Vom Arzt zurück' : 'Pause Ende', '#2e7d4f');
+    h += btn('gehen', 'Gehen', '#b02a2a');
   }
+  var letzteOrt = st.liste.length ? st.liste[st.liste.length - 1] : null;
+  var vorwahl = letzteOrt && letzteOrt.ort ? (letzteOrt.ort === 'Kunde' ? 'k:' + letzteOrt.kundeId : (letzteOrt.ort === 'Lager' ? 'lager' : (letzteOrt.ort === 'Arzt' ? 'arzt' : 'sonst'))) : '';
+  if(vorwahl === 'arzt') vorwahl = '';
+  h += '<details style="margin-top:12px;"><summary class="meta" style="cursor:pointer; padding:6px 0;">Wo war ich? / Notiz (optional)</summary>';
+  h += '<label style="margin-top:8px;">Wo? (Kunde / Lager / Arzt)</label>';
+  h += '<select data-zeitort="' + escapeHtml(name) + '"><option value="">– nicht angegeben –</option>' + zeitOrtOptionenHtml(vorwahl) + '</select>';
+  h += '<label style="margin-top:8px;">Notiz: wo war ich? (frei eintragen)</label>';
+  h += '<input type="text" data-zeitnotiz="' + escapeHtml(name) + '" placeholder="z.B. Brandschutzbegehung Schule Mödling">';
+  h += '</details>';
   return h;
+}
+
+function zeitKlick(btn, cb){
+  btn.disabled = true;
+  var name = btn.getAttribute('data-zeitname');
+  var ort = btn.getAttribute('data-zeitarzt') ? 'arzt' : zeitOrtWertLesen(name);
+  zeitStempeln(name, btn.getAttribute('data-zeitstempel'), ort, zeitNotizLesen(name), cb);
 }
 
 function zeitNotizLesen(name){
@@ -6171,9 +6197,7 @@ function zeitOrtWertLesen(name){
 
 function zeitTagesZeilenHtml(liste){
   var h = '';
-  liste.forEach(function(z){
-    h += '<div class="meta">' + zeitUhr(z.zeit) + ' &middot; ' + ZEIT_TYPEN[z.typ] + (z.ort ? ' &middot; ' + escapeHtml(zeitOrtText(z)) : '') + '</div>';
-  });
+  zeitZeilenText(liste).forEach(function(t){ h += '<div class="meta">' + t + '</div>'; });
   return h;
 }
 
@@ -6193,13 +6217,7 @@ function modalStempeln(name){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   document.querySelectorAll('[data-zeitstempel]').forEach(function(btn){
-    btn.onclick = function(){
-      btn.disabled = true;
-      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), zeitOrtWertLesen(btn.getAttribute('data-zeitname')), zeitNotizLesen(btn.getAttribute('data-zeitname')), function(){
-        closeModal();
-        render();
-      });
-    };
+    btn.onclick = function(){ zeitKlick(btn, function(){ closeModal(); render(); }); };
   });
 }
 
@@ -6207,7 +6225,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 08:45</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 10:55</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -6224,8 +6242,8 @@ function renderZeit(){
     html += '<div class="card">';
     html += '<div class="row"><h3>' + escapeHtml(name) + '</h3><span style="font-weight:600; color:' + st.farbe + ';">' + st.label + '</span></div>';
     if(st.liste.length > 0){
-      html += '<div class="meta">' + st.liste.map(function(z){ return zeitUhr(z.zeit) + ' ' + ZEIT_TYPEN[z.typ] + (z.ort ? ' (' + escapeHtml(zeitOrtText(z)) + ')' : ''); }).join(' &middot; ') + '</div>';
-      html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + '</div>';
+      html += '<div class="meta">' + zeitZeilenText(st.liste).join(' &middot; ') + '</div>';
+      html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + (b.arzt ? ' &middot; Arzt: ' + zeitDauer(b.arzt) : '') + '</div>';
     }
     html += '<div style="margin-top:6px;">' + zeitAktionenHtml(name, st) + '</div>';
     html += '</div>';
@@ -6235,10 +6253,7 @@ function renderZeit(){
 
 function bindZeit(){
   document.querySelectorAll('[data-zeitstempel]').forEach(function(btn){
-    btn.onclick = function(){
-      btn.disabled = true;
-      zeitStempeln(btn.getAttribute('data-zeitname'), btn.getAttribute('data-zeitstempel'), zeitOrtWertLesen(btn.getAttribute('data-zeitname')), zeitNotizLesen(btn.getAttribute('data-zeitname')), function(){ render(); });
-    };
+    btn.onclick = function(){ zeitKlick(btn, function(){ render(); }); };
   });
   var q = document.getElementById('zeitQrBtn');
   if(q) q.onclick = modalStempelQr;
