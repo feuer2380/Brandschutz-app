@@ -794,7 +794,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 13:05</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 13:25</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6230,7 +6230,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 13:05</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 13:25</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -6343,7 +6343,9 @@ function zeitMonatDaten(name, jahr, monat){
     var notizen = [];
     if(tagesNotizen[key] && tagesNotizen[key].text) notizen.push(tagesNotizen[key].text);
     liste.forEach(function(z){ if(z.notiz && notizen.indexOf(z.notiz) < 0) notizen.push(z.notiz); });
-    return { key: key, liste: liste, kommen: kommen, gehen: gehen, orte: orte, notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
+    var uniq = function(typ){ var r = []; liste.forEach(function(z){ if(z.typ === typ){ var u = zeitUhr(z.zeit); if(r.indexOf(u) < 0) r.push(u); } }); return r; };
+    var heuteKey = zeitTagKey(new Date().toISOString());
+    return { key: key, liste: liste, kommen: kommen, gehen: gehen, kommenListe: uniq('kommen'), gehenListe: uniq('gehen'), laeuft: b.offen && key === heuteKey, orte: orte, notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
   });
   return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt };
 }
@@ -6416,8 +6418,8 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen, bearbeiten)
     var d = new Date(z.key + 'T12:00:00');
     h += '<tr style="border-bottom:1px solid #ddd; vertical-align:top;">';
     h += '<td style="padding:6px 2px;">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + (z.orte.length ? '<div style="font-size:11px; color:#666;">' + z.orte.map(escapeHtml).join(', ') + '</div>' : '') + (z.notizen.length ? '<div style="font-size:11px; color:#444;">' + z.notizen.map(escapeHtml).join(' &middot; ') + '</div>' : '') + (bearbeiten ? '<button class="btn small secondary" style="font-size:11px; padding:2px 8px; margin-top:3px;" data-zeitnotiztag="' + z.key + '">Notiz</button>' : '') + '</td>';
-    h += '<td>' + (z.kommen ? zeitUhr(z.kommen.zeit) : '-') + '</td>';
-    h += '<td>' + (z.gehen ? zeitUhr(z.gehen.zeit) : (z.offen ? '<span style="color:#b02a2a;">fehlt</span>' : '-')) + '</td>';
+    h += '<td>' + (z.kommenListe.length ? z.kommenListe.join('<br>') : '-') + '</td>';
+    h += '<td>' + (z.gehenListe.length ? z.gehenListe.join('<br>') : '') + (z.laeuft ? (z.gehenListe.length ? '<br>' : '') + '<span style="color:#2e7d4f;">läuft</span>' : (z.offen ? (z.gehenListe.length ? '<br>' : '') + '<span style="color:#b02a2a;">fehlt</span>' : (z.gehenListe.length ? '' : '-'))) + '</td>';
     h += '<td>' + zeitDauer(z.pause) + '</td>';
     h += '<td><b>' + zeitDauer(z.arbeit) + '</b></td></tr>';
     if(mitLoeschen){
@@ -6456,8 +6458,8 @@ function zeitDruckHtml(name, jahr, monat, daten){
     var wo = z.orte.map(escapeHtml).join(', ');
     if(z.notizen.length) wo += (wo ? '<br>' : '') + z.notizen.map(escapeHtml).join(' &middot; ');
     h += '<tr><td style="' + zelle + '">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + '</td>';
-    h += '<td style="' + zelle + '">' + (z.kommen ? zeitUhr(z.kommen.zeit) : '') + '</td>';
-    h += '<td style="' + zelle + '">' + (z.gehen ? zeitUhr(z.gehen.zeit) : '') + '</td>';
+    h += '<td style="' + zelle + '">' + z.kommenListe.join('<br>') + '</td>';
+    h += '<td style="' + zelle + '">' + z.gehenListe.join('<br>') + (z.laeuft ? (z.gehenListe.length ? '<br>' : '') + 'läuft' : '') + '</td>';
     h += '<td style="' + zelle + '">' + zeitDauer(z.pause) + '</td>';
     h += '<td style="' + zelle + ' font-weight:700;">' + zeitDauer(z.arbeit) + '</td>';
     h += '<td style="' + zelle + '">' + (wo || '&nbsp;') + '</td></tr>';
