@@ -497,6 +497,7 @@ function starteEchtzeitSync(){
       var frisch = [];
       snap.forEach(function(doc){ frisch.push(doc.data()); });
       state[store] = frisch;
+      if(store === 'zeiten') zeitNamenMigrieren();
       render();
     }, function(err){
       console.error('Sync-Fehler bei ' + store, err);
@@ -552,6 +553,7 @@ function loadAll(cb){
                       state.tagesberichte = tb;
                       dbGetAll('zeiten', function(ze){
                         state.zeiten = ze;
+                        zeitNamenMigrieren();
                         cb();
                       });
                     });
@@ -794,7 +796,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 07.10. 20:40</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 08.10. 08:45</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1602,6 +1604,7 @@ function verarbeiteScan(text){
   if(portalMatch) id = decodeURIComponent(portalMatch[1]);
   if(id.indexOf('BSV-STEMPEL:') === 0){
     var stName = id.substring('BSV-STEMPEL:'.length);
+    if(ZEIT_ALTE_NAMEN[stName]) stName = ZEIT_ALTE_NAMEN[stName];
     if(zeitMitarbeiterNamen().indexOf(stName) >= 0){
       modalStempeln(stName);
     } else {
@@ -2339,11 +2342,29 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
 
 // ---------- Kunden ----------
 var CHEF_PIN = '0239';
+var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
-  { name: 'Mitarbeiter 1', pin: '8276' },
-  { name: 'Mitarbeiter 2', pin: '8277' },
-  { name: 'Mitarbeiter 3', pin: '8278' }
+  { name: 'Janiba Wolfgang sen.', pin: '8276' },
+  { name: 'Prominzer Tobias', pin: '8277' },
+  { name: 'Mayerhofer Tobias', pin: '8278' }
 ];
+// Alte Namen aus früheren Versionen -> neue Namen
+var ZEIT_ALTE_NAMEN = {
+  'Chef': 'Janiba Wolfgang',
+  'Mitarbeiter 1': 'Janiba Wolfgang sen.',
+  'Mitarbeiter 2': 'Prominzer Tobias',
+  'Mitarbeiter 3': 'Mayerhofer Tobias'
+};
+function zeitNamenMigrieren(){
+  if(!state.zeiten) return;
+  state.zeiten.forEach(function(z){
+    var neu = ZEIT_ALTE_NAMEN[z.mitarbeiter];
+    if(neu){
+      z.mitarbeiter = neu;
+      try{ dbPut('zeiten', z, function(){}); } catch(e){}
+    }
+  });
+}
 
 function kundeSichtbarFuerRolle(k){
   if(state.rolle !== 'mitarbeiter') return true;
@@ -6039,7 +6060,7 @@ function zeitOrtText(z){
 }
 
 function zeitMitarbeiterNamen(){
-  var n = ['Chef'];
+  var n = [CHEF_NAME];
   MITARBEITER_LISTE.forEach(function(m){ n.push(m.name); });
   return n;
 }
@@ -6242,7 +6263,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 07.10. 13:25</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 08.10. 08:45</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
