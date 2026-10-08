@@ -44,7 +44,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var CHEF_PIN = '0239';
-var MITARBEITER = [{name:'Mitarbeiter 1',pin:'8276'},{name:'Mitarbeiter 2',pin:'8277'},{name:'Mitarbeiter 3',pin:'8278'}];
+var MITARBEITER = [{name:'Janiba Wolfgang sen.',pin:'8276'},{name:'Prominzer Tobias',pin:'8277'},{name:'Mayerhofer Tobias',pin:'8278'}];
 var TYPEN = {kommen:'Kommen',pause_start:'Pause Beginn',pause_ende:'Pause Ende',gehen:'Gehen'};
 var MONATE = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 var db, zeiten = [], kunden = [], me = null, ansicht = 'heute', zielName = null, mJahr, mMonat, geladen = false;
@@ -57,7 +57,7 @@ function uid(){ return 'id_' + Date.now() + '_' + Math.floor(Math.random() * 100
 function tagKey(iso){ var d = new Date(iso); var m = d.getMonth() + 1, t = d.getDate(); return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (t < 10 ? '0' : '') + t; }
 function uhr(iso){ var d = new Date(iso); var h = d.getHours(), m = d.getMinutes(); return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
 function dauer(ms){ if(!ms || ms < 0) ms = 0; var min = Math.round(ms / 60000); var m = min % 60; return Math.floor(min / 60) + ':' + (m < 10 ? '0' : '') + m + ' h'; }
-function namen(){ return ['Chef'].concat(MITARBEITER.map(function(m){ return m.name; })); }
+function namen(){ return ['Janiba Wolfgang'].concat(MITARBEITER.map(function(m){ return m.name; })); }
 function eintraege(name, key){ return zeiten.filter(function(z){ return z.mitarbeiter === name && (!key || tagKey(z.zeit) === key); }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); }); }
 
 function berechne(liste, bisJetzt){
@@ -118,7 +118,7 @@ function renderLogin(){
     '<button class="btn" id="ok">Anmelden</button></div>';
   $('ok').onclick = function(){
     var p = $('pin').value.trim();
-    if(p === CHEF_PIN){ me = {name:'Chef', chef:true}; }
+    if(p === CHEF_PIN){ me = {name:'Janiba Wolfgang', chef:true}; }
     else { var m = MITARBEITER.filter(function(x){ return x.pin === p; })[0]; if(m) me = {name:m.name, chef:false}; }
     if(!me){ toast('PIN falsch'); return; }
     zielName = me.name; render();
