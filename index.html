@@ -796,7 +796,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 08.10. 08:45</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 09.10. 11:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6021,8 +6021,12 @@ var ZEIT_TYPEN = {
   kommen: 'Kommen',
   pause_start: 'Pause Beginn',
   pause_ende: 'Pause Ende',
-  gehen: 'Gehen'
+  gehen: 'Gehen',
+  urlaub: 'Urlaub',
+  zeitausgleich: 'Zeitausgleich',
+  feiertag: 'Feiertag'
 };
+var ZEIT_ABW_TYPEN = ['urlaub', 'zeitausgleich', 'feiertag'];
 
 function zeitOrtOptionenHtml(auswahl){
   var h = '';
@@ -6089,7 +6093,7 @@ function zeitDauer(ms){
 
 function zeitEintraege(name, tagKey){
   return (state.zeiten || []).filter(function(z){
-    return z.typ !== 'notiz' && z.mitarbeiter === name && (!tagKey || zeitTagKey(z.zeit) === tagKey);
+    return z.typ !== 'notiz' && ZEIT_ABW_TYPEN.indexOf(z.typ) < 0 && z.mitarbeiter === name && (!tagKey || zeitTagKey(z.zeit) === tagKey);
   }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
 }
 
@@ -6128,7 +6132,10 @@ function zeitBerechne(liste, bisJetzt){
 function zeitStatus(name){
   var heute = zeitTagKey(new Date().toISOString());
   var liste = zeitEintraege(name, heute);
-  if(liste.length === 0) return { key: 'abwesend', label: 'Nicht eingestempelt', farbe: 'var(--muted, #888)', liste: liste };
+  if(liste.length === 0){
+    var abwHeute = (state.zeiten || []).filter(function(z){ return ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0 && z.mitarbeiter === name && zeitTagKey(z.zeit) === heute; })[0];
+    return { key: 'abwesend', label: abwHeute ? ZEIT_TYPEN[abwHeute.typ] + ' (heute eingetragen)' : 'Nicht eingestempelt', farbe: abwHeute ? '#2a6fb0' : 'var(--muted, #888)', liste: liste };
+  }
   var last = liste[liste.length - 1].typ;
   if(last === 'gehen') return { key: 'gegangen', label: 'Feierabend', farbe: 'var(--muted, #888)', liste: liste };
   if(last === 'pause_start'){
@@ -6263,12 +6270,13 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 08.10. 08:45</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 09.10. 11:30</span></div>';
   if(istChef){
-    html += '<div style="display:flex; gap:8px; margin-bottom:12px;">';
+    html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
     html += '<button class="btn small secondary" id="zeitMonatBtn">Monatsliste</button>';
     html += '<button class="btn small" id="zeitNachtragBtn">Tag nachtragen</button>';
+    html += '<button class="btn small" id="zeitUrlaubBtn" style="background:#2a6fb0;">Urlaub eintragen</button>';
     html += '</div>';
   } else {
     html += '<div style="margin-bottom:12px;"><button class="btn small secondary" id="zeitMonatBtn">Meine Monatsliste</button></div>';
@@ -6295,6 +6303,8 @@ function bindZeit(){
   });
   var q = document.getElementById('zeitQrBtn');
   if(q) q.onclick = modalStempelQr;
+  var ub = document.getElementById('zeitUrlaubBtn');
+  if(ub) ub.onclick = function(){ modalZeitUrlaub(zeitMitarbeiterNamen()[0]); };
   var nt = document.getElementById('zeitNachtragBtn');
   if(nt) nt.onclick = function(){
     var d = new Date();
@@ -6365,9 +6375,11 @@ function zeitMonatDaten(name, jahr, monat){
     (tage[key] = tage[key] || []).push(z);
   });
   var keys = Object.keys(tage).sort();
-  var summe = 0, summePause = 0, summeArzt = 0;
+  var summe = 0, summePause = 0, summeArzt = 0, abwSumme = {};
   var zeilen = keys.map(function(key){
     var liste = tage[key].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
+    var abwArten = [];
+    liste.forEach(function(z){ if(ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0 && abwArten.indexOf(ZEIT_TYPEN[z.typ]) < 0){ abwArten.push(ZEIT_TYPEN[z.typ]); abwSumme[ZEIT_TYPEN[z.typ]] = (abwSumme[ZEIT_TYPEN[z.typ]] || 0) + 1; } });
     var b = zeitBerechne(liste, key === zeitTagKey(new Date().toISOString()));
     summe += b.arbeit; summePause += b.pause; summeArzt += b.arzt;
     var kommen = liste.filter(function(z){ return z.typ === 'kommen'; })[0];
@@ -6396,9 +6408,10 @@ function zeitMonatDaten(name, jahr, monat){
     var segGehen = segs.filter(function(g){ return g.bis; }).map(function(g){ return zeitUhr(g.bis.toISOString()); });
     var uniq = function(typ){ var r = []; liste.forEach(function(z){ if(z.typ === typ){ var u = zeitUhr(z.zeit); if(r.indexOf(u) < 0) r.push(u); } }); return r; };
     var heuteKey = zeitTagKey(new Date().toISOString());
-    return { key: key, liste: liste, kommen: kommen, gehen: gehen, kommenListe: segKommen, gehenListe: segGehen, laeuft: b.offen && key === heuteKey, orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
+    return { key: key, liste: liste, kommen: kommen, gehen: gehen, abwText: abwArten.join(', '), kommenListe: segKommen, gehenListe: segGehen, laeuft: b.offen && key === heuteKey, orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
   });
-  return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt };
+  var abwZeile = Object.keys(abwSumme).map(function(k){ return k + ': ' + abwSumme[k] + (abwSumme[k] === 1 ? ' Tag' : ' Tage'); }).join(' · ');
+  return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt, abwZeile: abwZeile };
 }
 
 function modalZeitMonat(name, jahr, monat){
@@ -6468,7 +6481,7 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen, bearbeiten)
   daten.zeilen.forEach(function(z){
     var d = new Date(z.key + 'T12:00:00');
     h += '<tr style="border-bottom:1px solid #ddd; vertical-align:top;">';
-    h += '<td style="padding:6px 2px;">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + (z.orte.length ? '<div style="font-size:11px; color:#666;">' + z.orte.map(escapeHtml).join(', ') + '</div>' : '') + (z.arztText ? '<div style="font-size:11px; color:#2a6fb0;">' + z.arztText + '</div>' : '') + (z.notizen.length ? '<div style="font-size:11px; color:#444;">' + z.notizen.map(escapeHtml).join(' &middot; ') + '</div>' : '') + (bearbeiten ? '<button class="btn small secondary" style="font-size:11px; padding:2px 8px; margin-top:3px;" data-zeitnotiztag="' + z.key + '">Notiz</button>' : '') + '</td>';
+    h += '<td style="padding:6px 2px;">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + (z.orte.length ? '<div style="font-size:11px; color:#666;">' + z.orte.map(escapeHtml).join(', ') + '</div>' : '') + (z.arztText ? '<div style="font-size:11px; color:#2a6fb0;">' + z.arztText + '</div>' : '') + (z.abwText ? '<div style="font-size:12px; font-weight:700; color:#2a6fb0;">' + z.abwText + '</div>' : '') + (z.notizen.length ? '<div style="font-size:11px; color:#444;">' + z.notizen.map(escapeHtml).join(' &middot; ') + '</div>' : '') + (bearbeiten ? '<button class="btn small secondary" style="font-size:11px; padding:2px 8px; margin-top:3px;" data-zeitnotiztag="' + z.key + '">Notiz</button>' : '') + '</td>';
     h += '<td>' + (z.kommenListe.length ? z.kommenListe.join('<br>') : '-') + '</td>';
     h += '<td>' + (z.gehenListe.length ? z.gehenListe.join('<br>') : '') + (z.laeuft ? (z.gehenListe.length ? '<br>' : '') + '<span style="color:#2e7d4f;">läuft</span>' : (z.offen ? (z.gehenListe.length ? '<br>' : '') + '<span style="color:#b02a2a;">fehlt</span>' : (z.gehenListe.length ? '' : '-'))) + '</td>';
     h += '<td>' + zeitDauer(z.pause) + '</td>';
@@ -6476,12 +6489,13 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen, bearbeiten)
     if(mitLoeschen){
       h += '<tr><td colspan="5" style="padding-bottom:6px;">';
       z.liste.forEach(function(s){
-        h += '<button class="btn small secondary" style="margin:2px; font-size:11px;" data-zeitloeschen="' + s.id + '">' + zeitUhr(s.zeit) + ' ' + ZEIT_TYPEN[s.typ] + (s.ort ? ' (' + escapeHtml(zeitOrtText(s)) + ')' : '') + ' &times;</button>';
+        h += '<button class="btn small secondary" style="margin:2px; font-size:11px;" data-zeitloeschen="' + s.id + '">' + (ZEIT_ABW_TYPEN.indexOf(s.typ) >= 0 ? '' : zeitUhr(s.zeit) + ' ') + ZEIT_TYPEN[s.typ] + (s.ort ? ' (' + escapeHtml(zeitOrtText(s)) + ')' : '') + ' &times;</button>';
       });
       h += '</td></tr>';
     }
   });
   h += '<tr style="font-weight:700;"><td colspan="3" style="padding-top:8px;">Summe</td><td style="padding-top:8px;">' + zeitDauer(daten.summePause) + '</td><td style="padding-top:8px;">' + zeitDauer(daten.summe) + '</td></tr>';
+  if(daten.abwZeile) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px; font-weight:700; color:#2a6fb0;">' + daten.abwZeile + '</td></tr>';
   if(daten.summeArzt > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Arzt (als Arbeitszeit gerechnet): ' + zeitDauer(daten.summeArzt) + '</td></tr>';
   h += '</table>';
   return h;
@@ -6507,6 +6521,7 @@ function zeitDruckHtml(name, jahr, monat, daten){
   daten.zeilen.forEach(function(z){
     var d = new Date(z.key + 'T12:00:00');
     var wo = z.orte.map(escapeHtml).join(', ');
+    if(z.abwText) wo = '<b>' + z.abwText + '</b>' + (wo ? '<br>' + wo : '');
     if(z.arztText) wo += (wo ? '<br>' : '') + z.arztText;
     if(z.notizen.length) wo += (wo ? '<br>' : '') + z.notizen.map(escapeHtml).join(' &middot; ');
     h += '<tr><td style="' + zelle + '">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + '</td>';
@@ -6516,7 +6531,7 @@ function zeitDruckHtml(name, jahr, monat, daten){
     h += '<td style="' + zelle + ' font-weight:700;">' + zeitDauer(z.arbeit) + '</td>';
     h += '<td style="' + zelle + '">' + (wo || '&nbsp;') + '</td></tr>';
   });
-  h += '<tr><td colspan="3" style="' + kopf + '">Summe</td><td style="' + kopf + '">' + zeitDauer(daten.summePause) + '</td><td style="' + kopf + '">' + zeitDauer(daten.summe) + '</td><td style="' + kopf + '">' + (daten.summeArzt > 0 ? 'davon Arzt (als Arbeitszeit): ' + zeitDauer(daten.summeArzt) : '&nbsp;') + '</td></tr>';
+  h += '<tr><td colspan="3" style="' + kopf + '">Summe</td><td style="' + kopf + '">' + zeitDauer(daten.summePause) + '</td><td style="' + kopf + '">' + zeitDauer(daten.summe) + '</td><td style="' + kopf + '">' + ((daten.summeArzt > 0 ? 'davon Arzt (als Arbeitszeit): ' + zeitDauer(daten.summeArzt) : '') + (daten.abwZeile ? (daten.summeArzt > 0 ? '<br>' : '') + daten.abwZeile : '') || '&nbsp;') + '</td></tr>';
   h += '</table>';
   h += '<table style="width:100%; border-collapse:collapse; margin-top:26px;"><tr>';
   h += '<td style="width:46%; border-top:1px solid #333; padding-top:4px; font-size:10px;">Datum, Unterschrift Mitarbeiter</td><td style="width:8%;"></td>';
@@ -6619,6 +6634,74 @@ function modalZeitNachtragen(name, jahr, monat){
           toast(fertig + ' Eintrag/Einträge gespeichert');
           var d = new Date(neueEintraege[0].zeit);
           modalZeitMonat(wer, d.getFullYear(), d.getMonth());
+        }
+      });
+    });
+  };
+}
+
+function modalZeitUrlaub(name){
+  var heute = new Date().toISOString().substring(0, 10);
+  var html = '';
+  html += '<div class="modal-head"><h3>Urlaub eintragen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>Mitarbeiter</label><select id="zuWer">';
+  zeitMitarbeiterNamen().forEach(function(n){
+    html += '<option value="' + escapeHtml(n) + '"' + (n === name ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+  });
+  html += '</select>';
+  html += '<label>Art</label><select id="zuArt"><option value="urlaub">Urlaub</option><option value="zeitausgleich">Zeitausgleich</option><option value="feiertag">Feiertag</option></select>';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Von</label><input type="date" id="zuVon" value="' + heute + '"></div>';
+  html += '<div style="flex:1;"><label>Bis</label><input type="date" id="zuBis" value="' + heute + '"></div></div>';
+  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:12px;"><input type="checkbox" id="zuWerktage" checked style="width:auto;"> Nur Montag bis Freitag eintragen</label>';
+  html += '<div class="meta" id="zuInfo" style="margin-top:8px;"></div>';
+  html += '<button class="btn block" id="zuSpeichern" style="margin-top:14px;">Speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var tage = function(){
+    var v = document.getElementById('zuVon').value, b = document.getElementById('zuBis').value;
+    var nurWerk = document.getElementById('zuWerktage').checked;
+    var liste = [];
+    if(!v) return liste;
+    if(!b || b < v) b = v;
+    var d = new Date(v + 'T12:00:00'), ende = new Date(b + 'T12:00:00');
+    var n = 0;
+    while(d <= ende && n < 400){
+      var wd = d.getDay();
+      if(!nurWerk || (wd !== 0 && wd !== 6)) liste.push(new Date(d.getTime()));
+      d.setDate(d.getDate() + 1); n++;
+    }
+    return liste;
+  };
+  var info = function(){
+    var l = tage();
+    document.getElementById('zuInfo').textContent = l.length + (l.length === 1 ? ' Tag wird eingetragen' : ' Tage werden eingetragen');
+  };
+  ['zuVon', 'zuBis', 'zuWerktage'].forEach(function(id){ document.getElementById(id).onchange = info; });
+  info();
+  document.getElementById('zuSpeichern').onclick = function(){
+    var wer = document.getElementById('zuWer').value || name;
+    var art = document.getElementById('zuArt').value;
+    var l = tage();
+    if(l.length === 0){ toast('Bitte Datum angeben'); return; }
+    var btn = document.getElementById('zuSpeichern');
+    btn.disabled = true;
+    var fertig = 0;
+    l.forEach(function(dt){
+      var key = zeitTagKey(dt.toISOString());
+      var z = {
+        id: 'abw_' + wer.replace(/[^A-Za-z0-9]/g, '_') + '_' + key,
+        mitarbeiter: wer, typ: art,
+        zeit: dt.toISOString(),
+        ort: null, kundeId: null, notiz: null,
+        erstelltVon: 'Chef (Urlaub)'
+      };
+      dbPut('zeiten', z, function(){
+        state.zeiten = (state.zeiten || []).filter(function(x){ return x.id !== z.id; });
+        state.zeiten.push(z);
+        fertig++;
+        if(fertig === l.length){
+          toast(fertig + (fertig === 1 ? ' Tag' : ' Tage') + ' eingetragen');
+          modalZeitMonat(wer, l[0].getFullYear(), l[0].getMonth());
         }
       });
     });
