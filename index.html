@@ -804,7 +804,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 10:35</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 11:10</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -5745,22 +5745,27 @@ function buildFlaschenUebersichtHtml(eintraege, katFilter){
       var nr = g.nr || (idx + 1);
       var lager = istLagerStandort(g.standort);
       var zustand, farbe = '#111';
+      // Nach dem letzten Anschluss neu abgefüllt = befüllt, aber noch nicht wieder angeschlossen
+      var neuBefuellt = !!(g.abfuelldatum && g.letzterAnschluss && String(g.abfuelldatum).substring(0, 10) > String(g.letzterAnschluss).substring(0, 10));
+      var anschlussAktuell = !!g.letzterAnschluss && !neuBefuellt && !(lager && !g.leer);
       if(g.leer){ zustand = 'LEER'; farbe = '#c23f12'; }
       else if(lager){ zustand = g.abfuelldatum ? 'Voll, im Lager' : 'Im Lager'; farbe = '#1d5fa8'; }
+      else if(neuBefuellt || (!g.letzterAnschluss && g.abfuelldatum)){ zustand = 'Befüllt, nicht angeschlossen'; farbe = '#1d5fa8'; }
       else if(g.letzterAnschluss){ zustand = 'Angeschlossen'; farbe = '#1e8449'; }
       else { zustand = 'Befüllt'; }
       var tage = null;
-      if(g.letzterAnschluss){
+      if(anschlussAktuell){
         tage = tageZwischen(g.letzterAnschluss, (g.leer && g.leerSeit) ? g.leerSeit : heute.toISOString());
       }
-      zeilen.push({ nr: nr, g: g, k: e.k, zustand: zustand, farbe: farbe, lager: lager, tage: tage });
+      zeilen.push({ nr: nr, g: g, k: e.k, zustand: zustand, farbe: farbe, lager: lager, tage: tage, anschlussAktuell: anschlussAktuell });
     });
   });
-  var anz = { gesamt: zeilen.length, leer: 0, angeschlossen: 0, lager: 0 };
+  var anz = { gesamt: zeilen.length, leer: 0, angeschlossen: 0, lager: 0, befuellt: 0 };
   zeilen.forEach(function(z){
     if(z.g.leer) anz.leer++;
     else if(z.lager) anz.lager++;
     else if(z.zustand === 'Angeschlossen') anz.angeschlossen++;
+    else if(z.zustand === 'Befüllt, nicht angeschlossen') anz.befuellt++;
   });
 
   var html = '<div class="bericht-brief">';
@@ -5769,19 +5774,21 @@ function buildFlaschenUebersichtHtml(eintraege, katFilter){
   html += '<img src="' + ((katFilter === 'CO2-Flaschen') ? LOGO_DATA : LOGO_DATA_PZ) + '" class="pb-logo">';
   html += '</div>';
   html += '<div class="pb-berichtnr">Stand: ' + fmtDate(heute.toISOString()) + ' ' + fmtZeit(heute.toISOString()) + ' Uhr</div>';
-  html += '<div class="pb-kundenbox"><div class="knr">Gesamt</div><div>' + anz.gesamt + ' Flasche' + (anz.gesamt === 1 ? '' : 'n') + ' &middot; angeschlossen: ' + anz.angeschlossen + ' &middot; im Lager: ' + anz.lager + ' &middot; <span style="color:#c23f12; font-weight:700;">leer: ' + anz.leer + '</span></div></div>';
+  html += '<div class="pb-kundenbox"><div class="knr">Gesamt</div><div>' + anz.gesamt + ' Flasche' + (anz.gesamt === 1 ? '' : 'n') + ' &middot; angeschlossen: ' + anz.angeschlossen + ' &middot; befüllt, nicht angeschlossen: ' + anz.befuellt + ' &middot; im Lager: ' + anz.lager + ' &middot; <span style="color:#c23f12; font-weight:700;">leer: ' + anz.leer + '</span></div></div>';
   if(zeilen.length === 0){
     html += '<div style="margin:16px 0;">Keine Flaschen vorhanden.</div>';
   } else {
-    html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Flasche</th><th>Serien-Nr.</th><th>Wo ist sie?</th><th>Zustand</th><th>Abgefüllt am</th><th>Angeschlossen am</th><th>Leer seit</th><th>Tage ange&shy;schlossen</th></tr></thead><tbody>';
+    var kz = function(v){ return fmtDatumZeitLokal(v).replace(', ', '<br>').replace(' Uhr', ''); };
+    html += '<table class="pb-tabelle" style="width:100%; table-layout:fixed; font-size:9px;"><colgroup><col style="width:5%"><col style="width:14%"><col style="width:8%"><col style="width:17%"><col style="width:14%"><col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>';
+    html += '<thead><tr><th>Nr.</th><th>Flasche</th><th>SN</th><th>Wo ist sie?</th><th>Zustand</th><th>Abgefüllt</th><th>Ange&shy;schlossen</th><th>Leer seit</th><th>Tage ange&shy;schl.</th></tr></thead><tbody>';
     zeilen.forEach(function(z){
       var g = z.g;
-      var wo = escapeHtml(g.standort || '-') + (z.k ? '<br><span style="font-size:9px; color:#555;">' + escapeHtml(z.k.name) + '</span>' : '');
-      html += '<tr><td>' + z.nr + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.seriennummer || '-') + '</td><td>' + wo + '</td>';
+      var wo = escapeHtml(g.standort || '-') + (z.k ? '<br><span style="font-size:8px; color:#555;">' + escapeHtml(z.k.name) + '</span>' : '');
+      html += '<tr><td>' + z.nr + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.seriennummer || '-') + '</td><td style="word-wrap:break-word;">' + wo + '</td>';
       html += '<td style="font-weight:700; color:' + z.farbe + ';">' + z.zustand + '</td>';
       html += '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td>';
-      html += '<td>' + (g.letzterAnschluss ? fmtDatumZeitLokal(g.letzterAnschluss) : '-') + '</td>';
-      html += '<td>' + (g.leer && g.leerSeit ? fmtDatumZeitLokal(g.leerSeit) : (g.leer ? 'ja' : '-')) + '</td>';
+      html += '<td>' + (z.anschlussAktuell ? kz(g.letzterAnschluss) : '-') + '</td>';
+      html += '<td>' + (g.leer && g.leerSeit ? kz(g.leerSeit) : (g.leer ? 'ja' : '-')) + '</td>';
       html += '<td>' + (z.tage !== null ? z.tage + (z.tage === 1 ? ' Tag' : ' Tage') : '-') + '</td></tr>';
     });
     html += '</tbody></table>';
@@ -6363,7 +6370,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 10:35</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 11:10</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
