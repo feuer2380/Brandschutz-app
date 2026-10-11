@@ -482,6 +482,14 @@ function syncOeffentlichFuerKunde(k){
   }).catch(function(err){ console.error('Kundenportal-Sync Geräte-Lookup Fehler', err); });
 }
 
+// Suchfelder: beim Antippen wird der alte Text markiert, die neue Eingabe ersetzt ihn
+document.addEventListener('focusin', function(e){
+  var t = e.target;
+  if(t && t.tagName === 'INPUT' && t.type === 'text' && /such/i.test((t.id || '') + ' ' + (t.placeholder || ''))){
+    setTimeout(function(){ try{ t.setSelectionRange(0, 9999); } catch(err){} }, 0);
+  }
+});
+
 function uid(){
   return 'id_' + Date.now() + '_' + Math.floor(Math.random()*10000);
 }
@@ -796,7 +804,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 09.10. 11:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 09:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -2428,7 +2436,8 @@ function renderKundenListe(query){
 function renderKunden(){
   var html = '';
   html += '<div style="display:flex; gap:8px;">';
-  html += '<input id="kundenSuchInput" type="text" placeholder="Suche nach Name oder Kundennummer..." value="' + escapeHtml(state.kundenSuche || '') + '" style="flex:1;">';
+  html += '<div style="flex:1; position:relative; min-width:0;"><input id="kundenSuchInput" type="text" placeholder="Suche nach Name oder Kundennummer..." value="' + escapeHtml(state.kundenSuche || '') + '" style="width:100%; padding-right:40px;">';
+  html += '<button type="button" id="kundenSuchClear" aria-label="Suche löschen" style="display:' + (state.kundenSuche ? 'block' : 'none') + '; position:absolute; right:6px; top:6px; width:32px; height:32px; border:0; border-radius:16px; background:#ddd; color:#333; font-size:20px; line-height:30px; padding:0;">&times;</button></div>';
   html += '<select id="kundenSortSelect" style="width:auto; flex-shrink:0; margin-bottom:10px;">';
   var kundenSortOptionen = [ {key:'nummer', label:'Nr.'}, {key:'name', label:'Name'}, {key:'ort', label:'Ort'}, {key:'geraete', label:'Geräte'} ];
   kundenSortOptionen.forEach(function(o){
@@ -6270,7 +6279,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 09.10. 11:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 09:40</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8585,8 +8594,19 @@ function bindDynamic(){
 
   var suchInput = document.getElementById('kundenSuchInput');
   if(suchInput){
+    var clearBtn = document.getElementById('kundenSuchClear');
+    if(clearBtn) clearBtn.onclick = function(){
+      suchInput.value = '';
+      state.kundenSuche = '';
+      clearBtn.style.display = 'none';
+      var c2 = document.getElementById('kundenListContainer');
+      c2.innerHTML = renderKundenListe('');
+      bindKundenCards(c2);
+      suchInput.focus();
+    };
     suchInput.oninput = function(){
       state.kundenSuche = suchInput.value;
+      if(clearBtn) clearBtn.style.display = suchInput.value ? 'block' : 'none';
       var container = document.getElementById('kundenListContainer');
       container.innerHTML = renderKundenListe(state.kundenSuche);
       bindKundenCards(container);
