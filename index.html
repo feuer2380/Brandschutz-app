@@ -804,7 +804,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 11:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 21:00</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -5779,19 +5779,29 @@ function buildFlaschenUebersichtHtml(eintraege, katFilter){
     html += '<div style="margin:16px 0;">Keine Flaschen vorhanden.</div>';
   } else {
     var kz = function(v){ return fmtDatumZeitLokal(v).replace(', ', '<br>').replace(' Uhr', ''); };
-    html += '<table class="pb-tabelle" style="width:100%; table-layout:fixed; font-size:9px;"><colgroup><col style="width:5%"><col style="width:14%"><col style="width:8%"><col style="width:17%"><col style="width:14%"><col style="width:10%"><col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>';
-    html += '<thead><tr><th>Nr.</th><th>Flasche</th><th>SN</th><th>Wo ist sie?</th><th>Zustand</th><th>Abgefüllt</th><th>Ange&shy;schlossen</th><th>Leer seit</th><th>Tage ange&shy;schl.</th></tr></thead><tbody>';
+    var gruppen = {}, reihenfolge = [];
     zeilen.forEach(function(z){
-      var g = z.g;
-      var wo = escapeHtml(g.standort || '-') + (z.k ? '<br><span style="font-size:8px; color:#555;">' + escapeHtml(z.k.name) + '</span>' : '');
-      html += '<tr><td>' + z.nr + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.seriennummer || '-') + '</td><td style="word-wrap:break-word;">' + wo + '</td>';
-      html += '<td style="font-weight:700; color:' + z.farbe + ';">' + z.zustand + '</td>';
-      html += '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td>';
-      html += '<td>' + (z.anschlussAktuell ? kz(g.letzterAnschluss) : '-') + '</td>';
-      html += '<td>' + (g.leer && g.leerSeit ? kz(g.leerSeit) : (g.leer ? 'ja' : '-')) + '</td>';
-      html += '<td>' + (z.tage !== null ? z.tage + (z.tage === 1 ? ' Tag' : ' Tage') : '-') + '</td></tr>';
+      var kat = z.g.kategorie || 'Perchtl Zisch';
+      if(!gruppen[kat]){ gruppen[kat] = []; reihenfolge.push(kat); }
+      gruppen[kat].push(z);
     });
-    html += '</tbody></table>';
+    reihenfolge.forEach(function(kat){
+      html += '<h2 style="font-size:15px; margin:14px 0 6px;">' + escapeHtml(kat) + ' (' + gruppen[kat].length + ')</h2>';
+      html += '<table class="pb-tabelle" style="width:100%; table-layout:fixed; font-size:12px;"><colgroup><col style="width:25%"><col style="width:17%"><col style="width:19%"><col style="width:13%"><col style="width:15%"><col style="width:11%"></colgroup>';
+      html += '<thead><tr><th>Flasche</th><th>Wo ist sie?</th><th>Zustand</th><th>Abgefüllt</th><th>Angeschlossen</th><th>Leer seit</th></tr></thead><tbody>';
+      gruppen[kat].forEach(function(z){
+        var g = z.g;
+        var sn = (g.seriennummer && g.seriennummer !== g.typ) ? '<br><span style="font-size:10.5px; color:#555;">' + escapeHtml(g.seriennummer) + '</span>' : '';
+        var wo = escapeHtml(g.standort || '-') + (z.k ? '<br><span style="font-size:10.5px; color:#555;">' + escapeHtml(z.k.name) + '</span>' : '');
+        html += '<tr style="page-break-inside:avoid; break-inside:avoid;"><td style="word-wrap:break-word;"><b>' + z.nr + '.</b> ' + escapeHtml(g.typ || '-') + sn + '</td>';
+        html += '<td style="word-wrap:break-word;">' + wo + '</td>';
+        html += '<td style="font-weight:700; color:' + z.farbe + ';">' + z.zustand + '</td>';
+        html += '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td>';
+        html += '<td>' + (z.anschlussAktuell ? kz(g.letzterAnschluss) + (z.tage !== null ? '<br><span style="font-size:10.5px; color:#555;">' + z.tage + (z.tage === 1 ? ' Tag' : ' Tage') + '</span>' : '') : '-') + '</td>';
+        html += '<td>' + (g.leer && g.leerSeit ? kz(g.leerSeit) : (g.leer ? 'ja' : '-')) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    });
   }
   html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at &middot; Druckdatum: ' + fmtDate(heute.toISOString()) + '</div>';
   html += '</div>';
@@ -6370,7 +6380,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 11:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 21:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
