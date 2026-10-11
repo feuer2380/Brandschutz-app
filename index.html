@@ -804,7 +804,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 09:40</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 09:55</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -3629,6 +3629,17 @@ function renderStatistik(){
     html += '<div class="stat"><div class="n">' + nkSchaum + '</div><div class="l">Schaumlöscher</div></div>';
     html += '<div class="stat"><div class="n">' + nkPulver + '</div><div class="l">Pulverlöscher</div></div>';
     html += '</div>';
+    // Alle weiteren Arten (Wasser, Fettbrand, CO2, Metallbrand, Sonstige) ebenfalls anzeigen
+    var nkWeitere = ['CO2-Löscher', 'Wasserlöscher', 'Fettbrandlöscher', 'Metallbrandlöscher', 'Sonstige'].map(function(art){
+      return { art: art, n: nkGeraete.filter(function(g){ return nkArt(g) === art; }).length };
+    }).filter(function(x){ return x.n > 0; });
+    for(var nkI = 0; nkI < nkWeitere.length; nkI += 3){
+      html += '<div class="statrow">';
+      nkWeitere.slice(nkI, nkI + 3).forEach(function(x){
+        html += '<div class="stat"><div class="n">' + x.n + '</div><div class="l">' + x.art + '</div></div>';
+      });
+      html += '</div>';
+    }
     if(nkGeraete.length === 0){
       html += '<div class="empty">Keine Neugeräte in diesem Zeitraum</div>';
     } else {
@@ -6279,7 +6290,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 09:40</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 09:55</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
