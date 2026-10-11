@@ -804,7 +804,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 10:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 10:35</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -5533,7 +5533,8 @@ function modalFuellhistorieListe(kundeId){
       html += '</div>';
     }
 
-    html += '<button type="button" class="btn block" id="fuellDruckenBtn" style="margin-top:14px;">Statistik drucken / als PDF teilen</button>';
+    html += '<button type="button" class="btn block" id="fuellUebersichtBtn" style="margin-top:14px;">Flaschen-Übersicht drucken (pro Flasche: wo, gefüllt, angeschlossen, leer)</button>';
+    html += '<button type="button" class="btn block secondary" id="fuellDruckenBtn" style="margin-top:10px;">Statistik drucken / als PDF teilen</button>';
 
     if(gefiltert.length === 0){
       html += '<div class="empty">Keine Flaschen gefunden</div>';
@@ -5565,6 +5566,9 @@ function modalFuellhistorieListe(kundeId){
     document.querySelectorAll('[data-katfilter]').forEach(function(b){
       b.onclick = function(){ neuZeichnen(suchtext, b.getAttribute('data-katfilter') || null); };
     });
+    document.getElementById('fuellUebersichtBtn').onclick = function(){
+      bsvDruckenOderTeilen(buildFlaschenUebersichtHtml(gefiltert, katFilter), 'Flaschen-Uebersicht.pdf');
+    };
     document.getElementById('fuellDruckenBtn').onclick = function(){
       bsvDruckenOderTeilen(buildFuellstatistikHtml(gefiltert, suchtext, katFilter), 'Fuellstatistik.pdf');
     };
@@ -5714,6 +5718,75 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
   });
 
   html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at &middot; Druckdatum: ' + fmtDate(new Date().toISOString()) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+// ---------- Flaschen-Übersicht: eine Zeile pro Flasche ----------
+function buildFlaschenUebersichtHtml(eintraege, katFilter){
+  var heute = new Date();
+  var tageZwischen = function(von, bis){
+    var a = new Date(von), b = new Date(bis);
+    if(isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+    var t = Math.round((b - a) / 86400000);
+    return t < 0 ? 0 : t;
+  };
+  // Nummern wie in der Geräteliste: gespeicherte Nr., sonst fortlaufend je Kunde und Kategorie
+  var nachKunde = {};
+  eintraege.forEach(function(e){
+    var key = (e.k ? e.k.name : '-') + '|' + (e.g.kategorie || 'Perchtl Zisch');
+    (nachKunde[key] = nachKunde[key] || []).push(e);
+  });
+  var zeilen = [];
+  Object.keys(nachKunde).sort(function(a, b){ return a.localeCompare(b); }).forEach(function(key){
+    var liste = nachKunde[key].slice().sort(function(a, b){ return geraeteSortierVergleich(a.g, b.g); });
+    liste.forEach(function(e, idx){
+      var g = e.g;
+      var nr = g.nr || (idx + 1);
+      var lager = istLagerStandort(g.standort);
+      var zustand, farbe = '#111';
+      if(g.leer){ zustand = 'LEER'; farbe = '#c23f12'; }
+      else if(lager){ zustand = g.abfuelldatum ? 'Voll, im Lager' : 'Im Lager'; farbe = '#1d5fa8'; }
+      else if(g.letzterAnschluss){ zustand = 'Angeschlossen'; farbe = '#1e8449'; }
+      else { zustand = 'Befüllt'; }
+      var tage = null;
+      if(g.letzterAnschluss){
+        tage = tageZwischen(g.letzterAnschluss, (g.leer && g.leerSeit) ? g.leerSeit : heute.toISOString());
+      }
+      zeilen.push({ nr: nr, g: g, k: e.k, zustand: zustand, farbe: farbe, lager: lager, tage: tage });
+    });
+  });
+  var anz = { gesamt: zeilen.length, leer: 0, angeschlossen: 0, lager: 0 };
+  zeilen.forEach(function(z){
+    if(z.g.leer) anz.leer++;
+    else if(z.lager) anz.lager++;
+    else if(z.zustand === 'Angeschlossen') anz.angeschlossen++;
+  });
+
+  var html = '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Flaschen-Übersicht</h1><div class="sub">' + escapeHtml(katFilter || 'Perchtl Zisch / CO2-Flaschen') + '</div></div>';
+  html += '<img src="' + ((katFilter === 'CO2-Flaschen') ? LOGO_DATA : LOGO_DATA_PZ) + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(heute.toISOString()) + ' ' + fmtZeit(heute.toISOString()) + ' Uhr</div>';
+  html += '<div class="pb-kundenbox"><div class="knr">Gesamt</div><div>' + anz.gesamt + ' Flasche' + (anz.gesamt === 1 ? '' : 'n') + ' &middot; angeschlossen: ' + anz.angeschlossen + ' &middot; im Lager: ' + anz.lager + ' &middot; <span style="color:#c23f12; font-weight:700;">leer: ' + anz.leer + '</span></div></div>';
+  if(zeilen.length === 0){
+    html += '<div style="margin:16px 0;">Keine Flaschen vorhanden.</div>';
+  } else {
+    html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Flasche</th><th>Serien-Nr.</th><th>Wo ist sie?</th><th>Zustand</th><th>Abgefüllt am</th><th>Angeschlossen am</th><th>Leer seit</th><th>Tage ange&shy;schlossen</th></tr></thead><tbody>';
+    zeilen.forEach(function(z){
+      var g = z.g;
+      var wo = escapeHtml(g.standort || '-') + (z.k ? '<br><span style="font-size:9px; color:#555;">' + escapeHtml(z.k.name) + '</span>' : '');
+      html += '<tr><td>' + z.nr + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.seriennummer || '-') + '</td><td>' + wo + '</td>';
+      html += '<td style="font-weight:700; color:' + z.farbe + ';">' + z.zustand + '</td>';
+      html += '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td>';
+      html += '<td>' + (g.letzterAnschluss ? fmtDatumZeitLokal(g.letzterAnschluss) : '-') + '</td>';
+      html += '<td>' + (g.leer && g.leerSeit ? fmtDatumZeitLokal(g.leerSeit) : (g.leer ? 'ja' : '-')) + '</td>';
+      html += '<td>' + (z.tage !== null ? z.tage + (z.tage === 1 ? ' Tag' : ' Tage') : '-') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at &middot; Druckdatum: ' + fmtDate(heute.toISOString()) + '</div>';
   html += '</div>';
   return html;
 }
@@ -6290,7 +6363,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 10:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 10:35</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
