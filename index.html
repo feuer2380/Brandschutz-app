@@ -335,7 +335,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben'];
 var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
@@ -529,6 +529,8 @@ var state = {
   brandschutzplaene: [],
   tagesberichte: [],
   zeiten: [],
+  aufgaben: [],
+  aufgMonat: null,
   kundenSuche: '',
   pruefungFilter: 'alle',
   pruefungOffenAufgeklappt: {},
@@ -562,7 +564,10 @@ function loadAll(cb){
                       dbGetAll('zeiten', function(ze){
                         state.zeiten = ze;
                         zeitNamenMigrieren();
-                        cb();
+                        dbGetAll('aufgaben', function(au){
+                          state.aufgaben = au || [];
+                          cb();
+                        });
                       });
                     });
                   });
@@ -804,7 +809,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 11.10. 21:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 12.10. 14:20</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -839,12 +844,12 @@ function renderInner(){
   }
   if(tabsEl) tabsEl.style.display = '';
   if(fabEl){
-    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte' || state.tab === 'zeit') ? 'none' : '';
+    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte' || state.tab === 'zeit' || state.tab === 'aufgaben') ? 'none' : '';
     fabEl.classList.remove('fab-hidden');
   }
   document.querySelectorAll('.tabbtn').forEach(function(b){
     var dt = b.getAttribute('data-tab');
-    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit'));
+    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit' || state.tab === 'aufgaben'));
     b.className = 'tabbtn' + (istAktiv ? ' active' : '');
   });
   if(state.tab === 'dashboard') m.innerHTML = renderDashboard();
@@ -857,10 +862,12 @@ function renderInner(){
   else if(state.tab === 'geraetCheck') m.innerHTML = renderGeraetCheck(state.activeGeraetId);
   else if(state.tab === 'lager') m.innerHTML = renderLager();
   else if(state.tab === 'zeit') m.innerHTML = renderZeit();
+  else if(state.tab === 'aufgaben') m.innerHTML = renderAufgaben();
 
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
   if(state.tab === 'zeit') bindZeit();
+  if(state.tab === 'aufgaben') bindAufgaben();
   if(state.tab === 'scan') startScanner();
   if(fabEl && m.scrollHeight > m.clientHeight + 30){
     fabEl.classList.add('fab-hidden');
@@ -948,6 +955,10 @@ function renderDashboard(){
 
   var html = '';
   html += '<div class="row" style="margin-bottom:8px;"><span class="meta">Angemeldet als: ' + (state.rolle === 'chef' ? 'Chef' : escapeHtml(state.mitarbeiterName || 'Mitarbeiter')) + '</span><button class="btn small secondary" id="logoutBtn">Abmelden</button></div>';
+  var offeneAuf = aufgabenOffenFuerMich();
+  if(offeneAuf > 0){
+    html += '<button type="button" id="aufgabenBannerBtn" style="width:100%; text-align:left; background:#1d5fa8; color:#fff; border:none; border-radius:10px; padding:14px 16px; margin-bottom:12px; font-size:15px; font-weight:700;">&#9745; ' + offeneAuf + ' offene Aufgabe' + (offeneAuf === 1 ? '' : 'n') + ' &ndash; ansehen</button>';
+  }
   if(ueberfaelligGeraete.length > 0){
     html += '<button type="button" id="ueberfaelligBannerBtn" style="width:100%; text-align:left; background:#c23f12; color:#fff; border:none; border-radius:10px; padding:14px 16px; margin-bottom:12px; font-size:15px; font-weight:700; display:flex; align-items:center; gap:10px;">';
     html += '<span style="font-size:22px;">&#9888;</span>';
@@ -6380,7 +6391,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 11.10. 21:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 12.10. 14:20</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -6818,12 +6829,223 @@ function modalZeitUrlaub(name){
   };
 }
 
+// ---------- Aufgaben (To-do für Mitarbeiter) ----------
+function aufgMonatKey(d){
+  var mm = d.getMonth() + 1; if(mm < 10) mm = '0' + mm;
+  return d.getFullYear() + '-' + mm;
+}
+function aufgFuerMich(a){
+  if(state.rolle === 'chef') return true;
+  return a.mitarbeiter === 'alle' || a.mitarbeiter === state.mitarbeiterName;
+}
+function aufgabenOffenFuerMich(){
+  var aktuell = aufgMonatKey(new Date());
+  return (state.aufgaben || []).filter(function(a){
+    if(a.erledigt || !a.monat || a.monat > aktuell) return false;
+    if(state.rolle === 'chef') return false;
+    return aufgFuerMich(a);
+  }).length;
+}
+function aufgMonatText(key){
+  var n = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var t = key.split('-');
+  return n[parseInt(t[1], 10) - 1] + ' ' + t[0];
+}
+function aufgMonatVerschieben(key, delta){
+  var t = key.split('-');
+  return aufgMonatKey(new Date(parseInt(t[0], 10), parseInt(t[1], 10) - 1 + delta, 1));
+}
+function aufgZeileHtml(a, istChef){
+  var h = '<div style="display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);">';
+  h += '<input type="checkbox" data-aufgcheck="' + escapeHtml(a.id) + '"' + (a.erledigt ? ' checked' : '') + ' style="width:24px; height:24px; flex-shrink:0; margin-top:2px;">';
+  h += '<div style="flex:1; min-width:0;">';
+  h += '<div style="font-size:15px; word-wrap:break-word;' + (a.erledigt ? ' text-decoration:line-through; color:#777;' : '') + '">' + escapeHtml(a.text) + '</div>';
+  var meta = [];
+  if(istChef) meta.push(a.mitarbeiter === 'alle' ? 'Für alle' : escapeHtml(a.mitarbeiter));
+  if(a.erledigt && a.erledigtAm) meta.push('erledigt ' + fmtDate(a.erledigtAm) + (a.erledigtVon ? ' von ' + escapeHtml(a.erledigtVon) : ''));
+  if(meta.length) h += '<div class="meta">' + meta.join(' &middot; ') + '</div>';
+  var dl = a.dateien || [];
+  if(dl.length || istChef){
+    h += '<div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">';
+    dl.forEach(function(d){
+      h += '<button type="button" class="btn small secondary" data-aufgdatei="' + escapeHtml(a.id) + '|' + escapeHtml(d.id) + '">&#128206; ' + escapeHtml(d.name) + '</button>';
+    });
+    if(istChef) h += '<button type="button" class="btn small" data-aufgup="' + escapeHtml(a.id) + '">+ Unterlagen</button>';
+    h += '</div>';
+  }
+  h += '</div>';
+  if(istChef) h += '<button class="btn small secondary" data-aufgdel="' + escapeHtml(a.id) + '">&times;</button>';
+  h += '</div>';
+  return h;
+}
+function renderAufgaben(){
+  var istChef = state.rolle === 'chef';
+  var aktuell = aufgMonatKey(new Date());
+  if(!state.aufgMonat) state.aufgMonat = aktuell;
+  var mon = state.aufgMonat;
+  var alle = (state.aufgaben || []).filter(aufgFuerMich);
+  var html = '';
+  html += '<input type="file" id="aufgFile" accept="image/*,application/pdf" style="display:none;">';
+  html += '<div class="section-title">Aufgaben</div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><button class="btn small secondary" id="aufgZurueck">&lsaquo;</button><b>' + aufgMonatText(mon) + '</b><button class="btn small secondary" id="aufgVor">&rsaquo;</button></div>';
+  if(istChef){
+    html += '<div class="card">';
+    html += '<label>Neue Aufgabe</label><input type="text" id="aufgText" placeholder="z.B. Lager aufräumen, Fahrzeug waschen">';
+    html += '<label>Für wen?</label><select id="aufgWer"><option value="alle">Alle Mitarbeiter</option>';
+    zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; });
+    html += '</select>';
+    html += '<button class="btn block" id="aufgAdd" style="margin-top:10px;">Aufgabe hinzufügen (' + aufgMonatText(mon) + ')</button>';
+    html += '</div>';
+  }
+  var alt = alle.filter(function(a){ return !a.erledigt && a.monat && a.monat < mon && mon === aktuell; });
+  if(alt.length){
+    html += '<div class="section-title" style="margin-top:14px; color:#c23f12;">Noch offen aus früheren Monaten</div><div class="card">';
+    alt.forEach(function(a){ html += aufgZeileHtml(a, istChef); });
+    html += '</div>';
+  }
+  var diese = alle.filter(function(a){ return a.monat === mon; }).sort(function(a, b){
+    if(!!a.erledigt !== !!b.erledigt) return a.erledigt ? 1 : -1;
+    return String(a.erstelltAm || '').localeCompare(String(b.erstelltAm || ''));
+  });
+  html += '<div class="section-title" style="margin-top:14px;">' + aufgMonatText(mon) + '</div>';
+  if(!diese.length) html += '<div class="empty">Keine Aufgaben in diesem Monat</div>';
+  else {
+    html += '<div class="card">';
+    diese.forEach(function(a){ html += aufgZeileHtml(a, istChef); });
+    html += '</div>';
+  }
+  return html;
+}
+function aufgDateiSpeichern(aufgId, name, typ, dataUrl){
+  if(dataUrl.length > 950000){ toast('Datei zu groß (max. ca. 700 KB). Bitte kleineres PDF oder Foto verwenden'); return; }
+  var a = (state.aufgaben || []).filter(function(x){ return x.id === aufgId; })[0];
+  if(!a) return;
+  var did = uid();
+  db.collection('aufgaben_dateien').doc(did).set({ id: did, aufgabeId: aufgId, name: name, typ: typ, dataUrl: dataUrl }).then(function(){
+    a.dateien = (a.dateien || []).concat([{ id: did, name: name, typ: typ }]);
+    dbPut('aufgaben', a, function(){ toast('Unterlagen gespeichert'); render(); });
+  }).catch(function(){ toast('Speichern fehlgeschlagen'); });
+}
+function aufgDateiHochladen(aufgId, file){
+  var name = file.name || 'Unterlage';
+  if(file.type && file.type.indexOf('image/') === 0){
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function(){
+      var max = 1400, w = img.width, h = img.height;
+      var sc = Math.min(1, max / Math.max(w, h));
+      var c = document.createElement('canvas');
+      c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      var q = 0.8, d = c.toDataURL('image/jpeg', q);
+      while(d.length > 900000 && q > 0.3){ q -= 0.15; d = c.toDataURL('image/jpeg', q); }
+      aufgDateiSpeichern(aufgId, name, 'image/jpeg', d);
+    };
+    img.onerror = function(){ toast('Bild konnte nicht gelesen werden'); };
+    img.src = url;
+  } else {
+    var r = new FileReader();
+    r.onload = function(){ aufgDateiSpeichern(aufgId, name, file.type || 'application/pdf', r.result); };
+    r.readAsDataURL(file);
+  }
+}
+function aufgDateiAnzeigen(aufgId, did){
+  var a = (state.aufgaben || []).filter(function(x){ return x.id === aufgId; })[0];
+  var info = a && (a.dateien || []).filter(function(d){ return d.id === did; })[0];
+  db.collection('aufgaben_dateien').doc(did).get().then(function(doc){
+    if(!doc.exists){ toast('Datei nicht gefunden'); return; }
+    var d = doc.data();
+    var html = '<div class="modal-head"><h3>' + escapeHtml(d.name) + '</h3><button class="close" id="mClose">&times;</button></div>';
+    if(d.typ && d.typ.indexOf('image/') === 0){
+      html += '<img src="' + d.dataUrl + '" style="width:100%; border-radius:8px;">';
+    } else {
+      html += '<a class="btn block" id="aufgPdfLink" target="_blank" rel="noopener">PDF öffnen</a>';
+    }
+    if(state.rolle === 'chef') html += '<button class="btn block secondary" id="aufgDateiDel" style="margin-top:12px;">Unterlage löschen</button>';
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+    var lk = document.getElementById('aufgPdfLink');
+    if(lk){
+      try{
+        var bin = atob(d.dataUrl.split(',')[1]), arr = new Uint8Array(bin.length);
+        for(var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        lk.href = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+      } catch(e){ lk.href = d.dataUrl; }
+    }
+    var del = document.getElementById('aufgDateiDel');
+    if(del) del.onclick = function(){
+      if(!confirm('Unterlage löschen?')) return;
+      db.collection('aufgaben_dateien').doc(did).delete().then(function(){
+        a.dateien = (a.dateien || []).filter(function(x){ return x.id !== did; });
+        dbPut('aufgaben', a, function(){ closeModal(); render(); });
+      });
+    };
+  }).catch(function(){ toast('Datei konnte nicht geladen werden'); });
+}
+function bindAufgaben(){
+  var z = document.getElementById('aufgZurueck');
+  if(z) z.onclick = function(){ state.aufgMonat = aufgMonatVerschieben(state.aufgMonat, -1); render(); };
+  var v = document.getElementById('aufgVor');
+  if(v) v.onclick = function(){ state.aufgMonat = aufgMonatVerschieben(state.aufgMonat, 1); render(); };
+  var add = document.getElementById('aufgAdd');
+  if(add) add.onclick = function(){
+    var t = document.getElementById('aufgText').value.trim();
+    if(!t){ toast('Bitte Text eingeben'); return; }
+    var a = { id: uid(), text: t, mitarbeiter: document.getElementById('aufgWer').value, monat: state.aufgMonat,
+      erledigt: false, erledigtAm: null, erledigtVon: null, erstelltAm: new Date().toISOString() };
+    dbPut('aufgaben', a, function(){
+      if(!state.aufgaben) state.aufgaben = [];
+      if(!state.aufgaben.some(function(x){ return x.id === a.id; })) state.aufgaben.push(a);
+      render();
+    });
+  };
+  document.querySelectorAll('[data-aufgcheck]').forEach(function(cb){
+    cb.onchange = function(){
+      var id = cb.getAttribute('data-aufgcheck');
+      var a = (state.aufgaben || []).filter(function(x){ return x.id === id; })[0];
+      if(!a) return;
+      a.erledigt = cb.checked;
+      a.erledigtAm = cb.checked ? new Date().toISOString() : null;
+      a.erledigtVon = cb.checked ? (state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || 'Mitarbeiter')) : null;
+      dbPut('aufgaben', a, function(){ render(); });
+    };
+  });
+  var fileEl = document.getElementById('aufgFile');
+  var upZiel = null;
+  document.querySelectorAll('[data-aufgup]').forEach(function(b){
+    b.onclick = function(){ upZiel = b.getAttribute('data-aufgup'); fileEl.value = ''; fileEl.click(); };
+  });
+  if(fileEl) fileEl.onchange = function(){
+    var f = fileEl.files && fileEl.files[0];
+    if(!f || !upZiel) return;
+    aufgDateiHochladen(upZiel, f);
+  };
+  document.querySelectorAll('[data-aufgdatei]').forEach(function(b){
+    b.onclick = function(){
+      var t = b.getAttribute('data-aufgdatei').split('|');
+      aufgDateiAnzeigen(t[0], t[1]);
+    };
+  });
+  document.querySelectorAll('[data-aufgdel]').forEach(function(b){
+    b.onclick = function(){
+      var id = b.getAttribute('data-aufgdel');
+      if(!confirm('Aufgabe löschen?')) return;
+      dbDelete('aufgaben', id, function(){
+        state.aufgaben = (state.aufgaben || []).filter(function(x){ return x.id !== id; });
+        render();
+      });
+    };
+  });
+}
+
 function modalMehrMenu(){
   var html = '';
   html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
   var eintraege = [
     { tab:'berichte', label:'Berichte', svg:'<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>' },
     { tab:'statistik', label:'Statistik', svg:'<path d="M4 20V10M12 20V4M20 20v-7"/>' },
+    { tab:'aufgaben', label:'Aufgaben', svg:'<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>' },
     { tab:'zeit', label:'Zeiterfassung', svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' },
     { tab:'lager', label:'Lager', svg:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' }
   ];
@@ -8899,6 +9121,8 @@ function bindDynamic(){
   }
 
   var logoutBtn = document.getElementById('logoutBtn');
+  var aufBanner = document.getElementById('aufgabenBannerBtn');
+  if(aufBanner) aufBanner.onclick = function(){ state.tab = 'aufgaben'; render(); };
   if(logoutBtn) logoutBtn.onclick = function(){ state.rolle = null; state.mitarbeiterName = null; state.tab = 'dashboard'; render(); };
 
   var ueberfaelligBannerBtn = document.getElementById('ueberfaelligBannerBtn');
