@@ -335,7 +335,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben', 'zeit_unterschriften'];
 var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
@@ -530,6 +530,7 @@ var state = {
   tagesberichte: [],
   zeiten: [],
   aufgaben: [],
+  zeit_unterschriften: [],
   aufgMonat: null,
   kundenSuche: '',
   pruefungFilter: 'alle',
@@ -566,7 +567,10 @@ function loadAll(cb){
                         zeitNamenMigrieren();
                         dbGetAll('aufgaben', function(au){
                           state.aufgaben = au || [];
-                          cb();
+                          dbGetAll('zeit_unterschriften', function(zu){
+                            state.zeit_unterschriften = zu || [];
+                            cb();
+                          });
                         });
                       });
                     });
@@ -809,7 +813,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 12.10. 14:20</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 12.10. 15:20</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6391,7 +6395,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 12.10. 14:20</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 12.10. 15:20</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -6563,7 +6567,11 @@ function modalZeitMonat(name, jahr, monat){
   html += '<button class="btn" id="zmDruck" style="flex:1;">Drucken / PDF</button>';
   if(istChef) html += '<button class="btn secondary" id="zmNeu" style="flex:1;">Eintrag nachtragen</button>';
   html += '</div>';
+  var sgm = zeitSigHole(name, jahr, monat);
+  html += '<button class="btn block" id="zmSign" style="margin-top:8px; background:#2f7a4f;">&#9998; Unterschreiben</button>';
+  html += '<div class="meta" style="margin-top:6px;">Mitarbeiter: ' + (sgm && sgm.sigMa ? '&#10003; unterschrieben ' + fmtDate(sgm.datumMa) : 'noch nicht') + ' &middot; Geschäftsführung: ' + (sgm && sgm.sigGf ? '&#10003; unterschrieben ' + fmtDate(sgm.datumGf) : 'noch nicht') + '</div>';
   openModal(html);
+  document.getElementById('zmSign').onclick = function(){ modalZeitUnterschrift(name, jahr, monat); };
   document.getElementById('mClose').onclick = closeModal;
   var neu = function(n, j, m){ modalZeitMonat(n, j, m); };
   document.getElementById('zmZurueck').onclick = function(){ var m2 = monat - 1, j2 = jahr; if(m2 < 0){ m2 = 11; j2--; } neu(name, j2, m2); };
@@ -6589,6 +6597,62 @@ function modalZeitMonat(name, jahr, monat){
           modalZeitMonat(name, jahr, monat);
         });
       });
+    };
+  });
+}
+
+function zeitSigId(name, jahr, monat){
+  var mm = monat + 1; if(mm < 10) mm = '0' + mm;
+  return 'zsig_' + name.replace(/[^A-Za-z0-9]+/g, '_') + '_' + jahr + '-' + mm;
+}
+function zeitSigHole(name, jahr, monat){
+  var id = zeitSigId(name, jahr, monat);
+  return (state.zeit_unterschriften || []).filter(function(x){ return x.id === id; })[0] || null;
+}
+function modalZeitUnterschrift(name, jahr, monat){
+  var istChef = state.rolle === 'chef';
+  var darfMa = istChef || state.mitarbeiterName === name;
+  var sg = zeitSigHole(name, jahr, monat) || { id: zeitSigId(name, jahr, monat), mitarbeiter: name, monat: jahr + '-' + (monat < 9 ? '0' : '') + (monat + 1), sigMa: null, sigGf: null, datumMa: null, datumGf: null };
+  var html = '<div class="modal-head"><h3>Zeitliste unterschreiben</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + escapeHtml(name) + ' &middot; ' + (monat + 1) + '/' + jahr + '</div>';
+  var block = function(key, titel, darf){
+    var h = '<label style="margin-top:12px;">' + titel + '</label>';
+    if(sg['sig' + key]){
+      h += '<img src="' + sg['sig' + key] + '" style="width:100%; max-height:120px; object-fit:contain; background:#fff; border:1px solid var(--line); border-radius:8px;">';
+      h += '<div class="meta">unterschrieben am ' + fmtDate(sg['datum' + key]) + '</div>';
+      if(darf) h += '<button class="btn secondary small" id="zsDel' + key + '" style="margin-top:6px;">Unterschrift löschen</button>';
+    } else if(darf){
+      h += '<canvas class="sig" id="zsPad' + key + '"></canvas>';
+      h += '<div style="display:flex; gap:8px; margin-top:6px;"><button class="btn secondary small" id="zsClr' + key + '">Löschen</button><button class="btn small" id="zsOk' + key + '" style="flex:1; background:#2f7a4f;">Unterschrift speichern</button></div>';
+    } else {
+      h += '<div class="meta">noch nicht unterschrieben</div>';
+    }
+    return h;
+  };
+  html += block('Ma', 'Unterschrift Mitarbeiter', darfMa);
+  html += block('Gf', 'Unterschrift Geschäftsführung', istChef);
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ modalZeitMonat(name, jahr, monat); };
+  var speichern = function(){
+    dbPut('zeit_unterschriften', sg, function(){
+      state.zeit_unterschriften = (state.zeit_unterschriften || []).filter(function(x){ return x.id !== sg.id; });
+      state.zeit_unterschriften.push(sg);
+      modalZeitUnterschrift(name, jahr, monat);
+    });
+  };
+  ['Ma', 'Gf'].forEach(function(key){
+    var del = document.getElementById('zsDel' + key);
+    if(del) del.onclick = function(){ sg['sig' + key] = null; sg['datum' + key] = null; speichern(); };
+    var cv = initSigPad('zsPad' + key);
+    if(!cv) return;
+    var leer = cv.toDataURL('image/png');
+    document.getElementById('zsClr' + key).onclick = function(){ cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); };
+    document.getElementById('zsOk' + key).onclick = function(){
+      var d = cv.toDataURL('image/png');
+      if(d === leer){ toast('Bitte zuerst unterschreiben'); return; }
+      sg['sig' + key] = d;
+      sg['datum' + key] = new Date().toISOString();
+      speichern();
     };
   });
 }
@@ -6654,9 +6718,12 @@ function zeitDruckHtml(name, jahr, monat, daten){
   });
   h += '<tr><td colspan="3" style="' + kopf + '">Summe</td><td style="' + kopf + '">' + zeitDauer(daten.summePause) + '</td><td style="' + kopf + '">' + zeitDauer(daten.summe) + '</td><td style="' + kopf + '">' + ((daten.summeArzt > 0 ? 'davon Arzt (als Arbeitszeit): ' + zeitDauer(daten.summeArzt) : '') + (daten.abwZeile ? (daten.summeArzt > 0 ? '<br>' : '') + daten.abwZeile : '') || '&nbsp;') + '</td></tr>';
   h += '</table>';
-  h += '<table style="width:100%; border-collapse:collapse; margin-top:26px;"><tr>';
-  h += '<td style="width:46%; border-top:1px solid #333; padding-top:4px; font-size:10px;">Datum, Unterschrift Mitarbeiter</td><td style="width:8%;"></td>';
-  h += '<td style="width:46%; border-top:1px solid #333; padding-top:4px; font-size:10px;">Datum, Unterschrift Geschäftsführung</td>';
+  h += '<table style="width:100%; border-collapse:collapse; margin-top:30px; page-break-inside:avoid; break-inside:avoid;"><tr>';
+  var sg = zeitSigHole(name, jahr, monat);
+  var sigZelle = function(img){ return '<td style="width:46%; height:80px; vertical-align:bottom; text-align:center;">' + (img ? '<img src="' + img + '" style="max-height:74px; max-width:100%;">' : '&nbsp;') + '</td>'; };
+  h += sigZelle(sg && sg.sigMa) + '<td style="width:8%;"></td>' + sigZelle(sg && sg.sigGf) + '</tr><tr>';
+  h += '<td style="width:46%; border-top:1.5px solid #000; padding-top:5px; font-size:11px;">' + (sg && sg.datumMa ? fmtDate(sg.datumMa) + ', ' : 'Datum, ') + 'Unterschrift Mitarbeiter</td><td style="width:8%;"></td>';
+  h += '<td style="width:46%; border-top:1.5px solid #000; padding-top:5px; font-size:11px;">' + (sg && sg.datumGf ? fmtDate(sg.datumGf) + ', ' : 'Datum, ') + 'Unterschrift Geschäftsführung</td>';
   h += '</tr></table></div>';
   return h;
 }
