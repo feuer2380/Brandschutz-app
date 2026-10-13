@@ -828,7 +828,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 16:55</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 17:15</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1192,7 +1192,7 @@ function renderDashboard(){
     });
   }
 
-  html += '<div class="section-title">Alle Geräte' + (state.alleGeraeteKategorieFilter ? (' – ' + escapeHtml(state.alleGeraeteKategorieFilter)) : '') + '</div>';
+  html += '<details id="alleGeraeteBox"' + ((state.alleGeraeteBoxOffen || state.alleGeraeteKategorieFilter) ? ' open' : '') + ' style="margin-top:14px;"><summary style="cursor:pointer; font-weight:700; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:8px 0;">Alle Geräte' + (state.alleGeraeteKategorieFilter ? (' – ' + escapeHtml(state.alleGeraeteKategorieFilter)) : '') + ' (alle Kunden anzeigen)</summary>';
   if(state.alleGeraeteKategorieFilter){
     html += '<button class="btn small secondary" id="kategorieFilterLoeschen" style="margin-bottom:8px;">Filter "' + escapeHtml(state.alleGeraeteKategorieFilter) + '" entfernen &times;</button>';
   }
@@ -1263,6 +1263,7 @@ function renderDashboard(){
       html += '</div>';
     });
   }
+  html += '</details>';
 
   return html;
 }
@@ -6462,7 +6463,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 16:55</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 17:15</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -9255,6 +9256,8 @@ function bindDynamic(){
   }
 
   var logoutBtn = document.getElementById('logoutBtn');
+  var agBox = document.getElementById('alleGeraeteBox');
+  if(agBox) agBox.addEventListener('toggle', function(){ state.alleGeraeteBoxOffen = agBox.open; });
   var dtz = document.getElementById('dashTagZurueck');
   if(dtz) dtz.onclick = function(){ state.dashTagOffset = (state.dashTagOffset || 0) - 1; render(); };
   var dtv = document.getElementById('dashTagVor');
