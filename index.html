@@ -828,7 +828,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 18:50</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 20:10</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -2448,7 +2448,7 @@ var MITARBEITER_LISTE = [
   { name: 'Janiba Wolfgang sen.', pin: '8276' },
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
-  { name: 'Holakovsky Manuela', pin: '8279' }
+  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
 var ZEIT_ALTE_NAMEN = {
@@ -6480,7 +6480,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 18:50</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 20:10</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -6986,8 +6986,13 @@ function aufgMonatKey(d){
   var mm = d.getMonth() + 1; if(mm < 10) mm = '0' + mm;
   return d.getFullYear() + '-' + mm;
 }
-function aufgFuerMich(a){
+function kannAufgabenVergeben(){
   if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !!(m && m.aufgabenVergeben);
+}
+function aufgFuerMich(a){
+  if(kannAufgabenVergeben()) return true;
   return a.mitarbeiter === 'alle' || a.mitarbeiter === state.mitarbeiterName;
 }
 function aufgabenOffenFuerMich(){
@@ -6995,7 +7000,7 @@ function aufgabenOffenFuerMich(){
   return (state.aufgaben || []).filter(function(a){
     if(a.erledigt || !a.monat || a.monat > aktuell) return false;
     if(state.rolle === 'chef') return false;
-    return aufgFuerMich(a);
+    return a.mitarbeiter === 'alle' || a.mitarbeiter === state.mitarbeiterName;
   }).length;
 }
 function aufgMonatText(key){
@@ -7031,7 +7036,7 @@ function aufgZeileHtml(a, istChef){
   return h;
 }
 function renderAufgaben(){
-  var istChef = state.rolle === 'chef';
+  var istChef = kannAufgabenVergeben();
   var aktuell = aufgMonatKey(new Date());
   if(!state.aufgMonat) state.aufgMonat = aktuell;
   var mon = state.aufgMonat;
@@ -7114,7 +7119,7 @@ function aufgDateiAnzeigen(aufgId, did){
     } else {
       html += '<a class="btn block" id="aufgPdfLink" target="_blank" rel="noopener">PDF öffnen</a>';
     }
-    if(state.rolle === 'chef') html += '<button class="btn block secondary" id="aufgDateiDel" style="margin-top:12px;">Unterlage löschen</button>';
+    if(kannAufgabenVergeben()) html += '<button class="btn block secondary" id="aufgDateiDel" style="margin-top:12px;">Unterlage löschen</button>';
     openModal(html);
     document.getElementById('mClose').onclick = closeModal;
     var lk = document.getElementById('aufgPdfLink');
