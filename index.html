@@ -828,7 +828,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 20:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 21:10</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6480,7 +6480,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 20:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 21:10</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -6999,7 +6999,7 @@ function aufgabenOffenFuerMich(){
   var aktuell = aufgMonatKey(new Date());
   return (state.aufgaben || []).filter(function(a){
     if(a.erledigt || !a.monat || a.monat > aktuell) return false;
-    if(state.rolle === 'chef') return false;
+    if(state.rolle === 'chef') return a.mitarbeiter === CHEF_NAME;
     return a.mitarbeiter === 'alle' || a.mitarbeiter === state.mitarbeiterName;
   }).length;
 }
@@ -7018,7 +7018,7 @@ function aufgZeileHtml(a, istChef){
   h += '<div style="flex:1; min-width:0;">';
   h += '<div style="font-size:15px; word-wrap:break-word;' + (a.erledigt ? ' text-decoration:line-through; color:#777;' : '') + '">' + escapeHtml(a.text) + '</div>';
   var meta = [];
-  if(istChef) meta.push(a.mitarbeiter === 'alle' ? 'Für alle' : escapeHtml(a.mitarbeiter));
+  if(istChef) meta.push('Für: ' + (a.mitarbeiter === 'alle' ? 'alle Mitarbeiter' : escapeHtml(a.mitarbeiter) + (a.mitarbeiter === CHEF_NAME ? ' (Chef)' : '')));
   if(a.erledigt && a.erledigtAm) meta.push('erledigt ' + fmtDate(a.erledigtAm) + (a.erledigtVon ? ' von ' + escapeHtml(a.erledigtVon) : ''));
   if(meta.length) h += '<div class="meta">' + meta.join(' &middot; ') + '</div>';
   var dl = a.dateien || [];
@@ -7049,7 +7049,7 @@ function renderAufgaben(){
     html += '<div class="card">';
     html += '<label>Neue Aufgabe</label><input type="text" id="aufgText" placeholder="z.B. Lager aufräumen, Fahrzeug waschen">';
     html += '<label>Für wen?</label><select id="aufgWer"><option value="alle">Alle Mitarbeiter</option>';
-    zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; });
+    zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + (n === CHEF_NAME ? ' (Chef)' : '') + '</option>'; });
     html += '</select>';
     html += '<button class="btn block" id="aufgAdd" style="margin-top:10px;">Aufgabe hinzufügen (' + aufgMonatText(mon) + ')</button>';
     html += '</div>';
