@@ -828,7 +828,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 17:15</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 18:50</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1045,6 +1045,21 @@ function renderDashboard(){
         html += '<div class="card kunde-card" data-id="' + (kg ? kg.id : '') + '"><div class="row"><h3>' + (kg ? escapeHtml(kg.name) : 'Unbekannt') + '</h3><span class="badge blau">' + fmtDate(p.datum) + '</span></div><div class="meta">' + pruefungAnzeigeText(p) + '</div></div>';
       });
     }
+  }
+
+  var jetztKeyDash = jetzt.getFullYear() + '-' + ((jetzt.getMonth() + 1) < 10 ? '0' : '') + (jetzt.getMonth() + 1);
+  var vmFaellig = [];
+  state.kunden.forEach(function(kv){
+    if(kv.geloescht || kv.stillgelegt) return;
+    (kv.vermerke || []).forEach(function(v){
+      if(!v.erledigt && v.faellig && String(v.faellig).length >= 7 && String(v.faellig).substring(0, 7) <= jetztKeyDash) vmFaellig.push({ k: kv, v: v });
+    });
+  });
+  if(vmFaellig.length){
+    html += '<div class="section-title" style="margin-top:14px; color:#c23f12;">Vermerke fällig (' + vmFaellig.length + ')</div>';
+    vmFaellig.forEach(function(e){
+      html += '<div class="card kunde-card" data-id="' + e.k.id + '"><div class="row"><h3>' + escapeHtml(e.k.name) + '</h3><span class="badge soon">' + escapeHtml(vermerkFaelligText(e.v.faellig)) + '</span></div><div class="meta">' + escapeHtml(e.v.text) + '</div></div>';
+    });
   }
 
   html += '<details style="margin-top:14px;"><summary style="cursor:pointer; font-weight:700; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:8px 0;">Alle offenen diesen Monat (' + monatNamen[jetzt.getMonth()] + ') &middot; ' + diesenMonat.length + '</summary>';
@@ -2588,6 +2603,8 @@ function renderKundeDetail(kundeId){
     html += '<div class="meta" style="margin-top:10px; color:#a3300d;">Stillgelegt' + (k.stillgelegtAm ? ' seit ' + fmtDate(k.stillgelegtAm) : '') + ' &ndash; keine Erinnerungen, bis wieder aktiviert.</div>';
   }
   html += '</div>';
+
+  html += vermerkeKartenHtml(k);
 
   html += '<div class="row" style="margin-top:14px;"><div class="section-title" style="margin:0;">Geräte</div>';
   html += '<button class="btn small" id="addGeraetBtn">+ Gerät</button></div>';
@@ -6463,7 +6480,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 17:15</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 18:50</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -9018,7 +9035,72 @@ function bindKundenCards(container){
   });
 }
 
+// ---------- Vermerke beim Kunden (z.B. "Rauchmelder Tausch 2027") ----------
+function vermerkFaelligText(f){
+  if(!f) return 'ohne Datum';
+  var t = String(f).split('-');
+  var n = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  if(t.length >= 2 && t[1]) return n[parseInt(t[1], 10) - 1] + ' ' + t[0];
+  return t[0];
+}
+function vermerkeKartenHtml(k){
+  var liste = (k.vermerke || []).slice().sort(function(a, b){
+    if(!!a.erledigt !== !!b.erledigt) return a.erledigt ? 1 : -1;
+    return String(a.faellig || '9999').localeCompare(String(b.faellig || '9999'));
+  });
+  var jetztKey = new Date().getFullYear() + '-' + ((new Date().getMonth() + 1) < 10 ? '0' : '') + (new Date().getMonth() + 1);
+  var h = '<div class="card" style="margin-top:14px;">';
+  h += '<div class="section-title" style="margin:0 0 8px;">Vermerke / Später zu erledigen</div>';
+  if(!liste.length) h += '<div class="meta">Noch nichts eingetragen</div>';
+  liste.forEach(function(v){
+    var ueber = !v.erledigt && v.faellig && String(v.faellig).substring(0, 7) <= jetztKey && String(v.faellig).length > 4;
+    h += '<div style="display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">';
+    h += '<input type="checkbox" data-vmcheck="' + escapeHtml(v.id) + '"' + (v.erledigt ? ' checked' : '') + ' style="width:22px; height:22px; flex-shrink:0; margin-top:1px;">';
+    h += '<div style="flex:1; min-width:0;"><div style="word-wrap:break-word;' + (v.erledigt ? ' text-decoration:line-through; color:#777;' : '') + '">' + escapeHtml(v.text) + '</div>';
+    h += '<div class="meta"' + (ueber ? ' style="color:#c23f12; font-weight:700;"' : '') + '>fällig: ' + escapeHtml(vermerkFaelligText(v.faellig)) + '</div></div>';
+    h += '<button class="btn small secondary" data-vmdel="' + escapeHtml(v.id) + '">&times;</button></div>';
+  });
+  h += '<label style="margin-top:12px;">Neuer Vermerk</label><input type="text" id="vmText" placeholder="z.B. Rauchmelder Tausch" autocomplete="off">';
+  h += '<label>Fällig (Monat/Jahr, optional)</label><input type="month" id="vmFaellig">';
+  h += '<button class="btn block" id="vmAdd" style="margin-top:10px;">Vermerk speichern</button>';
+  h += '</div>';
+  return h;
+}
+function bindVermerke(){
+  var add = document.getElementById('vmAdd');
+  var kid = state.activeKundeId;
+  var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+  if(!k) return;
+  if(add) add.onclick = function(){
+    var t = document.getElementById('vmText').value.trim();
+    if(!t){ toast('Bitte Text eingeben'); return; }
+    var f = document.getElementById('vmFaellig').value || '';
+    if(!k.vermerke) k.vermerke = [];
+    k.vermerke.push({ id: uid(), text: t, faellig: f, erledigt: false, erledigtAm: null, erstelltAm: new Date().toISOString() });
+    dbPut('kunden', k, function(){ render(); });
+  };
+  document.querySelectorAll('[data-vmcheck]').forEach(function(cb){
+    cb.onchange = function(){
+      var v = (k.vermerke || []).filter(function(x){ return x.id === cb.getAttribute('data-vmcheck'); })[0];
+      if(!v) return;
+      v.erledigt = cb.checked;
+      v.erledigtAm = cb.checked ? new Date().toISOString() : null;
+      dbPut('kunden', k, function(){ render(); });
+    };
+  });
+  document.querySelectorAll('[data-vmdel]').forEach(function(b){
+    b.onclick = function(){
+      var id = b.getAttribute('data-vmdel');
+      customConfirm('Vermerk löschen?', function(){
+        k.vermerke = (k.vermerke || []).filter(function(x){ return x.id !== id; });
+        dbPut('kunden', k, function(){ render(); });
+      });
+    };
+  });
+}
+
 function bindDynamic(){
+  if(state.tab === 'kundeDetail') bindVermerke();
   bindKundenCards(document);
 
   document.querySelectorAll('[data-zuweisen-geraet]').forEach(function(b){
