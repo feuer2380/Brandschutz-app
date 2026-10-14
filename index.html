@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 22:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 22:25</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -3006,7 +3006,11 @@ function buildBaldFaelligDruckHtml(){
       html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
       html += '<table class="pb-tabelle" style="margin-top:8px;"><thead><tr><th>Gerät/Prüfung</th><th>Fällig</th></tr></thead><tbody>';
       gr.eintraege.forEach(function(p){
-        html += '<tr><td>' + pruefungAnzeigeText(p) + '</td><td>' + fmtDate(p.datum) + '</td></tr>';
+        var ueberf = daysUntil(p.datum) < 0;
+        var datumZelle = ueberf
+          ? '<span style="color:#c23f12; font-weight:700;">' + fmtDate(p.datum) + '</span><br><span style="display:inline-block; margin-top:3px; color:#c23f12; border:1.5px solid #c23f12; border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700; -webkit-print-color-adjust:exact; print-color-adjust:exact;">Überfällig</span>'
+          : fmtDate(p.datum);
+        html += '<tr><td>' + pruefungAnzeigeText(p) + '</td><td style="white-space:nowrap;">' + datumZelle + '</td></tr>';
       });
       html += '</tbody></table>';
       html += '</div>';
@@ -6556,7 +6560,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 22:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 22:25</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
