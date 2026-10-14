@@ -646,6 +646,24 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   }
 
   setTimeout(function(){
+    var bruchPunkte = [];
+    try {
+      var paBox = pa.getBoundingClientRect();
+      var verhaeltnis = 3;
+      var sammle = function(sel, kante){
+        pa.querySelectorAll(sel).forEach(function(el){
+          if(el.closest && el.closest('thead')) return;
+          var r = el.getBoundingClientRect();
+          bruchPunkte.push(Math.round(((kante === 'oben' ? r.top : r.bottom) - paBox.top) * verhaeltnis));
+        });
+      };
+      sammle('tbody tr', 'unten');
+      sammle('.pb-kundenbox', 'oben');
+      sammle('.pb-kundenbox', 'unten');
+      sammle('.card', 'oben');
+      sammle('.bericht-fuss', 'oben');
+      bruchPunkte.sort(function(x, y){ return x - y; });
+    } catch(e){ bruchPunkte = []; }
     html2canvas(pa, {
       scale: 3,
       backgroundColor: '#ffffff',
@@ -667,20 +685,35 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       var pageHeight = pdf.internal.pageSize.getHeight();
       var nutzbreite = pageWidth - (rand * 2);
       var nutzhoehe = pageHeight - (rand * 2);
-      var imgWidth = nutzbreite;
-      var imgHeight = canvas.height * (imgWidth / canvas.width);
-      var imgData = canvas.toDataURL('image/png');
-
-      pdf.addImage(imgData, 'PNG', rand, rand, imgWidth, imgHeight);
-      var heightLeft = imgHeight - nutzhoehe;
-      var seite = 0;
-      while(heightLeft > 0){
-        seite++;
-        var positionY = rand - (seite * nutzhoehe);
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', rand, positionY, imgWidth, imgHeight);
-        heightLeft -= nutzhoehe;
+      // Seitenumbruch nur an sauberen Stellen (zwischen Tabellenzeilen / Kästen), nie mitten durch eine Zeile
+      var seitePx = Math.floor(nutzhoehe * canvas.width / nutzbreite);
+      var gesamtPx = canvas.height;
+      var umbrueche = [];
+      var seg = 0;
+      while(seg < gesamtPx){
+        var ziel = seg + seitePx;
+        var ende = gesamtPx;
+        if(ziel < gesamtPx){
+          ende = ziel;
+          for(var ci = bruchPunkte.length - 1; ci >= 0; ci--){
+            if(bruchPunkte[ci] <= ziel && bruchPunkte[ci] > seg + seitePx * 0.35){ ende = bruchPunkte[ci]; break; }
+          }
+        }
+        umbrueche.push([seg, ende]);
+        seg = ende;
       }
+      umbrueche.forEach(function(teil, idx){
+        var hoehePx = Math.max(1, teil[1] - teil[0]);
+        var tc = document.createElement('canvas');
+        tc.width = canvas.width;
+        tc.height = hoehePx;
+        var tctx = tc.getContext('2d');
+        tctx.fillStyle = '#ffffff';
+        tctx.fillRect(0, 0, tc.width, tc.height);
+        tctx.drawImage(canvas, 0, teil[0], canvas.width, hoehePx, 0, 0, canvas.width, hoehePx);
+        if(idx > 0) pdf.addPage();
+        pdf.addImage(tc.toDataURL('image/png'), 'PNG', rand, rand, nutzbreite, hoehePx * nutzbreite / canvas.width);
+      });
 
       var blob = pdf.output('blob');
       var geteilt = false;
@@ -838,7 +871,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 15:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 15:50</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6492,7 +6525,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 15:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 15:50</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
