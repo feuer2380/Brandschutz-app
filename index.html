@@ -164,7 +164,7 @@ try {
 
   /* ===== PC-Ansicht: größere, kontrastreichere Darstellung (Handy bleibt unverändert) ===== */
   @media screen and (min-width:900px) and (hover:hover) and (pointer:fine){
-    :root{ --muted:#4a4136; --line:#c9bdac; --paper:#f4efe7; }
+    :root{ --muted:#4a4136; --line:#bfb2a0; --paper:#d8cfc1; --card:#f6f2ea; }
     body{ font-size:16px; }
     header.top, main, nav.tabs, .modal, .toast{ zoom:1.35; }
     main{ padding-left:max(16px, calc((100% - 1000px) / 2)); padding-right:max(16px, calc((100% - 1000px) / 2)); }
@@ -173,7 +173,7 @@ try {
     label{ color:#3d352b; font-weight:600; }
     .section-title{ color:#3d352b; }
     .badge{ font-weight:700; }
-    input,select,textarea{ border-color:#a89c8a; color:#111; }
+    input,select,textarea{ border-color:#a89c8a; color:#111; background:#fbf9f4; }
     .btn.secondary{ border-color:#a89c8a; }
     nav.tabs button{ color:#d8d0c4; }
     nav.tabs button.active{ color:var(--amber); }
@@ -182,7 +182,7 @@ try {
     .fab{ zoom:1.35; right:24px; }
     [style*="color:#999"], [style*="color:#777"], [style*="color:#555"]{ color:#2e2820 !important; }
     .modal-bg{ align-items:center; justify-content:center; }
-    .modal{ width:min(760px, 92%); max-height:88vh; border-radius:16px; padding-bottom:24px; }
+    .modal{ background:#e9e2d6; width:min(760px, 92%); max-height:88vh; border-radius:16px; padding-bottom:24px; }
   }
   @media print{
     .qr-etikett{
@@ -894,7 +894,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 16:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 16:25</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6548,7 +6548,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 16:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 16:25</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
