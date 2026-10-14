@@ -335,7 +335,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben', 'zeit_unterschriften'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben', 'zeit_unterschriften', 'fahrzeuge', 'fahrten'];
 var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
@@ -546,6 +546,10 @@ var state = {
   zeiten: [],
   aufgaben: [],
   zeit_unterschriften: [],
+  fahrzeuge: [],
+  fahrten: [],
+  fbFahrzeug: null,
+  fbMonat: null,
   aufgMonat: null,
   kundenSuche: '',
   pruefungFilter: 'alle',
@@ -584,7 +588,13 @@ function loadAll(cb){
                           state.aufgaben = au || [];
                           dbGetAll('zeit_unterschriften', function(zu){
                             state.zeit_unterschriften = zu || [];
-                            cb();
+                            dbGetAll('fahrzeuge', function(fz){
+                              state.fahrzeuge = fz || [];
+                              dbGetAll('fahrten', function(ft){
+                                state.fahrten = ft || [];
+                                cb();
+                              });
+                            });
                           });
                         });
                       });
@@ -828,7 +838,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 13.10. 21:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 15:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -863,12 +873,12 @@ function renderInner(){
   }
   if(tabsEl) tabsEl.style.display = '';
   if(fabEl){
-    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte' || state.tab === 'zeit' || state.tab === 'aufgaben') ? 'none' : '';
+    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte' || state.tab === 'zeit' || state.tab === 'aufgaben' || state.tab === 'fahrtenbuch') ? 'none' : '';
     fabEl.classList.remove('fab-hidden');
   }
   document.querySelectorAll('.tabbtn').forEach(function(b){
     var dt = b.getAttribute('data-tab');
-    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit' || state.tab === 'aufgaben'));
+    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit' || state.tab === 'aufgaben' || state.tab === 'fahrtenbuch'));
     b.className = 'tabbtn' + (istAktiv ? ' active' : '');
   });
   if(state.tab === 'dashboard') m.innerHTML = renderDashboard();
@@ -882,11 +892,13 @@ function renderInner(){
   else if(state.tab === 'lager') m.innerHTML = renderLager();
   else if(state.tab === 'zeit') m.innerHTML = renderZeit();
   else if(state.tab === 'aufgaben') m.innerHTML = renderAufgaben();
+  else if(state.tab === 'fahrtenbuch') m.innerHTML = renderFahrtenbuch();
 
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
   if(state.tab === 'zeit') bindZeit();
   if(state.tab === 'aufgaben') bindAufgaben();
+  if(state.tab === 'fahrtenbuch') bindFahrtenbuch();
   if(state.tab === 'scan') startScanner();
   if(fabEl && m.scrollHeight > m.clientHeight + 30){
     fabEl.classList.add('fab-hidden');
@@ -6480,7 +6492,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 13.10. 21:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 15:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -7196,12 +7208,276 @@ function bindAufgaben(){
   });
 }
 
+// ---------- Fahrtenbuch ----------
+function fbZahl(v){
+  if(v === null || v === undefined || v === '') return null;
+  var n = parseFloat(String(v).replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+function fbFmt(n, stellen){
+  if(n === null || n === undefined) return '-';
+  var t = n.toFixed(stellen || 0).replace('.', ',');
+  var teile = t.split(',');
+  teile[0] = teile[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return teile.join(',');
+}
+function fbAktuellesFahrzeug(){
+  var liste = (state.fahrzeuge || []).filter(function(f){ return !f.inaktiv; });
+  var f = liste.filter(function(x){ return x.id === state.fbFahrzeug; })[0];
+  if(!f && liste.length){ f = liste[0]; state.fbFahrzeug = f.id; }
+  return f || null;
+}
+function fbFahrtenVon(fzId){
+  return (state.fahrten || []).filter(function(x){ return x.fahrzeugId === fzId; }).sort(function(a, b){
+    if((a.datum || '') !== (b.datum || '')) return (a.datum || '') < (b.datum || '') ? -1 : 1;
+    if(a.abfahrt && b.abfahrt && a.abfahrt !== b.abfahrt) return a.abfahrt < b.abfahrt ? -1 : 1;
+    if(a.kmStart !== null && a.kmStart !== undefined && b.kmStart !== null && b.kmStart !== undefined && a.kmStart !== b.kmStart) return a.kmStart - b.kmStart;
+    return String(a.erstelltAm || '') < String(b.erstelltAm || '') ? -1 : 1;
+  });
+}
+function fbLetzterKm(fzId){
+  var l = fbFahrtenVon(fzId), km = null;
+  l.forEach(function(x){ if(x.kmEnde !== null && x.kmEnde !== undefined) km = x.kmEnde; });
+  return km;
+}
+function fbKundeName(f){
+  var k = f.kundeId ? state.kunden.filter(function(x){ return x.id === f.kundeId; })[0] : null;
+  return k ? k.name : '';
+}
+function fbZeileText(f){
+  var kn = fbKundeName(f);
+  var t = [];
+  if(kn) t.push(kn);
+  if(f.taetigkeit) t.push(f.taetigkeit);
+  return t.join(' – ');
+}
+function fbMonatListe(fzId, monKey){
+  return fbFahrtenVon(fzId).filter(function(x){ return (x.datum || '').substring(0, 7) === monKey; });
+}
+function fbSummen(liste){
+  var km = 0, liter = 0, euro = 0;
+  liste.forEach(function(x){
+    if(x.kmStart !== null && x.kmStart !== undefined && x.kmEnde !== null && x.kmEnde !== undefined) km += (x.kmEnde - x.kmStart);
+    if(x.liter) liter += x.liter;
+    if(x.euro) euro += x.euro;
+  });
+  return { km: km, liter: liter, euro: euro };
+}
+function renderFahrtenbuch(){
+  var html = '';
+  var aktuell = aufgMonatKey(new Date());
+  if(!state.fbMonat) state.fbMonat = aktuell;
+  var mon = state.fbMonat;
+  var fz = fbAktuellesFahrzeug();
+  var alleFz = (state.fahrzeuge || []).filter(function(f){ return !f.inaktiv; });
+  html += '<div class="row" style="align-items:center; margin-bottom:10px;"><div class="section-title" style="margin:0;">Fahrtenbuch</div><button class="btn small secondary" id="fbFzBtn">Fahrzeuge</button></div>';
+  if(!alleFz.length){
+    html += '<div class="empty">Noch kein Fahrzeug angelegt.<br>Tippe auf „Fahrzeuge" und lege dein erstes Auto an.</div>';
+    return html;
+  }
+  html += '<select id="fbFzSel" style="margin-bottom:10px;">';
+  alleFz.forEach(function(f){
+    html += '<option value="' + escapeHtml(f.id) + '"' + (fz && f.id === fz.id ? ' selected' : '') + '>' + escapeHtml(f.name) + (f.kennzeichen ? ' (' + escapeHtml(f.kennzeichen) + ')' : '') + '</option>';
+  });
+  html += '</select>';
+  html += '<div class="row" style="align-items:center; margin-bottom:10px;"><button class="btn small secondary" id="fbZurueck">&lsaquo;</button><b>' + aufgMonatText(mon) + '</b><button class="btn small secondary" id="fbVor">&rsaquo;</button></div>';
+  var liste = fbMonatListe(fz.id, mon);
+  var sm = fbSummen(liste);
+  var letzter = fbLetzterKm(fz.id);
+  html += '<div class="card"><div class="meta">Kilometerstand aktuell: <b>' + (letzter !== null ? fbFmt(letzter) + ' km' : 'noch keiner') + '</b></div>';
+  html += '<div class="meta">Dieser Monat: <b>' + fbFmt(sm.km) + ' km</b> &middot; getankt: <b>' + fbFmt(sm.liter, 1) + ' l</b>' + (sm.euro ? ' &middot; <b>' + fbFmt(sm.euro, 2) + ' &euro;</b>' : '') + '</div>';
+  html += '<div style="display:flex; gap:8px; margin-top:10px;"><button class="btn" id="fbNeu" style="flex:1;">+ Fahrt eintragen</button><button class="btn secondary" id="fbDruck" style="flex:1;">Drucken / PDF</button></div></div>';
+  if(!liste.length){
+    html += '<div class="empty">Keine Fahrten in diesem Monat</div>';
+  } else {
+    var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+    liste.slice().reverse().forEach(function(f){
+      var d = new Date(f.datum + 'T12:00:00');
+      var strecke = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
+      html += '<div class="card" data-fbedit="' + escapeHtml(f.id) + '" style="cursor:pointer;">';
+      html += '<div class="row"><h3>' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + (f.abfahrt || f.ende ? ' &middot; ' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') : '') + '</h3><span class="badge blau">' + (strecke !== null ? fbFmt(strecke) + ' km' : '-') + '</span></div>';
+      var zt = fbZeileText(f);
+      if(zt) html += '<div class="meta" style="font-size:14px; color:var(--ink);">' + escapeHtml(zt) + '</div>';
+      html += '<div class="meta">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + ' km' + (f.fahrer ? ' &middot; ' + escapeHtml(f.fahrer) : '') + '</div>';
+      if(f.liter || f.euro) html += '<div class="meta">&#9981; getankt: ' + (f.liter ? fbFmt(f.liter, 1) + ' l' : '') + (f.liter && f.euro ? ' &middot; ' : '') + (f.euro ? fbFmt(f.euro, 2) + ' &euro;' : '') + '</div>';
+      html += '</div>';
+    });
+  }
+  return html;
+}
+function bindFahrtenbuch(){
+  var fzBtn = document.getElementById('fbFzBtn');
+  if(fzBtn) fzBtn.onclick = modalFahrzeuge;
+  var sel = document.getElementById('fbFzSel');
+  if(sel) sel.onchange = function(){ state.fbFahrzeug = sel.value; render(); };
+  var z = document.getElementById('fbZurueck');
+  if(z) z.onclick = function(){ state.fbMonat = aufgMonatVerschieben(state.fbMonat, -1); render(); };
+  var v = document.getElementById('fbVor');
+  if(v) v.onclick = function(){ state.fbMonat = aufgMonatVerschieben(state.fbMonat, 1); render(); };
+  var neu = document.getElementById('fbNeu');
+  if(neu) neu.onclick = function(){ modalFahrt(null); };
+  var dr = document.getElementById('fbDruck');
+  if(dr) dr.onclick = function(){
+    var fz = fbAktuellesFahrzeug();
+    if(!fz) return;
+    bsvDruckenOderTeilen(buildFahrtenbuchHtml(fz, state.fbMonat), 'Fahrtenbuch_' + (fz.kennzeichen || fz.name).replace(/[^A-Za-z0-9]+/g, '_') + '_' + state.fbMonat + '.pdf');
+  };
+  document.querySelectorAll('[data-fbedit]').forEach(function(c){
+    c.onclick = function(){ modalFahrt(c.getAttribute('data-fbedit')); };
+  });
+}
+function modalFahrzeuge(){
+  var liste = (state.fahrzeuge || []).filter(function(f){ return !f.inaktiv; });
+  var html = '<div class="modal-head"><h3>Fahrzeuge</h3><button class="close" id="mClose">&times;</button></div>';
+  if(!liste.length) html += '<div class="meta">Noch kein Fahrzeug.</div>';
+  liste.forEach(function(f){
+    html += '<div class="row" style="padding:8px 0; border-bottom:1px solid var(--line);"><div><b>' + escapeHtml(f.name) + '</b><div class="meta">' + escapeHtml(f.kennzeichen || '') + '</div></div><button class="btn small secondary" data-fzdel="' + escapeHtml(f.id) + '">Entfernen</button></div>';
+  });
+  html += '<label style="margin-top:14px;">Neues Fahrzeug (Name)</label><input type="text" id="fzName" placeholder="z.B. VW Caddy" autocomplete="off">';
+  html += '<label>Kennzeichen</label><input type="text" id="fzKz" placeholder="z.B. M-12345X" autocomplete="off" style="text-transform:uppercase;">';
+  html += '<button class="btn block" id="fzAdd" style="margin-top:12px;">Fahrzeug speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('fzAdd').onclick = function(){
+    var n = document.getElementById('fzName').value.trim();
+    if(!n){ toast('Bitte einen Namen eingeben'); return; }
+    var f = { id: uid(), name: n, kennzeichen: document.getElementById('fzKz').value.trim().toUpperCase(), inaktiv: false, erstelltAm: new Date().toISOString() };
+    dbPut('fahrzeuge', f, function(){
+      if(!state.fahrzeuge) state.fahrzeuge = [];
+      if(!state.fahrzeuge.some(function(x){ return x.id === f.id; })) state.fahrzeuge.push(f);
+      state.fbFahrzeug = f.id;
+      closeModal(); render();
+    });
+  };
+  document.querySelectorAll('[data-fzdel]').forEach(function(b){
+    b.onclick = function(){
+      var id = b.getAttribute('data-fzdel');
+      var f = (state.fahrzeuge || []).filter(function(x){ return x.id === id; })[0];
+      if(!f) return;
+      customConfirm('Fahrzeug "' + escapeHtml(f.name) + '" entfernen? Die eingetragenen Fahrten bleiben gespeichert.', function(){
+        f.inaktiv = true;
+        dbPut('fahrzeuge', f, function(){ if(state.fbFahrzeug === id) state.fbFahrzeug = null; closeModal(); render(); });
+      });
+    };
+  });
+}
+function modalFahrt(fahrtId){
+  var fz = fbAktuellesFahrzeug();
+  if(!fz) return;
+  var f = fahrtId ? (state.fahrten || []).filter(function(x){ return x.id === fahrtId; })[0] : null;
+  var heute = new Date();
+  var heuteIso = heute.getFullYear() + '-' + ((heute.getMonth() + 1) < 10 ? '0' : '') + (heute.getMonth() + 1) + '-' + (heute.getDate() < 10 ? '0' : '') + heute.getDate();
+  var jetztZeit = (heute.getHours() < 10 ? '0' : '') + heute.getHours() + ':' + (heute.getMinutes() < 10 ? '0' : '') + heute.getMinutes();
+  var letzter = fbLetzterKm(fz.id);
+  var fahrerStd = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
+  var v = f || { datum: heuteIso, abfahrt: '', ende: '', kmStart: letzter, kmEnde: null, kundeId: '', taetigkeit: '', fahrer: fahrerStd, liter: null, euro: null };
+  var html = '<div class="modal-head"><h3>' + (f ? 'Fahrt bearbeiten' : 'Neue Fahrt') + '</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + escapeHtml(fz.name) + (fz.kennzeichen ? ' (' + escapeHtml(fz.kennzeichen) + ')' : '') + '</div>';
+  html += '<label>Datum</label><input type="date" id="ftDatum" value="' + escapeHtml(v.datum || heuteIso) + '">';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Abfahrt</label><input type="time" id="ftAb" value="' + escapeHtml(v.abfahrt || '') + '"></div><div style="flex:1;"><label>Ende</label><input type="time" id="ftEnde" value="' + escapeHtml(v.ende || '') + '"></div></div>';
+  html += '<div class="row" style="gap:8px; margin-top:4px;"><button type="button" class="btn small secondary" id="ftAbJetzt">Abfahrt = jetzt</button><button type="button" class="btn small secondary" id="ftEndeJetzt">Ende = jetzt</button></div>';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Km-Stand Start</label><input type="number" inputmode="numeric" id="ftKmS" value="' + (v.kmStart !== null && v.kmStart !== undefined ? v.kmStart : '') + '"></div><div style="flex:1;"><label>Km-Stand Ende</label><input type="number" inputmode="numeric" id="ftKmE" value="' + (v.kmEnde !== null && v.kmEnde !== undefined ? v.kmEnde : '') + '"></div></div>';
+  html += '<div class="meta" id="ftStrecke" style="margin-top:4px;"></div>';
+  html += '<label>Kunde (optional)</label><select id="ftKunde"><option value="">- kein Kunde -</option>';
+  state.kunden.filter(function(k){ return !k.geloescht; }).slice().sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); }).forEach(function(k){
+    html += '<option value="' + escapeHtml(k.id) + '"' + (v.kundeId === k.id ? ' selected' : '') + '>' + escapeHtml(k.name) + '</option>';
+  });
+  html += '</select>';
+  html += '<label>Tätigkeit / Ziel</label><input type="text" id="ftTaet" placeholder="z.B. Löscherprüfung, Lager, Besorgung" value="' + escapeHtml(v.taetigkeit || '') + '" autocomplete="off">';
+  html += '<label>Fahrer</label><input type="text" id="ftFahrer" value="' + escapeHtml(v.fahrer || '') + '" autocomplete="off">';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Getankt (Liter)</label><input type="text" inputmode="decimal" id="ftLiter" value="' + (v.liter ? String(v.liter).replace('.', ',') : '') + '"></div><div style="flex:1;"><label>Betrag (&euro;)</label><input type="text" inputmode="decimal" id="ftEuro" value="' + (v.euro ? String(v.euro).replace('.', ',') : '') + '"></div></div>';
+  html += '<button class="btn block" id="ftSave" style="margin-top:14px;">Speichern</button>';
+  if(f) html += '<button class="btn block secondary" id="ftDel" style="margin-top:8px;">Fahrt löschen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var strecke = function(){
+    var a = fbZahl(document.getElementById('ftKmS').value), b = fbZahl(document.getElementById('ftKmE').value);
+    var el = document.getElementById('ftStrecke');
+    if(a !== null && b !== null) el.innerHTML = b >= a ? 'Strecke: <b>' + fbFmt(b - a) + ' km</b>' : '<span style="color:#c23f12;">Ende-Stand ist kleiner als Start-Stand</span>';
+    else el.innerHTML = '';
+  };
+  document.getElementById('ftKmS').oninput = strecke;
+  document.getElementById('ftKmE').oninput = strecke;
+  strecke();
+  document.getElementById('ftAbJetzt').onclick = function(){ document.getElementById('ftAb').value = jetztZeit; };
+  document.getElementById('ftEndeJetzt').onclick = function(){ document.getElementById('ftEnde').value = jetztZeit; };
+  document.getElementById('ftSave').onclick = function(){
+    var datum = document.getElementById('ftDatum').value;
+    if(!datum){ toast('Bitte Datum wählen'); return; }
+    var a = fbZahl(document.getElementById('ftKmS').value), b = fbZahl(document.getElementById('ftKmE').value);
+    if(a !== null && b !== null && b < a){ toast('Km-Stand Ende ist kleiner als Start'); return; }
+    var neu = f || { id: uid(), fahrzeugId: fz.id, erstelltAm: new Date().toISOString(), erstelltVon: fahrerStd };
+    neu.datum = datum;
+    neu.abfahrt = document.getElementById('ftAb').value || '';
+    neu.ende = document.getElementById('ftEnde').value || '';
+    neu.kmStart = a;
+    neu.kmEnde = b;
+    neu.kundeId = document.getElementById('ftKunde').value || '';
+    neu.taetigkeit = document.getElementById('ftTaet').value.trim();
+    neu.fahrer = document.getElementById('ftFahrer').value.trim();
+    neu.liter = fbZahl(document.getElementById('ftLiter').value);
+    neu.euro = fbZahl(document.getElementById('ftEuro').value);
+    dbPut('fahrten', neu, function(){
+      if(!state.fahrten) state.fahrten = [];
+      state.fahrten = state.fahrten.filter(function(x){ return x.id !== neu.id; });
+      state.fahrten.push(neu);
+      state.fbMonat = datum.substring(0, 7);
+      closeModal(); render();
+    });
+  };
+  var del = document.getElementById('ftDel');
+  if(del) del.onclick = function(){
+    customConfirm('Diese Fahrt wirklich löschen?', function(){
+      dbDelete('fahrten', f.id, function(){
+        state.fahrten = (state.fahrten || []).filter(function(x){ return x.id !== f.id; });
+        closeModal(); render();
+      });
+    });
+  };
+}
+function buildFahrtenbuchHtml(fz, monKey){
+  var liste = fbMonatListe(fz.id, monKey);
+  var sm = fbSummen(liste);
+  var zelle = 'border:1px solid #333; padding:6px 5px; font-size:11px; vertical-align:top;';
+  var kopf = 'border:1px solid #333; background:#eee; padding:6px 5px; font-size:11px; font-weight:700; text-align:left;';
+  var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+  var h = '<div style="font-family:Arial,sans-serif; color:#111; padding:6px;">';
+  h += '<table style="width:100%; border-collapse:collapse; margin-bottom:4px;"><tr>';
+  h += '<td style="vertical-align:top; width:120px;"><img src="' + LOGO_DATA + '" style="width:105px;"></td>';
+  h += '<td style="vertical-align:top; text-align:right; font-size:9px; color:#222; line-height:1.5;">Wolfgang Janiba<br>Brandschutztechnik GmbH<br><br>Ketzergasse 299, 2380 Perchtoldsdorf<br>www.loeschtechnik.at, 0676 / 305 83 98</td></tr></table>';
+  h += '<div style="text-align:center; font-size:16px; font-weight:700; margin:8px 0 10px;">FAHRTENBUCH</div>';
+  h += '<table style="width:100%; border-collapse:collapse; margin-bottom:10px;"><tr>';
+  h += '<td style="' + kopf + ' width:15%;">Fahrzeug</td><td style="' + zelle + ' width:35%;">' + escapeHtml(fz.name) + (fz.kennzeichen ? ' (' + escapeHtml(fz.kennzeichen) + ')' : '') + '</td>';
+  h += '<td style="' + kopf + ' width:15%;">Monat</td><td style="' + zelle + ' width:35%;">' + aufgMonatText(monKey) + '</td></tr></table>';
+  if(!liste.length){
+    h += '<div style="margin:16px 0;">Keine Fahrten in diesem Monat.</div>';
+  } else {
+    h += '<table style="width:100%; border-collapse:collapse; table-layout:fixed;"><colgroup><col style="width:17%"><col style="width:23%"><col style="width:30%"><col style="width:15%"><col style="width:15%"></colgroup>';
+    h += '<thead><tr><th style="' + kopf + '">Datum / Zeit</th><th style="' + kopf + '">Km-Stand</th><th style="' + kopf + '">Kunde / Tätigkeit</th><th style="' + kopf + '">Fahrer</th><th style="' + kopf + '">Getankt</th></tr></thead><tbody>';
+    liste.forEach(function(f){
+      var d = new Date(f.datum + 'T12:00:00');
+      var str = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
+      h += '<tr style="page-break-inside:avoid; break-inside:avoid;">';
+      h += '<td style="' + zelle + '">' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + '<br>' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') + '</td>';
+      h += '<td style="' + zelle + '">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + '<br><b>' + (str !== null ? fbFmt(str) + ' km' : '-') + '</b></td>';
+      h += '<td style="' + zelle + ' word-wrap:break-word;">' + (escapeHtml(fbZeileText(f)) || '&nbsp;') + '</td>';
+      h += '<td style="' + zelle + '">' + (escapeHtml(f.fahrer || '') || '&nbsp;') + '</td>';
+      h += '<td style="' + zelle + '">' + (f.liter ? fbFmt(f.liter, 1) + ' l' : '') + (f.euro ? '<br>' + fbFmt(f.euro, 2) + ' &euro;' : '') + (!f.liter && !f.euro ? '&nbsp;' : '') + '</td></tr>';
+    });
+    h += '<tr><td colspan="2" style="' + kopf + '">Summe: ' + fbFmt(sm.km) + ' km</td><td colspan="3" style="' + kopf + '">Getankt: ' + fbFmt(sm.liter, 1) + ' l' + (sm.euro ? ' &middot; ' + fbFmt(sm.euro, 2) + ' &euro;' : '') + '</td></tr>';
+    h += '</tbody></table>';
+  }
+  h += '</div>';
+  return h;
+}
+
 function modalMehrMenu(){
   var html = '';
   html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
   var eintraege = [
     { tab:'berichte', label:'Berichte', svg:'<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>' },
     { tab:'statistik', label:'Statistik', svg:'<path d="M4 20V10M12 20V4M20 20v-7"/>' },
+    { tab:'fahrtenbuch', label:'Fahrtenbuch', svg:'<path d="M3 13l2-6h14l2 6v5h-3v-2H6v2H3z"/><circle cx="7.5" cy="14.5" r="1"/><circle cx="16.5" cy="14.5" r="1"/>' },
     { tab:'aufgaben', label:'Aufgaben', svg:'<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>' },
     { tab:'zeit', label:'Zeiterfassung', svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' },
     { tab:'lager', label:'Lager', svg:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' }
