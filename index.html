@@ -192,7 +192,6 @@ try {
     }
     .qr-etikett-firma{font-size:7px; line-height:1.1; font-weight:700; text-align:center; margin-bottom:0.8mm; color:#000;}
     .qr-etikett img, .qr-etikett canvas, .qr-etikett table{ width:22mm !important; height:22mm !important; }
-    @page{ size:40mm 30mm; margin:0; }
   }
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
@@ -644,7 +643,16 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
 
   if(!eigenstaendig || !window.html2canvas || !window.jspdf){
     setTimeout(function(){
-      window.print();
+      // Seitengröße je nach Druckart setzen (Etikett 40x30 mm oder normale Seite) und danach wieder entfernen
+      var istEtikett = !!pa.querySelector('.qr-etikett');
+      var st = document.createElement('style');
+      st.id = 'bsvSeitenStil';
+      st.textContent = istEtikett ? '@page{ size:40mm 30mm; margin:0; }' : '@page{ margin:12mm; }';
+      document.head.appendChild(st);
+      var weg = function(){ var x = document.getElementById('bsvSeitenStil'); if(x && x.parentNode) x.parentNode.removeChild(x); window.removeEventListener('afterprint', weg); };
+      window.addEventListener('afterprint', weg);
+      try { window.print(); } catch(e){}
+      setTimeout(weg, 1500);
       if(cb) cb();
     }, 120);
     return;
@@ -894,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 21:45</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 22:10</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6548,7 +6556,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 21:45</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 22:10</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
