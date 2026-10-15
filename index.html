@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 15:35</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 16:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1107,7 +1107,9 @@ function renderDashboard(){
       });
       html += '</div>';
     });
+    html += '<button type="button" class="btn block secondary" id="dashTagDruckBtn" style="margin-top:4px;">Tagesbericht drucken (' + erledigtTag.length + ' erledigt)</button>';
   }
+  html += '<button type="button" class="btn block secondary" id="dashTbFormularBtn" style="margin-top:8px;">Tagesbericht-Formular drucken (leer)</button>';
   if(tagOffset === 0){
     var morgenKey = zeitTagKey(new Date(Date.now() + 86400000).toISOString());
     var geplant = offen.filter(function(p){
@@ -2580,11 +2582,31 @@ function renderKundenListe(query){
     return na - nb;
   });
   if(q){
-    liste = liste.filter(function(k){
-      var num = (k.kundennummer || '').toLowerCase();
-      var name = (k.name || '').toLowerCase();
-      return num.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+    var sNorm = function(t){
+      return String(t || '').toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+    };
+    var sKompakt = function(t){ return sNorm(t).replace(/ /g,''); };
+    var qWorte = sNorm(q).split(' ').filter(function(w){ return w; });
+    var qKompakt = sKompakt(q);
+    var sFeld = function(k){ return sNorm((k.name || '') + ' ' + (k.kundennummer || '') + ' ' + (k.objekt || '') + ' ' + (k.adresse || '')); };
+    // 1) normale Suche: alle Suchwörter kommen irgendwo in Name, Nummer, Objekt oder Adresse vor (Satzzeichen/Umlaute egal)
+    var treffer = liste.filter(function(k){
+      var f = sFeld(k);
+      return qWorte.every(function(w){ return f.indexOf(w) !== -1; }) || sKompakt(f).indexOf(qKompakt) !== -1;
     });
+    // 2) Tippfehler-Suche: Buchstaben der Eingabe kommen in dieser Reihenfolge im Namen vor (z.B. "Pada" findet "Panda's Wok")
+    if(treffer.length === 0 && qKompakt.length >= 3){
+      treffer = liste.filter(function(k){
+        var n = sKompakt(k.name), pos = 0;
+        for(var i = 0; i < qKompakt.length; i++){
+          pos = n.indexOf(qKompakt.charAt(i), pos);
+          if(pos === -1) return false;
+          pos++;
+        }
+        return true;
+      });
+    }
+    liste = treffer;
   }
   var html = '';
   if(liste.length === 0){
@@ -3023,6 +3045,58 @@ function buildBaldFaelligDruckHtml(){
     });
   }
 
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
+  html += '</div>';
+  return html;
+}
+
+function dashTagDatumFuerOffset(off){
+  var d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + (off || 0));
+  return d;
+}
+function buildTagesuebersichtDruckHtml(tagDatum){
+  var tagKey = zeitTagKey(tagDatum.toISOString());
+  var wt = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+  var liste = state.pruefungen.filter(function(p){ return p.erledigt && p.erledigtAm && zeitTagKey(p.erledigtAm) === tagKey; });
+  liste.sort(function(a, b){ return new Date(a.erledigtAm) - new Date(b.erledigtAm); });
+  var gruppen = {}, reihenfolge = [], proMa = {};
+  liste.forEach(function(p){
+    var kid = p.kundeId || 'unbekannt';
+    if(!gruppen[kid]){ gruppen[kid] = []; reihenfolge.push(kid); }
+    gruppen[kid].push(p);
+    var wer = p.erledigtVon ? (p.erledigtVon === 'Chef' ? CHEF_NAME : p.erledigtVon) : 'unbekannt';
+    proMa[wer] = (proMa[wer] || 0) + 1;
+  });
+  var html = '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile">';
+  html += '<div class="pb-titel"><h1>Tagesbericht</h1><div class="sub">' + wt[tagDatum.getDay()] + ', ' + fmtDate(tagDatum.toISOString()) + '</div></div>';
+  html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
+  html += '</div>';
+  html += '<div class="pb-berichtnr">' + liste.length + ' Prüfung' + (liste.length === 1 ? '' : 'en') + ' bei ' + reihenfolge.length + ' Kunde' + (reihenfolge.length === 1 ? '' : 'n');
+  var maTeile = Object.keys(proMa).map(function(n){ return escapeHtml(n) + ': ' + proMa[n]; });
+  if(maTeile.length) html += ' &middot; ' + maTeile.join(' &middot; ');
+  html += '</div>';
+  if(!liste.length){
+    html += '<div class="empty">An diesem Tag wurde nichts erledigt</div>';
+  } else {
+    reihenfolge.forEach(function(kid){
+      var eintraege = gruppen[kid];
+      var k = kundeFuerPruefung(eintraege[0]);
+      html += '<div class="pb-kundenbox" style="margin-bottom:14px;">';
+      html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (k && k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '</div>';
+      html += '<div>' + (k ? escapeHtml(k.adresse || '') : '') + '</div>';
+      html += '<table class="pb-tabelle" style="margin-top:8px;"><thead><tr><th>Uhrzeit</th><th>Gerät/Prüfung</th><th>Ergebnis</th><th>Von</th></tr></thead><tbody>';
+      eintraege.forEach(function(p){
+        var ei = ergebnisInfo(p.ergebnis);
+        var ergText = p.ergebnis || ei.label;
+        var kritisch = (p.ergebnis === 'Reparatur nötig' || p.ergebnis === 'Ausgeschieden');
+        var wer = p.erledigtVon ? (p.erledigtVon === 'Chef' ? CHEF_NAME : p.erledigtVon) : '-';
+        html += '<tr><td style="white-space:nowrap;">' + fmtZeit(p.erledigtAm) + '</td><td>' + pruefungAnzeigeText(p) + (p.bemerkung ? '<br><i>' + escapeHtml(p.bemerkung) + '</i>' : '') + '</td><td style="' + (kritisch ? 'color:#c23f12; font-weight:700;' : '') + '">' + escapeHtml(ergText) + '</td><td>' + escapeHtml(wer) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+  }
   html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
   html += '</div>';
   return html;
@@ -6566,7 +6640,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 15:35</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 16:40</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -9336,6 +9410,39 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
   return html;
 }
 
+function tagesberichtLeerOhneKundeDrucken(){
+  var pa = document.getElementById('printArea');
+  if(!pa){ toast('Fehler: Druckbereich nicht gefunden'); return; }
+  pa.innerHTML = buildTagesberichtLeerDruckHtml(null, null);
+  bsvDruckenOderTeilen(null, 'Tagesbericht-leer.pdf');
+}
+function modalTagesberichtFormularWahl(suchtext){
+  var norm = function(t){ return String(t || '').toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim(); };
+  var qw = norm(suchtext).split(' ').filter(function(w){ return w; });
+  var treffer = state.kunden.filter(function(k){
+    if(k.geloescht || !kundeSichtbarFuerRolle(k)) return false;
+    var f = norm((k.name || '') + ' ' + (k.kundennummer || '') + ' ' + (k.objekt || '') + ' ' + (k.adresse || ''));
+    return qw.every(function(w){ return f.indexOf(w) !== -1; });
+  }).sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); }).slice(0, 30);
+  var html = '<div class="modal-head"><h3>Tagesbericht-Formular drucken</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Für welchen Kunden? Das Formular bekommt dessen Namen und einen QR-Code zum Zuordnen.</div>';
+  html += '<button class="btn block" id="tbFormOhneKunde" style="margin-bottom:10px;">Ohne Kunde (ganz leer)</button>';
+  html += '<input id="tbFormSuche" type="text" placeholder="Suche nach Name, Kundennummer oder Objekt..." value="' + escapeHtml(suchtext || '') + '" style="margin-bottom:10px;">';
+  if(!treffer.length) html += '<div class="empty">Keine Treffer</div>';
+  treffer.forEach(function(k){
+    html += '<button class="btn block secondary tbFormKundeBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k.name) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + (k.kundennummer ? ' <span class="badge blau" style="margin-left:6px;">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</button>';
+  });
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var se = document.getElementById('tbFormSuche');
+  if(suchtext){ se.focus(); se.setSelectionRange(se.value.length, se.value.length); }
+  se.oninput = function(){ modalTagesberichtFormularWahl(se.value); };
+  document.getElementById('tbFormOhneKunde').onclick = function(){ closeModal(); tagesberichtLeerOhneKundeDrucken(); };
+  document.querySelectorAll('.tbFormKundeBtn').forEach(function(b){
+    b.onclick = function(){ var kid = b.getAttribute('data-kid'); closeModal(); tagesberichtLeerDrucken(kid); };
+  });
+}
+
 function tagesberichtLeerDrucken(kundeId){
   toast('Bereite Formular vor...');
   try{
@@ -9770,6 +9877,14 @@ function bindDynamic(){
   if(agBox) agBox.addEventListener('toggle', function(){ state.alleGeraeteBoxOffen = agBox.open; });
   var dtz = document.getElementById('dashTagZurueck');
   if(dtz) dtz.onclick = function(){ state.dashTagOffset = (state.dashTagOffset || 0) - 1; render(); };
+  var dtf = document.getElementById('dashTbFormularBtn');
+  if(dtf) dtf.onclick = function(){ modalTagesberichtFormularWahl(''); };
+  var dtd = document.getElementById('dashTagDruckBtn');
+  if(dtd) dtd.onclick = function(){
+    var dt = dashTagDatumFuerOffset(state.dashTagOffset || 0);
+    var nm = dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2) + '-' + ('0' + dt.getDate()).slice(-2);
+    bsvDruckenOderTeilen(buildTagesuebersichtDruckHtml(dt), 'Tagesbericht-' + nm + '.pdf');
+  };
   var dtv = document.getElementById('dashTagVor');
   if(dtv) dtv.onclick = function(){ if((state.dashTagOffset || 0) < 0){ state.dashTagOffset = state.dashTagOffset + 1; render(); } };
   var aufBanner = document.getElementById('aufgabenBannerBtn');
