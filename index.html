@@ -1387,7 +1387,7 @@ function renderLager(){
   var html = '';
   html += '<div class="row" style="align-items:center; margin-bottom:10px;">';
   html += '<div class="section-title" style="margin:0;">Lager</div>';
-  if(state.rolle === 'chef') html += '<button type="button" class="btn small secondary no-print" id="lagerbuchBtn" style="margin-left:auto; margin-right:8px;">Lagerbuch</button>';
+  if(darfLagerbuch()) html += '<button type="button" class="btn small secondary no-print" id="lagerbuchBtn" style="margin-left:auto; margin-right:8px;">Lagerbuch</button>';
   html += '<button type="button" class="icon-btn no-print" id="lagerDruckMenuBtn" title="Drucken"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1"/><path d="M6 17v4h12v-4"/></svg></button>';
   html += '</div>';
   html += '<input id="lagerSuchInput" type="text" placeholder="Suche nach Artikel oder Nummer..." value="' + escapeHtml(state.lagerSuche || '') + '" style="margin-bottom:14px;">';
@@ -1477,6 +1477,13 @@ function modalLagerDrucken(){
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mLagerlisteBtn').onclick = function(){ closeModal(); lagerstandDrucken(); };
   document.getElementById('mAlleQrBtn').onclick = function(){ closeModal(); alleLagerQrDrucken(); };
+}
+
+// Lagerbuch sehen: Chef und Mitarbeiter mit lagerbuch: true in MITARBEITER_LISTE
+function darfLagerbuch(){
+  if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !!(m && m.lagerbuch);
 }
 
 function lagerAktuellerBenutzer(){
@@ -1578,7 +1585,7 @@ function lagerArtText(b){
 function modalLagerArtikelAnpassen(artikelId){
   var a = state.lagerartikel.filter(function(x){ return x.id === artikelId; })[0];
   if(!a) return;
-  var istChef = state.rolle === 'chef';
+  var istChef = darfLagerbuch();
   var einheit = escapeHtml(a.einheit || 'Stk');
   var html = '';
   html += '<div class="modal-head"><h3>' + escapeHtml(a.name) + '</h3><button class="close" id="mClose">&times;</button></div>';
@@ -1755,7 +1762,7 @@ function buildLagerbuchDruckHtml(liste, f){
 }
 
 function modalLagerbuch(){
-  if(state.rolle !== 'chef'){ toast('Nur für Chef'); return; }
+  if(!darfLagerbuch()){ toast('Keine Berechtigung'); return; }
   var jetzt = new Date();
   var mm = jetzt.getMonth() + 1; if(mm < 10) mm = '0' + mm;
   if(!state.lagerbuchFilter) state.lagerbuchFilter = { monat: jetzt.getFullYear() + '-' + mm, art: '', person: '', artikel: '' };
@@ -1774,7 +1781,7 @@ function modalLagerbuch(){
 
   var html = '';
   html += '<div class="modal-head"><h3>Lagerbuch</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:10px;">Wer hat was entnommen oder eingebucht. Nur für dich sichtbar.</div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Wer hat was entnommen oder eingebucht. Nur für Chef und berechtigte Personen sichtbar.</div>';
   html += '<div class="row" style="gap:8px;">';
   html += '<select id="lbMonat" style="flex:1;"><option value="">Alle Monate</option>';
   monatListe.forEach(function(m){ html += '<option value="' + m + '"' + (f.monat === m ? ' selected' : '') + '>' + lagerbuchMonatText(m) + '</option>'; });
@@ -2738,7 +2745,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
 var CHEF_PIN = '0239';
 var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
-  { name: 'Janiba Wolfgang sen.', pin: '8276' },
+  { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true },
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
   { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true }
