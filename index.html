@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 10:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 12:05</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6560,7 +6560,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 10:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 12:05</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -7123,7 +7123,7 @@ function aufgZeileHtml(a, istChef){
     h += '</div>';
   }
   h += '</div>';
-  if(istChef) h += '<button class="btn small secondary" data-aufgdel="' + escapeHtml(a.id) + '">&times;</button>';
+  if(istChef) h += '<div style="display:flex; gap:6px; flex-shrink:0;"><button class="btn small secondary" data-aufgedit="' + escapeHtml(a.id) + '" aria-label="Bearbeiten">&#9998;</button><button class="btn small secondary" data-aufgdel="' + escapeHtml(a.id) + '">&times;</button></div>';
   h += '</div>';
   return h;
 }
@@ -7235,7 +7235,51 @@ function aufgDateiAnzeigen(aufgId, did){
     };
   }).catch(function(){ toast('Datei konnte nicht geladen werden'); });
 }
+function modalAufgabeBearbeiten(id){
+  var a = (state.aufgaben || []).filter(function(x){ return x.id === id; })[0];
+  if(!a) return;
+  var emp = aufgEmpf(a);
+  var cbStil = 'width:22px; height:22px; margin:0; padding:0; flex-shrink:0;';
+  var zeilenStil = 'display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:15px; color:var(--ink); margin:0;';
+  var html = '<div class="modal-head"><h3>Aufgabe bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>Aufgabe</label><textarea id="aeText" rows="3">' + escapeHtml(a.text || '') + '</textarea>';
+  html += '<label>Monat</label><input type="month" id="aeMonat" value="' + escapeHtml(a.monat || aufgMonatKey(new Date())) + '">';
+  html += '<label>Für wen? (mehrere möglich)</label><div style="margin-bottom:10px;">';
+  html += '<label style="' + zeilenStil + '"><input type="checkbox" data-aewer="alle" style="' + cbStil + '"' + (emp.indexOf('alle') > -1 ? ' checked' : '') + '> <b>Alle Mitarbeiter</b></label>';
+  zeitMitarbeiterNamen().forEach(function(n){
+    html += '<label style="' + zeilenStil + '"><input type="checkbox" data-aewer="' + escapeHtml(n) + '" style="' + cbStil + '"' + (emp.indexOf(n) > -1 ? ' checked' : '') + '> ' + escapeHtml(n) + (n === CHEF_NAME ? ' (Chef)' : '') + '</label>';
+  });
+  html += '</div>';
+  html += '<button class="btn block" id="aeSpeichern">Speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('[data-aewer]').forEach(function(c){
+    c.onchange = function(){
+      var istAlle = c.getAttribute('data-aewer') === 'alle';
+      document.querySelectorAll('[data-aewer]').forEach(function(o){
+        if(o === c) return;
+        if(istAlle && c.checked) o.checked = false;
+        if(!istAlle && c.checked && o.getAttribute('data-aewer') === 'alle') o.checked = false;
+      });
+    };
+  });
+  document.getElementById('aeSpeichern').onclick = function(){
+    var t = document.getElementById('aeText').value.trim();
+    if(!t){ toast('Bitte Text eingeben'); return; }
+    var gew = [];
+    document.querySelectorAll('[data-aewer]').forEach(function(c){ if(c.checked) gew.push(c.getAttribute('data-aewer')); });
+    if(!gew.length){ toast('Bitte mindestens eine Person ankreuzen'); return; }
+    if(gew.indexOf('alle') > -1) gew = ['alle'];
+    var mon = document.getElementById('aeMonat').value;
+    if(!/^\d{4}-\d{2}$/.test(mon)) mon = a.monat || aufgMonatKey(new Date());
+    a.text = t; a.mitarbeiter = gew[0]; a.mitarbeiterListe = gew; a.monat = mon;
+    dbPut('aufgaben', a, function(){ closeModal(); toast('Aufgabe gespeichert'); render(); });
+  };
+}
 function bindAufgaben(){
+  document.querySelectorAll('[data-aufgedit]').forEach(function(b){
+    b.onclick = function(){ modalAufgabeBearbeiten(b.getAttribute('data-aufgedit')); };
+  });
   var z = document.getElementById('aufgZurueck');
   if(z) z.onclick = function(){ state.aufgMonat = aufgMonatVerschieben(state.aufgMonat, -1); render(); };
   var v = document.getElementById('aufgVor');
