@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 17:35</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 21:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -2386,7 +2386,13 @@ function naechsterTerminNach(datumIso, intervallMonate){
 }
 
 function naechsterTerminBeiAbschluss(g, jetztIso){
-  return naechsterTerminNach(jetztIso, g.intervallMonate);
+  var r = naechsterTerminNach(jetztIso, g.intervallMonate);
+  // Nachträgliches Datum: Nie einen bereits überfälligen Termin nach einer Erledigung setzen
+  try {
+    var d = new Date(); var heute = d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+    if(r && r < heute){ r = naechsterTerminNach(new Date().toISOString(), g.intervallMonate); }
+  } catch(e){}
+  return r;
 }
 
 function neuenOffenenTerminAnlegen(g, cb){
@@ -6872,7 +6878,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 17:35</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 21:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
