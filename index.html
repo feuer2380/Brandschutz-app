@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 17:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 17:35</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1797,7 +1797,7 @@ function modalLagerbuch(){
   html += '<select id="lbArtikel" style="flex:1;"><option value="">Alle Artikel</option>';
   artikelListe.forEach(function(a){ html += '<option value="' + a.id + '"' + (f.artikel === a.id ? ' selected' : '') + '>' + escapeHtml(a.name) + '</option>'; });
   html += '</select></div>';
-  html += '<button type="button" class="btn block secondary" id="lbDrucken" style="margin-top:10px;">Drucken / Als PDF teilen</button>';
+  html += '<div class="row" style="gap:8px; margin-top:10px;"><button type="button" class="btn block secondary" id="lbDrucken" style="flex:2;">Drucken / Als PDF teilen</button><button type="button" class="btn block secondary" id="lbReset" style="flex:1;">Filter löschen</button></div>';
   html += '<div id="lbInhalt" style="margin-top:12px;">' + lagerbuchListeHtml(lagerbuchGefiltert(f)) + '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -1807,6 +1807,20 @@ function modalLagerbuch(){
     f.person = document.getElementById('lbPerson').value;
     f.artikel = document.getElementById('lbArtikel').value;
     document.getElementById('lbInhalt').innerHTML = lagerbuchListeHtml(lagerbuchGefiltert(f));
+    lbDruckKnopf();
+  };
+  var lbDruckKnopf = function(){
+    var n = lagerbuchGefiltert(f).length;
+    var b = document.getElementById('lbDrucken');
+    b.textContent = n ? 'Drucken / Als PDF teilen (' + n + ' Einträge)' : 'Nichts zu drucken – Filter ändern';
+    b.style.opacity = n ? '' : '.55';
+  };
+  lbDruckKnopf();
+  document.getElementById('lbReset').onclick = function(){
+    f.monat = ''; f.art = ''; f.person = ''; f.artikel = '';
+    document.getElementById('lbMonat').value = ''; document.getElementById('lbArt').value = '';
+    document.getElementById('lbPerson').value = ''; document.getElementById('lbArtikel').value = '';
+    aktualisieren();
   };
   document.getElementById('lbMonat').onchange = aktualisieren;
   document.getElementById('lbArt').onchange = aktualisieren;
@@ -1814,7 +1828,7 @@ function modalLagerbuch(){
   document.getElementById('lbArtikel').onchange = aktualisieren;
   document.getElementById('lbDrucken').onclick = function(){
     var liste = lagerbuchGefiltert(f);
-    if(liste.length === 0){ toast('Keine Bewegungen zum Drucken'); return; }
+    if(liste.length === 0){ toast('Keine Bewegungen zum Drucken – bitte Filter ändern oder „Filter löschen“'); return; }
     closeModal();
     bsvDruckenOderTeilen(buildLagerbuchDruckHtml(liste, f), 'Lagerbuch.pdf');
   };
@@ -6858,7 +6872,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 17:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 17:35</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
