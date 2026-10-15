@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 14.10. 22:25</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 10:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6560,7 +6560,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 14.10. 22:25</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 10:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -7071,16 +7071,28 @@ function kannAufgabenVergeben(){
   var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
   return !!(m && m.aufgabenVergeben);
 }
+function aufgEmpf(a){
+  return (a.mitarbeiterListe && a.mitarbeiterListe.length) ? a.mitarbeiterListe : [a.mitarbeiter];
+}
+function aufgGiltFuer(a, name, mitAlle){
+  var l = aufgEmpf(a);
+  return l.indexOf(name) > -1 || (mitAlle && l.indexOf('alle') > -1);
+}
+function aufgEmpfText(a){
+  var l = aufgEmpf(a);
+  if(l.indexOf('alle') > -1) return 'alle Mitarbeiter';
+  return l.map(function(n){ return escapeHtml(n) + (n === CHEF_NAME ? ' (Chef)' : ''); }).join(', ');
+}
 function aufgFuerMich(a){
   if(kannAufgabenVergeben()) return true;
-  return a.mitarbeiter === 'alle' || a.mitarbeiter === state.mitarbeiterName;
+  return aufgGiltFuer(a, state.mitarbeiterName, true);
 }
 function aufgabenOffenFuerMich(){
   var aktuell = aufgMonatKey(new Date());
   return (state.aufgaben || []).filter(function(a){
     if(a.erledigt || !a.monat || a.monat > aktuell) return false;
-    if(state.rolle === 'chef') return a.mitarbeiter === CHEF_NAME;
-    return a.mitarbeiter === 'alle' || a.mitarbeiter === state.mitarbeiterName;
+    if(state.rolle === 'chef') return aufgGiltFuer(a, CHEF_NAME, false);
+    return aufgGiltFuer(a, state.mitarbeiterName, true);
   }).length;
 }
 function aufgMonatText(key){
@@ -7098,7 +7110,7 @@ function aufgZeileHtml(a, istChef){
   h += '<div style="flex:1; min-width:0;">';
   h += '<div style="font-size:15px; word-wrap:break-word;' + (a.erledigt ? ' text-decoration:line-through; color:#777;' : '') + '">' + escapeHtml(a.text) + '</div>';
   var meta = [];
-  if(istChef) meta.push('Für: ' + (a.mitarbeiter === 'alle' ? 'alle Mitarbeiter' : escapeHtml(a.mitarbeiter) + (a.mitarbeiter === CHEF_NAME ? ' (Chef)' : '')));
+  if(istChef) meta.push('Für: ' + aufgEmpfText(a));
   if(a.erledigt && a.erledigtAm) meta.push('erledigt ' + fmtDate(a.erledigtAm) + (a.erledigtVon ? ' von ' + escapeHtml(a.erledigtVon) : ''));
   if(meta.length) h += '<div class="meta">' + meta.join(' &middot; ') + '</div>';
   var dl = a.dateien || [];
@@ -7128,9 +7140,12 @@ function renderAufgaben(){
   if(istChef){
     html += '<div class="card">';
     html += '<label>Neue Aufgabe</label><input type="text" id="aufgText" placeholder="z.B. Lager aufräumen, Fahrzeug waschen">';
-    html += '<label>Für wen?</label><select id="aufgWer"><option value="alle">Alle Mitarbeiter</option>';
-    zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + (n === CHEF_NAME ? ' (Chef)' : '') + '</option>'; });
-    html += '</select>';
+    html += '<label>Für wen? (mehrere möglich)</label><div id="aufgWer" style="margin-bottom:6px;">';
+    var cbStil = 'width:22px; height:22px; margin:0; padding:0; flex-shrink:0;';
+    var zeilenStil = 'display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:15px; color:var(--ink); margin:0;';
+    html += '<label style="' + zeilenStil + '"><input type="checkbox" data-aufgwer="alle" style="' + cbStil + '"> <b>Alle Mitarbeiter</b></label>';
+    zeitMitarbeiterNamen().forEach(function(n){ html += '<label style="' + zeilenStil + '"><input type="checkbox" data-aufgwer="' + escapeHtml(n) + '" style="' + cbStil + '"> ' + escapeHtml(n) + (n === CHEF_NAME ? ' (Chef)' : '') + '</label>'; });
+    html += '</div>';
     html += '<button class="btn block" id="aufgAdd" style="margin-top:10px;">Aufgabe hinzufügen (' + aufgMonatText(mon) + ')</button>';
     html += '</div>';
   }
@@ -7229,7 +7244,11 @@ function bindAufgaben(){
   if(add) add.onclick = function(){
     var t = document.getElementById('aufgText').value.trim();
     if(!t){ toast('Bitte Text eingeben'); return; }
-    var a = { id: uid(), text: t, mitarbeiter: document.getElementById('aufgWer').value, monat: state.aufgMonat,
+    var gew = [];
+    document.querySelectorAll('[data-aufgwer]').forEach(function(c){ if(c.checked) gew.push(c.getAttribute('data-aufgwer')); });
+    if(!gew.length){ toast('Bitte mindestens eine Person ankreuzen'); return; }
+    if(gew.indexOf('alle') > -1) gew = ['alle'];
+    var a = { id: uid(), text: t, mitarbeiter: gew[0], mitarbeiterListe: gew, monat: state.aufgMonat,
       erledigt: false, erledigtAm: null, erledigtVon: null, erstelltAm: new Date().toISOString() };
     dbPut('aufgaben', a, function(){
       if(!state.aufgaben) state.aufgaben = [];
@@ -7237,6 +7256,16 @@ function bindAufgaben(){
       render();
     });
   };
+  document.querySelectorAll('[data-aufgwer]').forEach(function(c){
+    c.onchange = function(){
+      var istAlle = c.getAttribute('data-aufgwer') === 'alle';
+      document.querySelectorAll('[data-aufgwer]').forEach(function(o){
+        if(o === c) return;
+        if(istAlle && c.checked) o.checked = false;
+        if(!istAlle && c.checked && o.getAttribute('data-aufgwer') === 'alle') o.checked = false;
+      });
+    };
+  });
   document.querySelectorAll('[data-aufgcheck]').forEach(function(cb){
     cb.onchange = function(){
       var id = cb.getAttribute('data-aufgcheck');
