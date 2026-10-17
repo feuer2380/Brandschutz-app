@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 17.10. 11:45</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 17.10. 12:25</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -986,14 +986,20 @@ function geraetFuerPruefung(p){
   return state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] || null;
 }
 
+function istVollsicht(){
+  if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !!(m && m.vollzugriff);
+}
+function istEingeschraenkt(){ return state.rolle === 'mitarbeiter' && !istVollsicht(); }
 function pruefungFuerMich(p){
-  if(state.rolle !== 'mitarbeiter') return true;
+  if(!istEingeschraenkt()) return true;
   var g = geraetFuerPruefung(p);
-  if(!g || !g.zustaendig) return true;
+  if(!g || !g.zustaendig) return false;
   return g.zustaendig === state.mitarbeiterName;
 }
 function zuordSelectHtml(p){
-  if(state.rolle !== 'chef') return '';
+  if(!istVollsicht()) return '';
   var g = geraetFuerPruefung(p);
   if(!g) return '';
   var h = '<select class="zuordSel" data-gid="' + g.id + '" style="margin-top:6px; font-size:14px; padding:6px 8px;"><option value="">&#128100; Wer macht das? &ndash; offen</option>';
@@ -1028,7 +1034,7 @@ function kundeIstAktiv(kundeId){
 }
 
 function renderDashboard(){
-  var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId); });
+  var offen = state.pruefungen.filter(function(p){ return !p.erledigt && kundeIstAktiv(p.kundeId) && pruefungFuerMich(p); });
   var jetztFuerMonatslaenge = new Date();
   var naechsterMonatDatum = new Date(jetztFuerMonatslaenge.getFullYear(), jetztFuerMonatslaenge.getMonth() + 1, 1);
   var naechsterMonatIndex = naechsterMonatDatum.getMonth();
@@ -1049,7 +1055,7 @@ function renderDashboard(){
     return d.getMonth() === jetzt.getMonth() && d.getFullYear() === jetzt.getFullYear();
   });
   diesenMonat.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
-  if(state.rolle === 'mitarbeiter'){
+  if(istEingeschraenkt()){
     diesenMonat = diesenMonat.filter(function(p){
       var k = kundeFuerPruefung(p);
       return k && kundeSichtbarFuerRolle(k) && pruefungFuerMich(p);
@@ -1058,7 +1064,7 @@ function renderDashboard(){
 
   var kundenSichtbar = state.kunden.filter(function(x){ return !x.geloescht; });
   var geraeteSichtbar = geraeteAktiv;
-  if(state.rolle === 'mitarbeiter'){
+  if(istEingeschraenkt()){
     kundenSichtbar = kundenSichtbar.filter(kundeSichtbarFuerRolle);
     var sichtbareKundenIds = {};
     kundenSichtbar.forEach(function(k){ sichtbareKundenIds[k.id] = true; });
@@ -1082,7 +1088,7 @@ function renderDashboard(){
   html += '<div class="stat"><div class="n">' + geraeteSichtbar.length + '</div><div class="l">Geräte</div></div>';
   html += '<div class="stat"><div class="n" style="color:' + (ueberfaelligGeraete.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaelligGeraete.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
-  html += '<button class="btn block secondary" id="baldFaelligDruckBtn" style="margin-top:12px;">Bald fällig drucken (für unterwegs)</button>';
+  if(istVollsicht()) html += '<button class="btn block secondary" id="baldFaelligDruckBtn" style="margin-top:12px;">Bald fällig drucken (für unterwegs)</button>';
 
   var lagerNiedrig = state.lagerartikel.filter(function(a){ return (a.mindestbestand != null) && (a.bestand <= a.mindestbestand); });
   if(lagerNiedrig.length > 0){
@@ -1095,6 +1101,7 @@ function renderDashboard(){
   }
 
   // ---- Tagesübersicht: was wurde an einem Tag erledigt (blättern mit Pfeilen), dazu heute/morgen geplant ----
+  var htmlVorTagesuebersicht = html.length;
   var tagOffset = state.dashTagOffset || 0;
   var tagDatum = new Date(); tagDatum.setHours(12, 0, 0, 0); tagDatum.setDate(tagDatum.getDate() + tagOffset);
   var tagKeyAnzeige = zeitTagKey(tagDatum.toISOString());
@@ -1127,6 +1134,7 @@ function renderDashboard(){
     html += '<button type="button" class="btn block secondary" id="dashTagDruckBtn" style="margin-top:4px;">Tagesbericht drucken (' + erledigtTag.length + ' erledigt)</button>';
   }
   html += '<button type="button" class="btn block secondary" id="dashTbFormularBtn" style="margin-top:8px;">Tagesbericht-Formular drucken (leer)</button>';
+  if(!istVollsicht()){ html = html.substring(0, htmlVorTagesuebersicht); }
   if(tagOffset === 0){
     var morgenKey = zeitTagKey(new Date(Date.now() + 86400000).toISOString());
     var geplant = offen.filter(function(p){
@@ -1145,7 +1153,7 @@ function renderDashboard(){
   var jetztKeyDash = jetzt.getFullYear() + '-' + ((jetzt.getMonth() + 1) < 10 ? '0' : '') + (jetzt.getMonth() + 1);
   var vmFaellig = [];
   state.kunden.forEach(function(kv){
-    if(kv.geloescht || kv.stillgelegt) return;
+    if(kv.geloescht || kv.stillgelegt || istEingeschraenkt()) return;
     (kv.vermerke || []).forEach(function(v){
       if(!v.erledigt && v.faellig && String(v.faellig).length >= 7 && String(v.faellig).substring(0, 7) <= jetztKeyDash) vmFaellig.push({ k: kv, v: v });
     });
@@ -1274,6 +1282,7 @@ function renderDashboard(){
   var innenrevListe = [];
   state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); }).forEach(function(g){
     var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+    if(istEingeschraenkt() && g.zustaendig !== state.mitarbeiterName) return;
     if(bj && bj.cls === 'soon' && bj.label.indexOf('Innenrevision') === 0){
       innenrevListe.push({ geraet:g, bj:bj });
     }
@@ -1326,7 +1335,7 @@ function renderDashboard(){
     if(geraeteFilter === 'ok') return st.cls === 'ok';
     return true;
   });
-  if(state.rolle === 'mitarbeiter'){
+  if(istEingeschraenkt()){
     var heuteFuerSicht = new Date();
     var sichtMonat = heuteFuerSicht.getMonth();
     var sichtJahr = heuteFuerSicht.getFullYear();
@@ -1336,6 +1345,7 @@ function renderDashboard(){
     }
     var sichtbarBisDatum = new Date(sichtJahr, sichtMonat + 1, 0, 23, 59, 59);
     gefiltert = gefiltert.filter(function(g){
+      if(g.zustaendig !== state.mitarbeiterName) return false;
       if(!g.naechstePruefung) return true;
       return new Date(g.naechstePruefung) <= sichtbarBisDatum;
     });
@@ -2784,10 +2794,10 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
 var CHEF_PIN = '0239';
 var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
-  { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true },
+  { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true, vollzugriff: true },
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
-  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true }
+  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
 var ZEIT_ALTE_NAMEN = {
@@ -2808,7 +2818,7 @@ function zeitNamenMigrieren(){
 }
 
 function kundeSichtbarFuerRolle(k){
-  if(state.rolle !== 'mitarbeiter') return true;
+  if(!istEingeschraenkt()) return true;
   var heute = new Date();
   var monatsEnde = new Date(heute.getFullYear(), heute.getMonth() + 1, 0, 23, 59, 59);
   return state.pruefungen.some(function(p){
@@ -3113,13 +3123,13 @@ function renderPruefungen(){
 
   sorted = sorted.filter(function(p){ return kundeIstAktiv(p.kundeId); });
 
-  if(state.rolle === 'mitarbeiter'){
+  if(istEingeschraenkt()){
     sorted = sorted.filter(function(p){
       var k = kundeFuerPruefung(p);
       return k && kundeSichtbarFuerRolle(k) && pruefungFuerMich(p);
     });
   }
-  if(state.rolle === 'chef' && state.pruefungPerson){
+  if(istVollsicht() && state.pruefungPerson){
     sorted = sorted.filter(function(p){
       var g = geraetFuerPruefung(p);
       if(state.pruefungPerson === '__keine') return !(g && g.zustaendig);
@@ -3146,7 +3156,7 @@ function renderPruefungen(){
   html += '</div>';
 
   html += '<input id="pruefungSuchInput" type="text" placeholder="Suche nach Kunde, Gerät oder Standort..." value="' + escapeHtml(state.pruefungSuche || '') + '" style="margin-bottom:12px;">';
-  if(state.rolle === 'chef'){
+  if(istVollsicht()){
     html += '<select id="pruefungPersonSel" style="margin-bottom:12px;"><option value="">Alle Mitarbeiter</option>';
     zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (state.pruefungPerson === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
     html += '<option value="__keine"' + (state.pruefungPerson === '__keine' ? ' selected' : '') + '>Nicht zugeordnet</option></select>';
@@ -6924,7 +6934,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 17.10. 11:45</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 17.10. 12:25</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
