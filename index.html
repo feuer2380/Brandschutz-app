@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 17.10. 12:25</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 17.10. 13:00</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1553,6 +1553,7 @@ function modalLagerartikelBearbeiten(artikelId){
   html += '<div class="modal-head"><h3>Lagerartikel bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Name</label><input id="fLaName2" type="text" value="' + escapeHtml(a.name || '') + '">';
   html += '<label>Einheit</label><input id="fLaEinheit2" type="text" value="' + escapeHtml(a.einheit || 'Stk') + '">';
+  html += '<label>Lagerbestand (tatsächlich vorhanden)</label><input id="fLaBestand2" type="number" inputmode="numeric" value="' + (a.bestand || 0) + '">';
   html += '<label>Mindestbestand (optional, für Warnung)</label><input id="fLaMindest2" type="number" inputmode="numeric" value="' + (a.mindestbestand != null ? a.mindestbestand : '') + '">';
   html += '<label>Externe ID (altes QR-Aufkleber-System, optional)</label><input id="fLaExterneId2" type="text" value="' + escapeHtml(a.externeId || '') + '" placeholder="z.B. 1009">';
   html += '<button class="btn block" id="fLaSpeichern2" style="margin-top:14px;">Speichern</button>';
@@ -1570,6 +1571,11 @@ function modalLagerartikelBearbeiten(artikelId){
     a.einheit = document.getElementById('fLaEinheit2').value.trim() || 'Stk';
     a.mindestbestand = document.getElementById('fLaMindest2').value ? parseInt(document.getElementById('fLaMindest2').value, 10) : null;
     a.externeId = externeIdNeu;
+    var bestandNeu = parseInt(document.getElementById('fLaBestand2').value, 10);
+    if(!isNaN(bestandNeu) && bestandNeu >= 0 && bestandNeu !== (a.bestand || 0)){
+      lagerBewegungBuchen(a, bestandNeu, 'inventur', { notiz: 'Bestand beim Bearbeiten korrigiert' }, closeModal);
+      return;
+    }
     dbPut('lagerartikel', a, function(){
       loadAll(function(){ render(); closeModal(); toast('Lagerartikel gespeichert'); });
     });
@@ -1624,7 +1630,7 @@ function modalLagerArtikelAnpassen(artikelId){
   html += '<label style="margin-top:14px;">Menge</label>';
   html += '<div class="row" style="gap:8px;">';
   html += '<button type="button" class="btn secondary" id="laMengeMinus" style="flex:0 0 auto; padding:10px 18px;">&minus;</button>';
-  html += '<input id="laMenge" type="number" inputmode="numeric" value="1" min="1" style="flex:1; text-align:center; font-size:18px;">';
+  html += '<input id="laMenge" type="number" inputmode="numeric" value="1" style="flex:1; text-align:center; font-size:18px;">';
   html += '<button type="button" class="btn secondary" id="laMengePlus" style="flex:0 0 auto; padding:10px 18px;">+</button>';
   html += '</div>';
 
@@ -1665,11 +1671,11 @@ function modalLagerArtikelAnpassen(artikelId){
   var mengeFeld = document.getElementById('laMenge');
   var leseMenge = function(){
     var m = parseInt(mengeFeld.value, 10);
-    if(isNaN(m) || m < 1){ toast('Bitte Menge ab 1 eingeben'); return 0; }
-    return m;
+    if(isNaN(m) || m === 0){ toast('Bitte eine Menge eingeben (nicht 0)'); return 0; }
+    return Math.abs(m);
   };
-  document.getElementById('laMengeMinus').onclick = function(){ var m = parseInt(mengeFeld.value, 10) || 1; mengeFeld.value = Math.max(1, m - 1); };
-  document.getElementById('laMengePlus').onclick = function(){ var m = parseInt(mengeFeld.value, 10) || 0; mengeFeld.value = m + 1; };
+  document.getElementById('laMengeMinus').onclick = function(){ var m = parseInt(mengeFeld.value, 10); if(isNaN(m)) m = 1; mengeFeld.value = m - 1; };
+  document.getElementById('laMengePlus').onclick = function(){ var m = parseInt(mengeFeld.value, 10); if(isNaN(m)) m = 0; mengeFeld.value = m + 1; };
   var leseExtra = function(){
     return { kunde: document.getElementById('laKunde').value.trim(), notiz: document.getElementById('laNotiz').value.trim() };
   };
@@ -6934,7 +6940,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 17.10. 12:25</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 17.10. 13:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
