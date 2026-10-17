@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 15.10. 21:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 17.10. 11:20</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -986,6 +986,14 @@ function geraetFuerPruefung(p){
   return state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] || null;
 }
 
+function pruefungFuerMich(p){
+  if(state.rolle !== 'mitarbeiter') return true;
+  var g = geraetFuerPruefung(p);
+  if(!g || !g.zustaendig) return true;
+  return g.zustaendig === state.mitarbeiterName;
+}
+function zustaendigKurz(n){ return n === CHEF_NAME ? 'Chef' : String(n || ''); }
+
 function pruefungAnzeigeText(p){
   var g = geraetFuerPruefung(p);
   if(g){
@@ -1000,6 +1008,7 @@ function pruefungAnzeigeText(p){
       if(nrAnzeige) text += ' &middot; ' + nrAnzeige;
       if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
     }
+    if(g.zustaendig) text += ' &middot; <b style="color:#1d5fa8;">&#128100; ' + escapeHtml(zustaendigKurz(g.zustaendig)) + '</b>';
     return text;
   }
   return escapeHtml(p.typ || 'Prüfung');
@@ -1035,7 +1044,7 @@ function renderDashboard(){
   if(state.rolle === 'mitarbeiter'){
     diesenMonat = diesenMonat.filter(function(p){
       var k = kundeFuerPruefung(p);
-      return k && kundeSichtbarFuerRolle(k);
+      return k && kundeSichtbarFuerRolle(k) && pruefungFuerMich(p);
     });
   }
 
@@ -2794,6 +2803,7 @@ function kundeSichtbarFuerRolle(k){
   var monatsEnde = new Date(heute.getFullYear(), heute.getMonth() + 1, 0, 23, 59, 59);
   return state.pruefungen.some(function(p){
     if(p.kundeId !== k.id || p.erledigt) return false;
+    if(!pruefungFuerMich(p)) return false;
     return new Date(p.datum) <= monatsEnde;
   });
 }
@@ -3096,7 +3106,14 @@ function renderPruefungen(){
   if(state.rolle === 'mitarbeiter'){
     sorted = sorted.filter(function(p){
       var k = kundeFuerPruefung(p);
-      return k && kundeSichtbarFuerRolle(k);
+      return k && kundeSichtbarFuerRolle(k) && pruefungFuerMich(p);
+    });
+  }
+  if(state.rolle === 'chef' && state.pruefungPerson){
+    sorted = sorted.filter(function(p){
+      var g = geraetFuerPruefung(p);
+      if(state.pruefungPerson === '__keine') return !(g && g.zustaendig);
+      return g && g.zustaendig === state.pruefungPerson;
     });
   }
 
@@ -3119,6 +3136,11 @@ function renderPruefungen(){
   html += '</div>';
 
   html += '<input id="pruefungSuchInput" type="text" placeholder="Suche nach Kunde, Gerät oder Standort..." value="' + escapeHtml(state.pruefungSuche || '') + '" style="margin-bottom:12px;">';
+  if(state.rolle === 'chef'){
+    html += '<select id="pruefungPersonSel" style="margin-bottom:12px;"><option value="">Alle Mitarbeiter</option>';
+    zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (state.pruefungPerson === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
+    html += '<option value="__keine"' + (state.pruefungPerson === '__keine' ? ' selected' : '') + '>Nicht zugeordnet</option></select>';
+  }
 
   var zeitraumOptionen = [
     {tage:'', label:'Alle'},
@@ -5057,6 +5079,10 @@ function modalGeraetBearbeiten(geraetId){
     }
     html += '</div>';
   }
+  html += '<label>Zuständiger Mitarbeiter (muss die Prüfung/Begehung machen)</label><select id="fZustaendig"><option value="">– nicht zugeordnet –</option>';
+  zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
+  html += '</select>';
+  html += '<label style="display:flex; gap:8px; align-items:center; font-weight:400;"><input type="checkbox" id="fZustaendigAlle" style="width:auto;"> Allen Geräten dieses Kunden zuordnen</label>';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
   html += '<button class="btn block secondary" id="qrGeraetBtn" style="margin-top:10px;">QR-Code anzeigen</button>';
   html += '<button class="btn block secondary" id="btnGeraetVerschieben" style="margin-top:10px;">Zu anderem Kunden/Objekt verschieben</button>';
@@ -5088,6 +5114,16 @@ function modalGeraetBearbeiten(geraetId){
     if(fLetzterAkkutauschEl) g.letzterAkkutausch = fLetzterAkkutauschEl.value || null;
     if(fAkkuIntervallEl) g.akkuIntervallJahre = parseInt(fAkkuIntervallEl.value, 10);
     g.intervallMonate = parseInt(document.getElementById('fIntervall').value, 10);
+    var fZustEl = document.getElementById('fZustaendig');
+    if(fZustEl){
+      g.zustaendig = fZustEl.value || null;
+      var fZustAlleEl = document.getElementById('fZustaendigAlle');
+      if(fZustAlleEl && fZustAlleEl.checked){
+        state.geraete.forEach(function(x){
+          if(x.kundeId === g.kundeId && x.id !== g.id && !x.ausgeschieden){ x.zustaendig = g.zustaendig; try{ dbPut('geraete', x, function(){}); }catch(e){} }
+        });
+      }
+    }
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
     g.externeId = neueExterneId;
     g.standort = document.getElementById('fStandort').value.trim();
@@ -6878,7 +6914,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 15.10. 21:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 17.10. 11:20</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -9935,6 +9971,8 @@ function bindDynamic(){
     };
   }
 
+  var pruefungPersonSel = document.getElementById('pruefungPersonSel');
+  if(pruefungPersonSel){ pruefungPersonSel.onchange = function(){ state.pruefungPerson = pruefungPersonSel.value; render(); }; }
   var pruefungSuchInput = document.getElementById('pruefungSuchInput');
   if(pruefungSuchInput){
     pruefungSuchInput.oninput = function(){
