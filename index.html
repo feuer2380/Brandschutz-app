@@ -902,7 +902,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 17.10. 11:20</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 17.10. 11:45</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -991,6 +991,14 @@ function pruefungFuerMich(p){
   var g = geraetFuerPruefung(p);
   if(!g || !g.zustaendig) return true;
   return g.zustaendig === state.mitarbeiterName;
+}
+function zuordSelectHtml(p){
+  if(state.rolle !== 'chef') return '';
+  var g = geraetFuerPruefung(p);
+  if(!g) return '';
+  var h = '<select class="zuordSel" data-gid="' + g.id + '" style="margin-top:6px; font-size:14px; padding:6px 8px;"><option value="">&#128100; Wer macht das? &ndash; offen</option>';
+  zeitMitarbeiterNamen().forEach(function(n){ h += '<option value="' + escapeHtml(n) + '"' + (g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
+  return h + '</select>';
 }
 function zustaendigKurz(n){ return n === CHEF_NAME ? 'Chef' : String(n || ''); }
 
@@ -1176,6 +1184,7 @@ function renderDashboard(){
         html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
         html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div>';
         if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
+        html += zuordSelectHtml(p);
         html += '</div>';
       } else {
         var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['dm_' + kid]);
@@ -1187,6 +1196,7 @@ function renderDashboard(){
             var st = statusForDate(p.datum);
             html += '<div class="baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="cursor:pointer; ' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
             html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
+            html += zuordSelectHtml(p);
             html += '</div>';
           });
           if(k && k.adresse) html += '<div class="meta" style="margin-top:8px;">' + escapeHtml(k.adresse) + '</div>';
@@ -6914,7 +6924,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 17.10. 11:20</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 17.10. 11:45</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -9827,6 +9837,18 @@ function bindKundenCards(container){
     c.onclick = function(){
       state.activeKundeId = c.getAttribute('data-id');
       state.tab = 'kundeDetail';
+      render();
+    };
+  });
+  container.querySelectorAll('.zuordSel').forEach(function(sel){
+    sel.onclick = function(ev){ ev.stopPropagation(); };
+    sel.onchange = function(ev){
+      ev.stopPropagation();
+      var g = state.geraete.filter(function(x){ return x.id === sel.getAttribute('data-gid'); })[0];
+      if(!g) return;
+      g.zustaendig = sel.value || null;
+      try{ dbPut('geraete', g, function(){}); }catch(e){}
+      toast(g.zustaendig ? ('Zugeordnet: ' + zustaendigKurz(g.zustaendig)) : 'Zuordnung entfernt');
       render();
     };
   });
