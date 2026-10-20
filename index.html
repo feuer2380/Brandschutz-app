@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 17:20</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 17:55</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7039,7 +7039,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 17:20</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 17:55</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -9819,10 +9819,37 @@ function modalTagesberichtListe(kundeId){
   });
 }
 
+function tagesberichtVorgabe(kundeId){
+  var heuteKey = kalHeuteKey();
+  var ich = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
+  var kand = [];
+  (state.termine || []).forEach(function(t){
+    if(t.kundeId !== kundeId) return;
+    var pl = t.personen || [];
+    var wer = (pl.length && pl.indexOf('alle') < 0) ? (pl.indexOf(ich) >= 0 ? ich : pl[0]) : ich;
+    kand.push({ datum: String(t.datum).substring(0, 10), zeit: t.zeit || '', wer: wer });
+  });
+  state.pruefungen.forEach(function(p){
+    if(p.kundeId !== kundeId || p.erledigt) return;
+    var g = geraetFuerPruefung(p);
+    if(!g || !g.zustaendig) return;
+    kand.push({ datum: String(p.datum).substring(0, 10), zeit: p.zeit || '', wer: g.zustaendig });
+  });
+  // bevorzugt: heute (eigener Eintrag zuerst), sonst der nächste kommende Eintrag
+  var heuteListe = kand.filter(function(x){ return x.datum === heuteKey; });
+  var pick = heuteListe.filter(function(x){ return x.wer === ich; })[0] || heuteListe[0];
+  if(!pick){
+    var kommend = kand.filter(function(x){ return x.datum > heuteKey; }).sort(function(a, b){ return a.datum.localeCompare(b.datum); });
+    pick = kommend[0];
+  }
+  return { datum: pick ? pick.datum : heuteKey, techniker: pick ? pick.wer : ich, von: pick ? pick.zeit : '' };
+}
+
 function modalTagesberichtNeu(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
-  var heute = new Date().toISOString().substring(0,10);
+  var tbVg = tagesberichtVorgabe(kundeId);
+  var heute = tbVg.datum;
 
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
@@ -9830,9 +9857,9 @@ function modalTagesberichtNeu(kundeId){
   if(k.objekt) html += '<div class="meta">' + escapeHtml(k.objekt) + '</div>';
 
   html += '<label style="margin-top:10px;">Datum</label><input type="date" id="tbDatum" value="' + heute + '">';
-  html += '<label>Techniker</label><input type="text" id="tbTechniker" placeholder="Name">';
+  html += '<label>Techniker</label><input type="text" id="tbTechniker" placeholder="Name" value="' + escapeHtml(tbVg.techniker) + '">';
   html += '<div class="row" style="gap:8px;">';
-  html += '<div style="flex:1;"><label>Von</label><input type="time" id="tbVon"></div>';
+  html += '<div style="flex:1;"><label>Von</label><input type="time" id="tbVon" value="' + escapeHtml(tbVg.von) + '"></div>';
   html += '<div style="flex:1;"><label>Bis</label><input type="time" id="tbBis"></div>';
   html += '</div>';
   html += '<label>Anlage / Bereich</label><input type="text" id="tbAnlageBereich" placeholder="z.B. Küche, gesamtes Gebäude">';
@@ -10047,8 +10074,9 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
   html += tbBriefkopf(qrId);
 
   html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
-  html += tbKopfzeile('Datum', '', 'Techniker', '');
-  html += tbKopfzeile('Von', '', 'Bis', '');
+  var lvg = k ? tagesberichtVorgabe(k.id) : null;
+  html += tbKopfzeile('Datum', lvg ? fmtDate(lvg.datum) : '', 'Techniker', lvg ? escapeHtml(lvg.techniker || '') : '');
+  html += tbKopfzeile('Von', lvg ? escapeHtml(lvg.von || '') : '', 'Bis', '');
   html += tbKopfzeile('Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : ''), k ? escapeHtml(k.name) : '', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', '');
   html += '</table>';
