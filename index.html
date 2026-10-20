@@ -357,7 +357,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben', 'zeit_unterschriften', 'fahrzeuge', 'fahrten'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben', 'zeit_unterschriften', 'fahrzeuge', 'fahrten', 'termine'];
 var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
@@ -570,6 +570,7 @@ var state = {
   zeit_unterschriften: [],
   fahrzeuge: [],
   fahrten: [],
+  termine: [],
   fbFahrzeug: null,
   fbMonat: null,
   aufgMonat: null,
@@ -614,7 +615,10 @@ function loadAll(cb){
                               state.fahrzeuge = fz || [];
                               dbGetAll('fahrten', function(ft){
                                 state.fahrten = ft || [];
-                                cb();
+                                dbGetAll('termine', function(tm){
+                                  state.termine = tm || [];
+                                  cb();
+                                });
                               });
                             });
                           });
@@ -902,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 18.10. 14:05</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 15:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -937,12 +941,12 @@ function renderInner(){
   }
   if(tabsEl) tabsEl.style.display = '';
   if(fabEl){
-    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte' || state.tab === 'zeit' || state.tab === 'aufgaben' || state.tab === 'fahrtenbuch') ? 'none' : '';
+    fabEl.style.display = (state.tab === 'statistik' || state.tab === 'berichte' || state.tab === 'zeit' || state.tab === 'aufgaben' || state.tab === 'kalender' || state.tab === 'fahrtenbuch') ? 'none' : '';
     fabEl.classList.remove('fab-hidden');
   }
   document.querySelectorAll('.tabbtn').forEach(function(b){
     var dt = b.getAttribute('data-tab');
-    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit' || state.tab === 'aufgaben' || state.tab === 'fahrtenbuch'));
+    var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit' || state.tab === 'aufgaben' || state.tab === 'kalender' || state.tab === 'fahrtenbuch'));
     b.className = 'tabbtn' + (istAktiv ? ' active' : '');
   });
   if(state.tab === 'dashboard') m.innerHTML = renderDashboard();
@@ -956,12 +960,14 @@ function renderInner(){
   else if(state.tab === 'lager') m.innerHTML = renderLager();
   else if(state.tab === 'zeit') m.innerHTML = renderZeit();
   else if(state.tab === 'aufgaben') m.innerHTML = renderAufgaben();
+  else if(state.tab === 'kalender') m.innerHTML = renderKalender();
   else if(state.tab === 'fahrtenbuch') m.innerHTML = renderFahrtenbuch();
 
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
   if(state.tab === 'zeit') bindZeit();
   if(state.tab === 'aufgaben') bindAufgaben();
+  if(state.tab === 'kalender') bindKalender();
   if(state.tab === 'fahrtenbuch') bindFahrtenbuch();
   if(state.tab === 'scan') startScanner();
   if(fabEl && m.scrollHeight > m.clientHeight + 30){
@@ -6953,7 +6959,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 18.10. 14:05</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 15:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8005,6 +8011,194 @@ function buildFahrtenbuchHtml(fz, monKey){
   return h;
 }
 
+// ---------- Kalender (Termine + zugeteilte Prüfungen) ----------
+function kalHeuteKey(){
+  var d = new Date();
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+function kalPersonAktiv(){
+  if(istEingeschraenkt()) return state.mitarbeiterName;
+  return state.kalPerson || '';
+}
+function kalEintraegeFuerTag(key){
+  var person = kalPersonAktiv();
+  var res = [];
+  (state.termine || []).forEach(function(t){
+    if(String(t.datum || '').substring(0, 10) !== key) return;
+    var pl = t.personen || [];
+    if(person && pl.indexOf('alle') < 0 && pl.indexOf(person) < 0) return;
+    res.push({ art: 'termin', t: t, sort: (t.zeit || '99:99') });
+  });
+  state.pruefungen.forEach(function(p){
+    if(p.erledigt || String(p.datum || '').substring(0, 10) !== key) return;
+    if(!kundeIstAktiv(p.kundeId)) return;
+    var g = geraetFuerPruefung(p);
+    var z = g ? g.zustaendig : null;
+    if(person){ if(z !== person) return; }
+    else if(istEingeschraenkt()) return;
+    res.push({ art: 'pruefung', p: p, g: g, z: z, sort: '98:00' });
+  });
+  res.sort(function(a, b){ return a.sort.localeCompare(b.sort); });
+  return res;
+}
+
+function renderKalender(){
+  var jetzt = new Date();
+  var mk = state.kalMonat || (jetzt.getFullYear() + '-' + ('0' + (jetzt.getMonth() + 1)).slice(-2));
+  var jahr = parseInt(mk.substring(0, 4), 10), monat = parseInt(mk.substring(5, 7), 10) - 1;
+  var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var heute = kalHeuteKey();
+  var gewTag = state.kalTag || heute;
+  var voll = istVollsicht();
+  var html = '';
+  html += '<div class="row" style="align-items:center; margin-bottom:10px;"><div class="section-title" style="margin:0;">Kalender</div>';
+  if(voll) html += '<button type="button" class="btn small" id="kalNeu">+ Termin</button>';
+  html += '</div>';
+  if(voll){
+    html += '<select id="kalPersonSel" style="margin-bottom:10px;"><option value="">Alle Mitarbeiter</option>';
+    zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + ((state.kalPerson || '') === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
+    html += '</select>';
+  } else {
+    html += '<div class="meta" style="margin-bottom:8px;">Deine Termine &middot; ' + escapeHtml(state.mitarbeiterName || '') + '</div>';
+  }
+  html += '<div class="row" style="align-items:center; margin-bottom:8px;"><button class="btn small secondary" id="kalZurueck">&lsaquo;</button><div style="font-weight:700; text-align:center; flex:1;">' + monatNamen[monat] + ' ' + jahr + '</div><button class="btn small secondary" id="kalVor">&rsaquo;</button></div>';
+  var wt = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  html += '<div style="display:grid; grid-template-columns:repeat(7,1fr); gap:3px; text-align:center;">';
+  wt.forEach(function(w){ html += '<div class="meta" style="font-weight:700;">' + w + '</div>'; });
+  var erster = new Date(jahr, monat, 1);
+  var vorlauf = (erster.getDay() + 6) % 7;
+  var tageImMonat = new Date(jahr, monat + 1, 0).getDate();
+  for(var i = 0; i < vorlauf; i++) html += '<div></div>';
+  for(var d = 1; d <= tageImMonat; d++){
+    var key = jahr + '-' + ('0' + (monat + 1)).slice(-2) + '-' + ('0' + d).slice(-2);
+    var es = kalEintraegeFuerTag(key);
+    var nT = es.filter(function(e){ return e.art === 'termin'; }).length;
+    var nP = es.length - nT;
+    var istHeute = key === heute, istGew = key === gewTag;
+    html += '<button type="button" data-kaltag="' + key + '" style="border:' + (istGew ? '2px solid #1d5fa8' : '1px solid var(--line)') + '; background:' + (istHeute ? '#fbe9c8' : 'var(--card)') + '; border-radius:8px; padding:6px 0; min-height:52px; font-size:14px; color:var(--ink);">' + d;
+    html += '<div style="display:flex; gap:3px; justify-content:center; margin-top:3px; min-height:14px;">';
+    if(nT) html += '<span style="background:#1d5fa8; color:#fff; border-radius:8px; font-size:10px; padding:0 5px;">' + nT + '</span>';
+    if(nP) html += '<span style="background:#c26a12; color:#fff; border-radius:8px; font-size:10px; padding:0 5px;">' + nP + '</span>';
+    html += '</div></button>';
+  }
+  html += '</div>';
+  html += '<div class="meta" style="margin-top:6px;"><span style="background:#1d5fa8; color:#fff; border-radius:8px; font-size:10px; padding:0 6px;">&nbsp;</span> Termin &nbsp; <span style="background:#c26a12; color:#fff; border-radius:8px; font-size:10px; padding:0 6px;">&nbsp;</span> Prüfung/Begehung</div>';
+  var tg = gewTag.split('-');
+  html += '<div class="section-title" style="margin-top:14px;">' + parseInt(tg[2], 10) + '. ' + monatNamen[parseInt(tg[1], 10) - 1] + ' ' + tg[0] + '</div>';
+  var tagEs = kalEintraegeFuerTag(gewTag);
+  if(!tagEs.length){
+    html += '<div class="empty kompakt">Keine Einträge an diesem Tag</div>';
+  }
+  tagEs.forEach(function(e){
+    if(e.art === 'termin'){
+      var t = e.t;
+      var kt = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+      var pers = (t.personen || []).indexOf('alle') >= 0 ? 'Alle Mitarbeiter' : (t.personen || []).map(zustaendigKurz).join(', ');
+      html += '<div class="card"' + (voll ? ' data-kaltermin="' + t.id + '" style="cursor:pointer; border-left:4px solid #1d5fa8;"' : ' style="border-left:4px solid #1d5fa8;"') + '>';
+      html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '') + '</div>';
+      if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
+      html += '<div class="meta">&#128100; ' + escapeHtml(pers) + '</div>';
+      if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
+      html += '</div>';
+    } else {
+      var kp = kundeFuerPruefung(e.p);
+      html += '<div class="card kunde-card" data-id="' + (kp ? kp.id : '') + '" style="border-left:4px solid #c26a12;">';
+      html += '<div class="row"><h3>' + (kp ? escapeHtml(kp.name) : 'Unbekannt') + '</h3><span class="badge soon">Prüfung</span></div>';
+      html += '<div class="meta">' + pruefungAnzeigeText(e.p) + '</div>';
+      if(!e.z) html += '<div class="meta" style="color:#c23f12;">Noch niemandem zugeteilt</div>';
+      html += '</div>';
+    }
+  });
+  return html;
+}
+
+function modalKalenderTermin(terminId, datumVorgabe){
+  var t = terminId ? (state.termine || []).filter(function(x){ return x.id === terminId; })[0] : null;
+  var emp = t ? (t.personen || []) : [];
+  var cbStil = 'width:22px; height:22px; margin:0;';
+  var zeilenStil = 'display:flex; align-items:center; gap:10px; padding:6px 0; font-weight:400;';
+  var html = '';
+  html += '<div class="modal-head"><h3>' + (t ? 'Termin bearbeiten' : 'Neuer Termin') + '</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<label>Titel</label><input id="ktTitel" type="text" placeholder="z.B. Begehung, Besprechung" value="' + escapeHtml(t ? (t.titel || '') : '') + '">';
+  html += '<label>Datum</label><input id="ktDatum" type="date" value="' + escapeHtml(t ? String(t.datum).substring(0, 10) : (datumVorgabe || kalHeuteKey())) + '">';
+  html += '<label>Uhrzeit (optional)</label><input id="ktZeit" type="time" value="' + escapeHtml(t ? (t.zeit || '') : '') + '">';
+  html += '<label>Kunde (optional)</label><select id="ktKunde"><option value="">–</option>';
+  state.kunden.filter(function(k){ return !k.geloescht; }).slice().sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); }).forEach(function(k){
+    html += '<option value="' + k.id + '"' + (t && t.kundeId === k.id ? ' selected' : '') + '>' + escapeHtml(k.name) + '</option>';
+  });
+  html += '</select>';
+  html += '<label>Notiz (optional)</label><input id="ktNotiz" type="text" value="' + escapeHtml(t ? (t.notiz || '') : '') + '">';
+  html += '<label>Für wen? (mehrere möglich)</label><div style="margin-bottom:10px;">';
+  html += '<label style="' + zeilenStil + '"><input type="checkbox" data-ktwer="alle" style="' + cbStil + '"' + (emp.indexOf('alle') > -1 ? ' checked' : '') + '> <b>Alle Mitarbeiter</b></label>';
+  zeitMitarbeiterNamen().forEach(function(n){
+    html += '<label style="' + zeilenStil + '"><input type="checkbox" data-ktwer="' + escapeHtml(n) + '" style="' + cbStil + '"' + (emp.indexOf(n) > -1 ? ' checked' : '') + '> ' + escapeHtml(n) + '</label>';
+  });
+  html += '</div>';
+  html += '<button class="btn block" id="ktSpeichern">Speichern</button>';
+  if(t) html += '<button class="btn block secondary" id="ktLoeschen" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Termin löschen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('[data-ktwer]').forEach(function(c){
+    c.onchange = function(){
+      var istAlle = c.getAttribute('data-ktwer') === 'alle';
+      document.querySelectorAll('[data-ktwer]').forEach(function(o){
+        if(o === c) return;
+        if(istAlle && c.checked) o.checked = false;
+        if(!istAlle && c.checked && o.getAttribute('data-ktwer') === 'alle') o.checked = false;
+      });
+    };
+  });
+  document.getElementById('ktSpeichern').onclick = function(){
+    var titel = document.getElementById('ktTitel').value.trim();
+    var datum = document.getElementById('ktDatum').value;
+    if(!titel){ toast('Bitte Titel eingeben'); return; }
+    if(!datum){ toast('Bitte Datum wählen'); return; }
+    var gew = [];
+    document.querySelectorAll('[data-ktwer]').forEach(function(c){ if(c.checked) gew.push(c.getAttribute('data-ktwer')); });
+    if(!gew.length){ toast('Bitte mindestens eine Person ankreuzen'); return; }
+    if(gew.indexOf('alle') > -1) gew = ['alle'];
+    var obj = t || { id: uid(), erstelltAm: new Date().toISOString(), erstelltVon: lagerAktuellerBenutzer() };
+    obj.titel = titel; obj.datum = datum; obj.zeit = document.getElementById('ktZeit').value || '';
+    obj.kundeId = document.getElementById('ktKunde').value || ''; obj.notiz = document.getElementById('ktNotiz').value.trim();
+    obj.personen = gew;
+    if(!state.termine) state.termine = [];
+    if(!state.termine.some(function(x){ return x.id === obj.id; })) state.termine.push(obj);
+    state.kalTag = datum; state.kalMonat = datum.substring(0, 7);
+    dbPut('termine', obj, function(){ closeModal(); toast('Termin gespeichert'); render(); });
+  };
+  var del = document.getElementById('ktLoeschen');
+  if(del) del.onclick = function(){
+    customConfirm('Diesen Termin löschen?', function(){
+      dbDelete('termine', t.id, function(){
+        state.termine = (state.termine || []).filter(function(x){ return x.id !== t.id; });
+        closeModal(); toast('Termin gelöscht'); render();
+      });
+    });
+  };
+}
+
+function bindKalender(){
+  var el;
+  el = document.getElementById('kalZurueck'); if(el) el.onclick = function(){ kalMonatWechseln(-1); };
+  el = document.getElementById('kalVor'); if(el) el.onclick = function(){ kalMonatWechseln(1); };
+  el = document.getElementById('kalNeu'); if(el) el.onclick = function(){ modalKalenderTermin(null, state.kalTag || kalHeuteKey()); };
+  el = document.getElementById('kalPersonSel'); if(el) el.onchange = function(){ state.kalPerson = el.value; render(); };
+  document.querySelectorAll('[data-kaltag]').forEach(function(b){
+    b.onclick = function(){ state.kalTag = b.getAttribute('data-kaltag'); render(); };
+  });
+  document.querySelectorAll('[data-kaltermin]').forEach(function(c){
+    c.onclick = function(){ modalKalenderTermin(c.getAttribute('data-kaltermin')); };
+  });
+}
+function kalMonatWechseln(delta){
+  var jetzt = new Date();
+  var mk = state.kalMonat || (jetzt.getFullYear() + '-' + ('0' + (jetzt.getMonth() + 1)).slice(-2));
+  var d = new Date(parseInt(mk.substring(0, 4), 10), parseInt(mk.substring(5, 7), 10) - 1 + delta, 1);
+  state.kalMonat = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  state.kalTag = state.kalMonat + '-01';
+  render();
+}
+
 function modalMehrMenu(){
   var html = '';
   html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
@@ -8012,6 +8206,7 @@ function modalMehrMenu(){
     { tab:'berichte', label:'Berichte', svg:'<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/>' },
     { tab:'statistik', label:'Statistik', svg:'<path d="M4 20V10M12 20V4M20 20v-7"/>' },
     { tab:'fahrtenbuch', label:'Fahrtenbuch', svg:'<path d="M3 13l2-6h14l2 6v5h-3v-2H6v2H3z"/><circle cx="7.5" cy="14.5" r="1"/><circle cx="16.5" cy="14.5" r="1"/>' },
+    { tab:'kalender', label:'Kalender', svg:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>' },
     { tab:'aufgaben', label:'Aufgaben', svg:'<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>' },
     { tab:'zeit', label:'Zeiterfassung', svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' },
     { tab:'lager', label:'Lager', svg:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' }
