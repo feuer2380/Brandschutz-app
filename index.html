@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 16:40</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 17:00</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7039,7 +7039,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 16:40</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 17:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8218,6 +8218,7 @@ function renderKalender(){
       html += '</div>';
     }
   });
+  if(voll) html += '<button type="button" class="btn block secondary" id="kalNeuTag" style="margin-top:10px;">+ Neuer Termin an diesem Tag</button>';
   return html;
 }
 
@@ -8291,10 +8292,11 @@ function bindKalender(){
   el = document.getElementById('kalZurueck'); if(el) el.onclick = function(){ kalMonatWechseln(-1); };
   el = document.getElementById('kalVor'); if(el) el.onclick = function(){ kalMonatWechseln(1); };
   el = document.getElementById('kalFtVerschieben'); if(el) el.onclick = function(){ kalFeiertagVerschieben(state.kalTag); };
+  el = document.getElementById('kalNeuTag'); if(el) el.onclick = function(){ modalKalenderTermin(null, state.kalTag || kalHeuteKey()); };
   el = document.getElementById('kalNeu'); if(el) el.onclick = function(){ modalKalenderTermin(null, state.kalTag || kalHeuteKey()); };
   el = document.getElementById('kalPersonSel'); if(el) el.onchange = function(){ state.kalPerson = el.value; render(); };
   document.querySelectorAll('[data-kaltag]').forEach(function(b){
-    b.onclick = function(){ state.kalTag = b.getAttribute('data-kaltag'); render(); if(istVollsicht()) modalKalenderTermin(null, state.kalTag); };
+    b.onclick = function(){ state.kalTag = b.getAttribute('data-kaltag'); render(); };
   });
   document.querySelectorAll('[data-kaltermin]').forEach(function(c){
     c.onclick = function(){ modalKalenderTermin(c.getAttribute('data-kaltermin')); };
