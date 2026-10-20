@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 15:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 16:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1008,9 +1008,52 @@ function zuordSelectHtml(p){
   if(!istVollsicht()) return '';
   var g = geraetFuerPruefung(p);
   if(!g) return '';
-  var h = '<select class="zuordSel" data-gid="' + g.id + '" style="margin-top:6px; font-size:14px; padding:6px 8px;"><option value="">&#128100; Wer macht das? &ndash; offen</option>';
-  zeitMitarbeiterNamen().forEach(function(n){ h += '<option value="' + escapeHtml(n) + '"' + (g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
-  return h + '</select>';
+  var txt = g.zustaendig ? zustaendigKurz(g.zustaendig) : 'niemand';
+  var h = '<button type="button" class="btn secondary zuordBtn" data-pid="' + p.id + '" style="margin-top:8px; width:100%; justify-content:space-between;">';
+  h += '<span>&#128100; ' + escapeHtml(txt) + (p.zeit ? ' &middot; ' + escapeHtml(p.zeit) + ' Uhr' : '') + '</span><span style="font-weight:700;">Zuteilen / Termin &rsaquo;</span></button>';
+  return h;
+}
+function modalPruefungZuteilen(pid){
+  var p = state.pruefungen.filter(function(x){ return x.id === pid; })[0];
+  if(!p) return;
+  var g = geraetFuerPruefung(p);
+  var k = kundeFuerPruefung(p);
+  var html = '';
+  html += '<div class="modal-head"><h3>Zuteilen &amp; Termin</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;"><b>' + (k ? escapeHtml(k.name) : '') + '</b><br>' + pruefungAnzeigeText(p) + '</div>';
+  html += '<label>Wer macht das?</label><select id="zpWer"><option value="">– niemand –</option>';
+  zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g && g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
+  html += '</select>';
+  html += '<label>Datum</label><input id="zpDatum" type="date" value="' + escapeHtml(String(p.datum || '').substring(0, 10)) + '">';
+  html += '<div id="zpHinweis" class="meta" style="color:#c23f12; margin:-4px 0 8px 0;"></div>';
+  html += '<label>Uhrzeit (optional)</label><input id="zpZeit" type="time" value="' + escapeHtml(p.zeit || '') + '">';
+  html += '<button class="btn block" id="zpSpeichern" style="margin-top:6px;">Speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var hinweis = function(){
+    var v = document.getElementById('zpDatum').value, h = '';
+    if(v){
+      var ft = feiertagName(v), wt = new Date(v + 'T12:00:00').getDay();
+      if(ft) h = 'Achtung: Feiertag (' + ft + ')';
+      else if(wt === 0 || wt === 6) h = 'Achtung: Wochenende';
+    }
+    document.getElementById('zpHinweis').textContent = h;
+  };
+  document.getElementById('zpDatum').onchange = hinweis; hinweis();
+  document.getElementById('zpSpeichern').onclick = function(){
+    var datum = document.getElementById('zpDatum').value;
+    if(!datum){ toast('Bitte Datum wählen'); return; }
+    var alt = String(p.datum || '').substring(0, 10);
+    p.datum = datum;
+    p.zeit = document.getElementById('zpZeit').value || '';
+    if(g){
+      g.zustaendig = document.getElementById('zpWer').value || null;
+      if(String(g.naechstePruefung || '').substring(0, 10) === alt) g.naechstePruefung = datum;
+      try{ dbPut('geraete', g, function(){}); }catch(e){}
+    }
+    state.kalTag = datum; state.kalMonat = datum.substring(0, 7);
+    dbPut('pruefungen', p, function(){ closeModal(); toast('Gespeichert'); render(); });
+  };
 }
 function zustaendigKurz(n){ return n === CHEF_NAME ? 'Chef' : String(n || ''); }
 
@@ -1029,6 +1072,7 @@ function pruefungAnzeigeText(p){
       if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
     }
     if(g.zustaendig) text += ' &middot; <b style="color:#1d5fa8;">&#128100; ' + escapeHtml(zustaendigKurz(g.zustaendig)) + '</b>';
+    if(p.zeit) text += ' &middot; ' + escapeHtml(p.zeit) + ' Uhr';
     return text;
   }
   return escapeHtml(p.typ || 'Prüfung');
@@ -2424,10 +2468,46 @@ function jetztLokalDatumZeit(){
   return jj + '-' + mm + '-' + tt + 'T' + hh + ':' + min;
 }
 
+var feiertageCache = {};
+function oesterreichFeiertage(jahr){
+  if(feiertageCache[jahr]) return feiertageCache[jahr];
+  var a = jahr % 19, b = Math.floor(jahr / 100), c = jahr % 100, d = Math.floor(b / 4), e = b % 4;
+  var f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  var h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  var l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  var monat = Math.floor((h + l - 7 * m + 114) / 31), tag = ((h + l - 7 * m + 114) % 31) + 1;
+  var ostern = new Date(jahr, monat - 1, tag);
+  var res = {};
+  function put(dt, name){ res[dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2) + '-' + ('0' + dt.getDate()).slice(-2)] = name; }
+  function off(n){ return new Date(jahr, monat - 1, tag + n); }
+  put(new Date(jahr, 0, 1), 'Neujahr');
+  put(new Date(jahr, 0, 6), 'Heilige Drei Könige');
+  put(off(1), 'Ostermontag');
+  put(new Date(jahr, 4, 1), 'Staatsfeiertag');
+  put(off(39), 'Christi Himmelfahrt');
+  put(off(50), 'Pfingstmontag');
+  put(off(60), 'Fronleichnam');
+  put(new Date(jahr, 7, 15), 'Mariä Himmelfahrt');
+  put(new Date(jahr, 9, 26), 'Nationalfeiertag');
+  put(new Date(jahr, 10, 1), 'Allerheiligen');
+  put(new Date(jahr, 11, 8), 'Mariä Empfängnis');
+  put(new Date(jahr, 11, 25), 'Christtag');
+  put(new Date(jahr, 11, 26), 'Stefanitag');
+  feiertageCache[jahr] = res;
+  return res;
+}
+function feiertagName(key){
+  var y = parseInt(String(key).substring(0, 4), 10);
+  if(isNaN(y)) return null;
+  return oesterreichFeiertage(y)[String(key).substring(0, 10)] || null;
+}
 function naechsterWerktag(datum){
-  var tag = datum.getDay();
-  if(tag === 6){ datum.setDate(datum.getDate() + 2); }
-  else if(tag === 0){ datum.setDate(datum.getDate() + 1); }
+  for(var n = 0; n < 15; n++){
+    var tag = datum.getDay();
+    var key = datum.getFullYear() + '-' + ('0' + (datum.getMonth() + 1)).slice(-2) + '-' + ('0' + datum.getDate()).slice(-2);
+    if(tag === 6 || tag === 0 || oesterreichFeiertage(datum.getFullYear())[key]){ datum.setDate(datum.getDate() + 1); }
+    else break;
+  }
   return datum;
 }
 
@@ -6959,7 +7039,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 15:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 16:40</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8016,6 +8096,23 @@ function kalHeuteKey(){
   var d = new Date();
   return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
 }
+var KAL_FARBEN = { 'Janiba Wolfgang': '#1d5fa8', 'Janiba Wolfgang sen.': '#2f7a4f', 'Prominzer Tobias': '#d9731a', 'Mayerhofer Tobias': '#7b3fa0', 'Holakovsky Manuela': '#c2185b' };
+function kalFarbe(name){
+  if(name === 'alle') return '#555555';
+  if(!name) return '#9a9a9a';
+  return KAL_FARBEN[name] || '#555555';
+}
+function kalPunkt(farbe, gross){
+  var g = gross ? 12 : 8;
+  return '<span style="display:inline-block; width:' + g + 'px; height:' + g + 'px; border-radius:50%; background:' + farbe + '; flex-shrink:0;"></span>';
+}
+function kalEintragFarben(e){
+  if(e.art === 'termin'){
+    var pl = e.t.personen || [];
+    return pl.indexOf('alle') >= 0 ? ['alle'] : pl;
+  }
+  return [e.z || ''];
+}
 function kalPersonAktiv(){
   if(istEingeschraenkt()) return state.mitarbeiterName;
   return state.kalPerson || '';
@@ -8036,7 +8133,7 @@ function kalEintraegeFuerTag(key){
     var z = g ? g.zustaendig : null;
     if(person){ if(z !== person) return; }
     else if(istEingeschraenkt()) return;
-    res.push({ art: 'pruefung', p: p, g: g, z: z, sort: '98:00' });
+    res.push({ art: 'pruefung', p: p, g: g, z: z, sort: (p.zeit || '98:00') });
   });
   res.sort(function(a, b){ return a.sort.localeCompare(b.sort); });
   return res;
@@ -8072,20 +8169,30 @@ function renderKalender(){
   for(var d = 1; d <= tageImMonat; d++){
     var key = jahr + '-' + ('0' + (monat + 1)).slice(-2) + '-' + ('0' + d).slice(-2);
     var es = kalEintraegeFuerTag(key);
-    var nT = es.filter(function(e){ return e.art === 'termin'; }).length;
-    var nP = es.length - nT;
+    var ftName = feiertagName(key);
     var istHeute = key === heute, istGew = key === gewTag;
-    html += '<button type="button" data-kaltag="' + key + '" style="border:' + (istGew ? '2px solid #1d5fa8' : '1px solid var(--line)') + '; background:' + (istHeute ? '#fbe9c8' : 'var(--card)') + '; border-radius:8px; padding:6px 0; min-height:52px; font-size:14px; color:var(--ink);">' + d;
-    html += '<div style="display:flex; gap:3px; justify-content:center; margin-top:3px; min-height:14px;">';
-    if(nT) html += '<span style="background:#1d5fa8; color:#fff; border-radius:8px; font-size:10px; padding:0 5px;">' + nT + '</span>';
-    if(nP) html += '<span style="background:#c26a12; color:#fff; border-radius:8px; font-size:10px; padding:0 5px;">' + nP + '</span>';
+    var farbSet = [];
+    es.forEach(function(e){ kalEintragFarben(e).forEach(function(n){ if(farbSet.indexOf(n) < 0) farbSet.push(n); }); });
+    html += '<button type="button" data-kaltag="' + key + '" title="' + (ftName ? escapeHtml(ftName) : '') + '" style="border:' + (istGew ? '2px solid #1d5fa8' : '1px solid var(--line)') + '; background:' + (istHeute ? '#fbe9c8' : (ftName ? '#f8d9d0' : 'var(--card)')) + '; border-radius:8px; padding:6px 0; min-height:52px; font-size:14px; color:' + (ftName ? '#c23f12' : 'var(--ink)') + ';' + (ftName ? ' font-weight:700;' : '') + '">' + d;
+    html += '<div style="display:flex; gap:2px; justify-content:center; flex-wrap:wrap; margin-top:3px; min-height:12px;">';
+    farbSet.slice(0, 6).forEach(function(n){ html += kalPunkt(kalFarbe(n)); });
     html += '</div></button>';
   }
   html += '</div>';
-  html += '<div class="meta" style="margin-top:6px;"><span style="background:#1d5fa8; color:#fff; border-radius:8px; font-size:10px; padding:0 6px;">&nbsp;</span> Termin &nbsp; <span style="background:#c26a12; color:#fff; border-radius:8px; font-size:10px; padding:0 6px;">&nbsp;</span> Prüfung/Begehung</div>';
+  html += '<div style="display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px;">';
+  zeitMitarbeiterNamen().forEach(function(n){ html += '<span class="meta" style="display:inline-flex; align-items:center; gap:5px;">' + kalPunkt(kalFarbe(n), true) + escapeHtml(zustaendigKurz(n)) + '</span>'; });
+  html += '<span class="meta" style="display:inline-flex; align-items:center; gap:5px;">' + kalPunkt(kalFarbe('alle'), true) + 'Alle</span>';
+  html += '<span class="meta" style="display:inline-flex; align-items:center; gap:5px;">' + kalPunkt(kalFarbe(''), true) + 'Nicht zugeteilt</span>';
+  html += '</div>';
   var tg = gewTag.split('-');
   html += '<div class="section-title" style="margin-top:14px;">' + parseInt(tg[2], 10) + '. ' + monatNamen[parseInt(tg[1], 10) - 1] + ' ' + tg[0] + '</div>';
   var tagEs = kalEintraegeFuerTag(gewTag);
+  var ftTag = feiertagName(gewTag);
+  if(ftTag){
+    html += '<div class="card" style="border-left:4px solid #c23f12; background:#fbe9e3;"><div class="row"><h3 style="color:#c23f12;">Feiertag: ' + escapeHtml(ftTag) + '</h3></div>';
+    if(tagEs.length && voll) html += '<button type="button" class="btn small" id="kalFtVerschieben" style="margin-top:8px;">' + tagEs.length + ' Eintrag' + (tagEs.length === 1 ? '' : 'e') + ' auf nächsten Werktag verschieben</button>';
+    html += '</div>';
+  }
   if(!tagEs.length){
     html += '<div class="empty kompakt">Keine Einträge an diesem Tag</div>';
   }
@@ -8094,18 +8201,20 @@ function renderKalender(){
       var t = e.t;
       var kt = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
       var pers = (t.personen || []).indexOf('alle') >= 0 ? 'Alle Mitarbeiter' : (t.personen || []).map(zustaendigKurz).join(', ');
-      html += '<div class="card"' + (voll ? ' data-kaltermin="' + t.id + '" style="cursor:pointer; border-left:4px solid #1d5fa8;"' : ' style="border-left:4px solid #1d5fa8;"') + '>';
+      var tf = kalFarbe(kalEintragFarben(e)[0]);
+      html += '<div class="card"' + (voll ? ' data-kaltermin="' + t.id + '" style="cursor:pointer; border-left:6px solid ' + tf + ';"' : ' style="border-left:6px solid ' + tf + ';"') + '>';
       html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '') + '</div>';
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
-      html += '<div class="meta">&#128100; ' + escapeHtml(pers) + '</div>';
+      html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
       if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
       html += '</div>';
     } else {
       var kp = kundeFuerPruefung(e.p);
-      html += '<div class="card kunde-card" data-id="' + (kp ? kp.id : '') + '" style="border-left:4px solid #c26a12;">';
-      html += '<div class="row"><h3>' + (kp ? escapeHtml(kp.name) : 'Unbekannt') + '</h3><span class="badge soon">Prüfung</span></div>';
+      html += '<div class="card kunde-card" data-id="' + (kp ? kp.id : '') + '" style="border-left:6px solid ' + kalFarbe(e.z) + ';">';
+      html += '<div class="row"><h3>' + (kp ? escapeHtml(kp.name) : 'Unbekannt') + '</h3><span class="badge soon">' + (e.p.zeit ? escapeHtml(e.p.zeit) + ' Uhr' : 'Prüfung') + '</span></div>';
       html += '<div class="meta">' + pruefungAnzeigeText(e.p) + '</div>';
-      if(!e.z) html += '<div class="meta" style="color:#c23f12;">Noch niemandem zugeteilt</div>';
+      html += e.z ? ('<div class="meta" style="display:flex; align-items:center; gap:6px;">' + kalPunkt(kalFarbe(e.z), true) + '<span>' + escapeHtml(zustaendigKurz(e.z)) + '</span></div>') : '<div class="meta" style="color:#c23f12;">Noch niemandem zugeteilt</div>';
+      html += zuordSelectHtml(e.p);
       html += '</div>';
     }
   });
@@ -8181,13 +8290,36 @@ function bindKalender(){
   var el;
   el = document.getElementById('kalZurueck'); if(el) el.onclick = function(){ kalMonatWechseln(-1); };
   el = document.getElementById('kalVor'); if(el) el.onclick = function(){ kalMonatWechseln(1); };
+  el = document.getElementById('kalFtVerschieben'); if(el) el.onclick = function(){ kalFeiertagVerschieben(state.kalTag); };
   el = document.getElementById('kalNeu'); if(el) el.onclick = function(){ modalKalenderTermin(null, state.kalTag || kalHeuteKey()); };
   el = document.getElementById('kalPersonSel'); if(el) el.onchange = function(){ state.kalPerson = el.value; render(); };
   document.querySelectorAll('[data-kaltag]').forEach(function(b){
-    b.onclick = function(){ state.kalTag = b.getAttribute('data-kaltag'); render(); };
+    b.onclick = function(){ state.kalTag = b.getAttribute('data-kaltag'); render(); if(istVollsicht()) modalKalenderTermin(null, state.kalTag); };
   });
   document.querySelectorAll('[data-kaltermin]').forEach(function(c){
     c.onclick = function(){ modalKalenderTermin(c.getAttribute('data-kaltermin')); };
+  });
+}
+function kalFeiertagVerschieben(key){
+  var ziel = naechsterWerktag(new Date(parseInt(key.substring(0, 4), 10), parseInt(key.substring(5, 7), 10) - 1, parseInt(key.substring(8, 10), 10) + 1));
+  var zielKey = ziel.getFullYear() + '-' + ('0' + (ziel.getMonth() + 1)).slice(-2) + '-' + ('0' + ziel.getDate()).slice(-2);
+  customConfirm('Alle Einträge vom ' + fmtDate(key) + ' auf den ' + fmtDate(zielKey) + ' verschieben?', function(){
+    // Alle Prüfungen/Termine des Tages (ohne Personenfilter) verschieben
+    state.pruefungen.forEach(function(p){
+      if(p.erledigt || String(p.datum || '').substring(0, 10) !== key) return;
+      p.datum = zielKey;
+      var g = geraetFuerPruefung(p);
+      if(g && String(g.naechstePruefung || '').substring(0, 10) === key){ g.naechstePruefung = zielKey; try{ dbPut('geraete', g, function(){}); }catch(e){} }
+      try{ dbPut('pruefungen', p, function(){}); }catch(e){}
+    });
+    (state.termine || []).forEach(function(t){
+      if(String(t.datum || '').substring(0, 10) !== key) return;
+      t.datum = zielKey;
+      try{ dbPut('termine', t, function(){}); }catch(e){}
+    });
+    state.kalTag = zielKey; state.kalMonat = zielKey.substring(0, 7);
+    toast('Verschoben auf ' + fmtDate(zielKey));
+    render();
   });
 }
 function kalMonatWechseln(delta){
@@ -10064,17 +10196,8 @@ function bindKundenCards(container){
       render();
     };
   });
-  container.querySelectorAll('.zuordSel').forEach(function(sel){
-    sel.onclick = function(ev){ ev.stopPropagation(); };
-    sel.onchange = function(ev){
-      ev.stopPropagation();
-      var g = state.geraete.filter(function(x){ return x.id === sel.getAttribute('data-gid'); })[0];
-      if(!g) return;
-      g.zustaendig = sel.value || null;
-      try{ dbPut('geraete', g, function(){}); }catch(e){}
-      toast(g.zustaendig ? ('Zugeordnet: ' + zustaendigKurz(g.zustaendig)) : 'Zuordnung entfernt');
-      render();
-    };
+  container.querySelectorAll('.zuordBtn').forEach(function(btn){
+    btn.onclick = function(ev){ ev.stopPropagation(); modalPruefungZuteilen(btn.getAttribute('data-pid')); };
   });
   container.querySelectorAll('.baldFaelligZeile').forEach(function(z){
     z.onclick = function(event){
