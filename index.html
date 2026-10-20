@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 17:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 17:20</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7039,7 +7039,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 17:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 17:20</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8232,11 +8232,13 @@ function modalKalenderTermin(terminId, datumVorgabe){
   html += '<label>Titel</label><input id="ktTitel" type="text" placeholder="z.B. Begehung, Besprechung" value="' + escapeHtml(t ? (t.titel || '') : '') + '">';
   html += '<label>Datum</label><input id="ktDatum" type="date" value="' + escapeHtml(t ? String(t.datum).substring(0, 10) : (datumVorgabe || kalHeuteKey())) + '">';
   html += '<label>Uhrzeit (optional)</label><input id="ktZeit" type="time" value="' + escapeHtml(t ? (t.zeit || '') : '') + '">';
-  html += '<label>Kunde (optional)</label><select id="ktKunde"><option value="">–</option>';
-  state.kunden.filter(function(k){ return !k.geloescht; }).slice().sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); }).forEach(function(k){
-    html += '<option value="' + k.id + '"' + (t && t.kundeId === k.id ? ' selected' : '') + '>' + escapeHtml(k.name) + '</option>';
-  });
-  html += '</select>';
+  var ktKundeName = '';
+  if(t && t.kundeId){ var ktk = state.kunden.filter(function(x){ return x.id === t.kundeId; })[0]; if(ktk) ktKundeName = ktk.name || ''; }
+  html += '<label>Kunde (optional &ndash; aus der Liste wählen oder neuen Namen eintippen)</label><input id="ktKunde" type="text" list="ktKundenListe" autocomplete="off" placeholder="Kundenname" value="' + escapeHtml(ktKundeName) + '">';
+  html += '<datalist id="ktKundenListe">';
+  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(x, y){ return x.name.localeCompare(y.name); }).forEach(function(k){ html += '<option value="' + escapeHtml(k.name) + '">'; });
+  html += '</datalist>';
+  html += '<div class="meta" style="margin-top:-4px;">Ist der Kunde noch nicht im Programm, wird er beim Speichern automatisch neu angelegt (Daten kannst du später beim Kunden ergänzen).</div>';
   html += '<label>Notiz (optional)</label><input id="ktNotiz" type="text" value="' + escapeHtml(t ? (t.notiz || '') : '') + '">';
   html += '<label>Für wen? (mehrere möglich)</label><div style="margin-bottom:10px;">';
   html += '<label style="' + zeilenStil + '"><input type="checkbox" data-ktwer="alle" style="' + cbStil + '"' + (emp.indexOf('alle') > -1 ? ' checked' : '') + '> <b>Alle Mitarbeiter</b></label>';
@@ -8269,12 +8271,22 @@ function modalKalenderTermin(terminId, datumVorgabe){
     if(gew.indexOf('alle') > -1) gew = ['alle'];
     var obj = t || { id: uid(), erstelltAm: new Date().toISOString(), erstelltVon: lagerAktuellerBenutzer() };
     obj.titel = titel; obj.datum = datum; obj.zeit = document.getElementById('ktZeit').value || '';
-    obj.kundeId = document.getElementById('ktKunde').value || ''; obj.notiz = document.getElementById('ktNotiz').value.trim();
+    obj.notiz = document.getElementById('ktNotiz').value.trim();
     obj.personen = gew;
+    var kName = document.getElementById('ktKunde').value.trim();
+    var kTreffer = kName ? state.kunden.filter(function(x){ return !x.geloescht && (x.name || '').toLowerCase() === kName.toLowerCase(); })[0] : null;
+    var neuerKunde = null;
+    if(kName && !kTreffer){
+      neuerKunde = { id: uid(), name: kName, vorname: '', nachname: '', kundennummer: '', objekt: '', objektAdresse: '', strasse: '', plz: '', ort: '', adresse: '', telefon: '', email: '' };
+      state.kunden.push(neuerKunde);
+      kTreffer = neuerKunde;
+    }
+    obj.kundeId = kTreffer ? kTreffer.id : '';
     if(!state.termine) state.termine = [];
     if(!state.termine.some(function(x){ return x.id === obj.id; })) state.termine.push(obj);
     state.kalTag = datum; state.kalMonat = datum.substring(0, 7);
-    dbPut('termine', obj, function(){ closeModal(); toast('Termin gespeichert'); render(); });
+    var speichereTermin = function(){ dbPut('termine', obj, function(){ closeModal(); toast(neuerKunde ? 'Termin gespeichert, neuer Kunde angelegt' : 'Termin gespeichert'); render(); }); };
+    if(neuerKunde){ dbPut('kunden', neuerKunde, speichereTermin); } else { speichereTermin(); }
   };
   var del = document.getElementById('ktLoeschen');
   if(del) del.onclick = function(){
