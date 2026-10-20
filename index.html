@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 17:55</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 18:10</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -3169,8 +3169,11 @@ function renderKundeDetail(kundeId){
             html += '<div class="meta" style="margin-top:2px;">War das eigentlich eine Abfüllung, kein Anschluss? <span class="korrAbfuellBtn" data-gid="' + g.id + '" data-pid="' + bereitsHeute.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">Zu Abfüllung korrigieren</span></div>';
           }
         }
+        if(g.letztePruefung || g.naechstePruefung){
+          html += '<div class="meta" style="margin-top:6px; font-size:12px;">' + (g.letztePruefung ? ((istKegAnschluss ? 'Zuletzt angeschlossen: ' : 'Zuletzt geprüft: ') + '<b>' + fmtDate(g.letztePruefung) + '</b>') : '') + (g.letztePruefung && g.naechstePruefung ? ' &middot; ' : '') + (g.naechstePruefung ? ('Nächste: <b>' + fmtDate(g.naechstePruefung) + '</b>') : '') + '</div>';
+        }
         html += '<div style="display:flex; align-items:center; gap:6px;">';
-        html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">' + (istKegAnschluss ? 'Datum des Anschlusses' : 'Datum der Prüfung') + '</label>';
+        html += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">' + (istKegAnschluss ? 'Anschluss eintragen am' : 'Prüfung eintragen am') + '</label>';
         html += '<button type="button" class="info-i hinweisInfoBtn" data-gid="' + g.id + '" data-typ="' + (istKegAnschluss ? 'anschluss' : 'pruefung') + '" title="Hinweis">i</button>';
         html += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + datumWert + '" style="flex:1; min-width:0; max-width:100%; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
         html += '</div>';
@@ -7039,7 +7042,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 17:55</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 18:10</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
