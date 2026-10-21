@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 17:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 17:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -3046,8 +3046,10 @@ function renderKunden(){
       html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
       if(k.geloeschtAm) html += '<div class="meta">Gelöscht am ' + fmtDate(k.geloeschtAm) + '</div>';
       html += '<button class="btn small secondary" data-wiederherstellen="' + k.id + '" style="margin-top:8px;">Wiederherstellen</button>';
+      html += '<button class="btn small secondary kundeEndgueltigBtn" data-kid="' + k.id + '" style="margin-top:8px; margin-left:8px; color:#c23f12; border-color:#e6b19d;">Endgültig löschen</button>';
       html += '</div>';
     });
+    html += '<button class="btn block secondary" id="papierkorbLeerenBtn" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Papierkorb leeren</button>';
   }
   return html;
 }
@@ -3143,6 +3145,7 @@ function renderKundeDetail(kundeId){
       var akkuStatusBadge = akkutauschStatus(g);
       if(akkuStatusBadge) html += '<span class="badge ' + akkuStatusBadge.cls + '">' + akkuStatusBadge.label + '</span>';
       html += '<button class="btn secondary small qrGeraetInlineBtn" data-gid="' + g.id + '" style="padding:5px 9px;">QR</button>';
+      if(!istEingeschraenkt()) html += '<button class="btn secondary small geraetLoeschInlineBtn" data-gid="' + g.id + '" style="padding:5px 9px; color:#c23f12; border-color:#e6b19d;">Löschen</button>';
       html += '</div>';
       html += '</div>';
       if(!g.ausgeschieden){
@@ -7096,7 +7099,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 17:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 17:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -10819,6 +10822,62 @@ function bindDynamic(){
   document.querySelectorAll('.device-item').forEach(function(d){
     d.onclick = function(){ modalGeraetBearbeiten(d.getAttribute('data-gid')); };
   });
+
+  document.querySelectorAll('.geraetLoeschInlineBtn').forEach(function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      var gid = b.getAttribute('data-gid');
+      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      if(!g) return;
+      customConfirm('Gerät "' + (g.typ || '') + (g.seriennummer ? ' (SN ' + g.seriennummer + ')' : '') + '" endgültig löschen? Das kann nicht rückgängig gemacht werden.', function(){
+        var pr = state.pruefungen.filter(function(p){ return p.geraetId === gid; });
+        var i = 0;
+        (function weiter(){
+          if(i < pr.length){ var pid = pr[i++].id; dbDelete('pruefungen', pid, weiter); return; }
+          dbDelete('geraete', gid, function(){
+            loadAll(function(){ render(); toast('Gerät gelöscht'); });
+          });
+        })();
+      });
+    };
+  });
+
+  document.querySelectorAll('.kundeEndgueltigBtn').forEach(function(b){
+    b.onclick = function(){
+      var kid = b.getAttribute('data-kid');
+      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+      if(!k) return;
+      var gs = state.geraete.filter(function(x){ return x.kundeId === kid; });
+      customConfirm('"' + k.name + '" endgültig löschen?' + (gs.length ? ' Dazu gehören noch ' + gs.length + ' Geräte, die ebenfalls gelöscht werden.' : '') + ' Das kann nicht rückgängig gemacht werden.', function(){
+        var gids = gs.map(function(x){ return x.id; });
+        var pr = state.pruefungen.filter(function(p){ return gids.indexOf(p.geraetId) !== -1; });
+        var jobs = pr.map(function(p){ return ['pruefungen', p.id]; }).concat(gs.map(function(x){ return ['geraete', x.id]; })).concat([['kunden', kid]]);
+        var i = 0;
+        (function weiter(){
+          if(i < jobs.length){ var j = jobs[i++]; dbDelete(j[0], j[1], weiter); return; }
+          loadAll(function(){ render(); toast('Kunde endgültig gelöscht'); });
+        })();
+      });
+    };
+  });
+
+  var papierkorbLeerBtn = document.getElementById('papierkorbLeerenBtn');
+  if(papierkorbLeerBtn) papierkorbLeerBtn.onclick = function(){
+    var liste = state.kunden.filter(function(x){ return x.geloescht; });
+    if(!liste.length) return;
+    customConfirm('Alle ' + liste.length + ' Kunden im Papierkorb endgültig löschen (samt zugehöriger Geräte)? Das kann nicht rückgängig gemacht werden.', function(){
+      var kids = liste.map(function(x){ return x.id; });
+      var gs = state.geraete.filter(function(x){ return kids.indexOf(x.kundeId) !== -1; });
+      var gids = gs.map(function(x){ return x.id; });
+      var pr = state.pruefungen.filter(function(p){ return gids.indexOf(p.geraetId) !== -1; });
+      var jobs = pr.map(function(p){ return ['pruefungen', p.id]; }).concat(gs.map(function(x){ return ['geraete', x.id]; })).concat(kids.map(function(id){ return ['kunden', id]; }));
+      var i = 0;
+      (function weiter(){
+        if(i < jobs.length){ var j = jobs[i++]; dbDelete(j[0], j[1], weiter); return; }
+        loadAll(function(){ render(); toast('Papierkorb geleert'); });
+      })();
+    });
+  };
 
   document.querySelectorAll('.qrGeraetInlineBtn').forEach(function(b){
     b.onclick = function(e){
