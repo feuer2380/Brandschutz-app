@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 20.10. 18:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 16:45</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -4936,6 +4936,55 @@ function modalNeuerKunde(){
   };
 }
 
+function modalKundenZusammenfuehren(quelleId){
+  var q = state.kunden.filter(function(x){ return x.id === quelleId; })[0];
+  if(!q) return;
+  function zaehle(kid){
+    return state.geraete.filter(function(g){ return g.kundeId === kid; }).length;
+  }
+  function neuZeichnen(suchtext){
+    var sq = (suchtext || '').toLowerCase().trim();
+    var treffer = state.kunden.filter(function(k){
+      if(k.id === quelleId || k.geloescht) return false;
+      if(!sq) return (q.name && (k.name || '').toLowerCase() === q.name.toLowerCase()) || (q.kundennummer && k.kundennummer === q.kundennummer);
+      return (k.name || '').toLowerCase().indexOf(sq) > -1 || (k.kundennummer || '').toLowerCase().indexOf(sq) > -1 || (k.objekt || '').toLowerCase().indexOf(sq) > -1;
+    }).slice(0, 30);
+    var html = '';
+    html += '<div class="modal-head"><h3>Kunden zusammenführen</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<div class="meta" style="margin-bottom:10px;">Alles von <b>' + escapeHtml(q.name) + (q.objekt ? ' &middot; ' + escapeHtml(q.objekt) : '') + (q.adresse ? ' &middot; ' + escapeHtml(q.adresse) : '') + '</b> (' + zaehle(q.id) + ' Geräte) wird in den Kunden übernommen, den du unten auswählst. Danach kommt dieser Eintrag in den Papierkorb.</div>';
+    html += '<input id="zfSuche" type="text" placeholder="Anderen Kunden suchen (Name, Nr., Objekt)..." value="' + escapeHtml(suchtext || '') + '" style="margin-bottom:10px;">';
+    if(!sq && treffer.length) html += '<div class="meta" style="margin-bottom:6px;">Gleicher Name / gleiche Kundennummer:</div>';
+    if(!treffer.length){ html += '<div class="empty">' + (sq ? 'Keine Treffer' : 'Kein gleichnamiger Kunde gefunden – oben suchen') + '</div>'; }
+    treffer.forEach(function(k){
+      html += '<button class="btn block secondary zfZielBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k.name) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '<br><span class="meta">' + escapeHtml(k.adresse || '') + ' &middot; ' + zaehle(k.id) + ' Geräte' + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</span></button>';
+    });
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+    var se = document.getElementById('zfSuche');
+    se.setSelectionRange(se.value.length, se.value.length);
+    se.oninput = function(){ neuZeichnen(se.value); };
+    document.querySelectorAll('.zfZielBtn').forEach(function(b){
+      b.onclick = function(){
+        var ziel = state.kunden.filter(function(x){ return x.id === b.getAttribute('data-kid'); })[0];
+        if(!ziel) return;
+        customConfirm('Alle Geräte, Prüfungen, Berichte und Dokumente von "' + q.name + (q.adresse ? ' (' + q.adresse + ')' : '') + '" in "' + ziel.name + (ziel.adresse ? ' (' + ziel.adresse + ')' : '') + '" übernehmen und den ersten Eintrag in den Papierkorb verschieben?', function(){
+          ['geraete','pruefungen','sammelberichte','begehungsberichte','dokumente','brandschutzplaene','tagesberichte','termine'].forEach(function(store){
+            (state[store] || []).forEach(function(o){
+              if(o.kundeId === quelleId){ o.kundeId = ziel.id; try{ dbPut(store, o, function(){}); }catch(e){} }
+            });
+          });
+          q.geloescht = true; q.geloeschtAm = new Date().toISOString();
+          dbPut('kunden', q, function(){
+            state.activeKundeId = ziel.id; state.tab = 'kundeDetail';
+            loadAll(function(){ closeModal(); render(); toast('Zusammengeführt'); });
+          });
+        });
+      };
+    });
+  }
+  neuZeichnen('');
+}
+
 function modalKundeBearbeiten(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -4963,6 +5012,7 @@ function modalKundeBearbeiten(kundeId){
   html += '<div class="row" style="gap:8px;"><input id="fZugangscode" type="text" readonly value="' + escapeHtml(k.zugangscode || '') + '" style="flex:1; font-weight:700; letter-spacing:1px;"><button type="button" class="btn secondary" id="fCodeNeuBtn" style="flex:0 0 auto; padding:0 16px;">Neu</button></div>';
   html += '<div class="meta" style="margin-top:2px;">Zufällig erzeugt, hat nichts mit der Kundennummer zu tun. Diesen Code dem Kunden mitteilen.</div>';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
+  html += '<button class="btn block secondary" id="fZusammen" style="margin-top:10px;">Mit anderem Kunden zusammenführen (Doppelte)</button>';
   html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde in Papierkorb verschieben</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -5005,6 +5055,7 @@ function modalKundeBearbeiten(kundeId){
       loadAll(function(){ render(); closeModal(); toast('Änderungen gespeichert'); });
     });
   };
+  document.getElementById('fZusammen').onclick = function(){ modalKundenZusammenfuehren(k.id); };
   document.getElementById('fDelete').onclick = function(){
     customConfirm('Kunde in den Papierkorb verschieben? Er lässt sich später im Reiter Kunden wiederherstellen. Geräte und Prüfungen bleiben bestehen.', function(){
       k.geloescht = true;
@@ -7042,7 +7093,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 20.10. 18:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 16:45</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
