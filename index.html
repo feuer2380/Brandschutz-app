@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 18:40</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 19:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -3132,7 +3132,7 @@ function renderKundeDetail(kundeId){
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
       var katBadgeZeigen = g.kategorie && g.kategorie !== 'Feuerlöscher' && state.kundeGeraeteKatFilter !== katKey;
-      html += '<div><strong>Nr. ' + katNr + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (katBadgeZeigen ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
+      html += '<div><strong>Nr. ' + katNr + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + (katBadgeZeigen ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.notiz ? '<br>Notiz: ' + escapeHtml(g.notiz) : '') + '</span></div>';
       html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">';
       html += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
       if(bj) html += '<span class="badge ' + bj.cls + '">' + bj.label + '</span>';
@@ -3215,7 +3215,8 @@ function renderKundeDetail(kundeId){
     html += '</div>';
   }
 
-  html += '<button class="btn block" style="margin-top:14px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
+  html += '<button class="btn block secondary" style="margin-top:14px;" id="geraeteListeBtn">Geräteliste einfügen (aus altem Programm)</button>';
+  html += '<button class="btn block" style="margin-top:10px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="begehungsberichtBtn">Begehungsbericht (Mängel, Fotos, Tätigkeiten)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="dokumenteBtn">Dokumente ablegen (fertige PDF-Berichte)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="brandschutzplanBtn">Brandschutzplan (Melder-Nummer suchen)</button>';
@@ -5307,6 +5308,7 @@ function modalGeraetBearbeiten(geraetId){
     }
     html += '</div>';
   }
+  html += '<label>Notiz</label><input id="fNotiz" type="text" value="' + escapeHtml(g.notiz || '') + '" placeholder="z.B. Neukauf 2022">';
   html += '<label>Zuständiger Mitarbeiter (muss die Prüfung/Begehung machen)</label><select id="fZustaendig"><option value="">– nicht zugeordnet –</option>';
   zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
   html += '</select>';
@@ -5376,6 +5378,8 @@ function modalGeraetBearbeiten(geraetId){
       g.fuellungen.push({ datum: g.abfuelldatum + 'T12:00:00', menge: mengeInfoBearb.wert, einheit: mengeInfoBearb.einheit, standort: g.standort || '', abfuelldatum: g.abfuelldatum });
     }
     g.zusatzdaten = fZusatzdatenEl ? fZusatzdatenEl.value.trim() : g.zusatzdaten;
+    var fNotizEl = document.getElementById('fNotiz');
+    if(fNotizEl) g.notiz = fNotizEl.value.trim();
     var fMaengelEl = document.getElementById('fMaengel');
     g.maengel = fMaengelEl ? fMaengelEl.value.trim() : g.maengel;
     dbPut('geraete', g, function(){
@@ -5694,12 +5698,21 @@ function parseAltesSystemText(text){
   return ergebnis;
 }
 
-function bindEinfuegenAltesSystem(){
+function bindEinfuegenAltesSystem(kundeIdFuerListe){
   var btn = document.getElementById('btnEinfuegenUebernehmen');
   if(!btn) return;
   btn.onclick = function(){
     var text = document.getElementById('fEinfuegeText').value;
     if(!text || !text.trim()){ toast('Bitte zuerst Text einfügen'); return; }
+    // Mehrere Geräte eingefügt? Dann in die Geräteliste-Übernahme wechseln
+    try {
+      var zeilenGl = glTabelleLesen(text).filter(function(c){ return /^\d{1,4}$/.test(c[0]) && c.length >= 4; });
+      if(zeilenGl.length >= 2 && kundeIdFuerListe){
+        closeModal();
+        modalGeraeteListeEinfuegen(kundeIdFuerListe, text);
+        return;
+      }
+    } catch(errGl){}
     var werte = parseAltesSystemText(text);
     var typFeld = document.getElementById('fTyp');
     if(typFeld && werte.typ){
@@ -5930,7 +5943,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
   try { bindKategorieToggle(kundeId); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
-  try { bindEinfuegenAltesSystem(); } catch(err){ console.error('bindEinfuegenAltesSystem Fehler', err); }
+  try { bindEinfuegenAltesSystem(kundeId); } catch(err){ console.error('bindEinfuegenAltesSystem Fehler', err); }
   var fExterneIdScanBtnNeu = document.getElementById('fExterneIdScanBtn');
   if(fExterneIdScanBtnNeu) fExterneIdScanBtnNeu.onclick = function(){ modalCodeScannen('fExterneId'); };
 
@@ -6819,12 +6832,219 @@ function bsplanDataUrlZuUint8Array(dataUrl){
   return u8arr;
 }
 
+// ---------- Geräteliste einfügen (Tabelle aus altem Programm) ----------
+var GL_FELDER = [
+  ['nr','Nr'], ['hersteller','Hersteller'], ['sn','Seriennr.'], ['typ','Type'], ['beschr','Beschreibung'],
+  ['ort','Ort / Standort'], ['bj','Baujahr'], ['datum','Datum(e)'], ['x','– ignorieren –']
+];
+var GL_STANDARD = ['nr','hersteller','sn','typ','beschr','ort','bj','datum','datum'];
+
+function glTabelleLesen(text){
+  text = String(text || '').replace(/\r/g, '').replace(/ /g, ' ');
+  var rows = [];
+  if(text.indexOf('\t') !== -1){
+    var row = [], cell = '', inQ = false;
+    for(var i = 0; i < text.length; i++){
+      var ch = text.charAt(i);
+      if(inQ){
+        if(ch === '"'){ if(text.charAt(i+1) === '"'){ cell += '"'; i++; } else inQ = false; }
+        else cell += ch;
+      } else if(ch === '"' && cell === ''){ inQ = true; }
+      else if(ch === '\t'){ row.push(cell); cell = ''; }
+      else if(ch === '\n'){ row.push(cell); rows.push(row); row = []; cell = ''; }
+      else cell += ch;
+    }
+    row.push(cell); rows.push(row);
+  } else {
+    text.split('\n').forEach(function(z){
+      if(!z.trim()) return;
+      rows.push(z.split(/\s{2,}|;/));
+    });
+  }
+  return rows.map(function(r){
+    var c = r.map(function(x){ return String(x).replace(/\s*\n\s*/g, ' ').replace(/\s+/g, ' ').trim(); });
+    while(c.length && c[0] === '') c.shift();
+    while(c.length && c[c.length-1] === '') c.pop();
+    return c;
+  }).filter(function(c){ return c.length > 0; });
+}
+
+function glDatumIso(s){
+  var m = String(s).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/g) || [];
+  return m.map(function(d){
+    var t = d.split('.');
+    return t[2] + '-' + ('0' + t[1]).slice(-2) + '-' + ('0' + t[0]).slice(-2);
+  });
+}
+
+function glAuswerten(rows, map){
+  var geraete = [];
+  var letztes = null;
+  rows.forEach(function(c){
+    var joined = c.join(' ');
+    if(c.length === 1 || /^notiz/i.test(c[0])){
+      if(/^notiz/i.test(c[0]) && letztes){
+        var n = joined.replace(/^notiz\s*:?\s*/i, '').trim();
+        if(n) letztes.notiz = letztes.notiz ? letztes.notiz + ' | ' + n : n;
+      }
+      return;
+    }
+    if(!/^\d{1,4}$/.test(c[0]) || c.length < 4) return;
+    var w = { hersteller:'', sn:'', typ:'', beschr:'', ort:'', bj:'', nr:'', datum:'' };
+    c.forEach(function(zelle, idx){
+      var f = map[idx];
+      if(!f || f === 'x') return;
+      if(f === 'datum') w.datum += ' ' + zelle;
+      else w[f] = w[f] ? w[f] + ' ' + zelle : zelle;
+    });
+    var daten = glDatumIso(w.datum);
+    var bjM = String(w.bj).match(/(19|20)\d{2}/);
+    var g = {
+      nr: parseInt(w.nr, 10) || null,
+      typ: [w.hersteller, w.beschr, w.typ].filter(function(x){ return x; }).join(' '),
+      seriennummer: w.sn,
+      standort: w.ort,
+      baujahr: bjM ? parseInt(bjM[0], 10) : null,
+      letztePruefung: daten.length ? daten[daten.length - 1] : null,
+      notiz: ''
+    };
+    geraete.push(g);
+    letztes = g;
+  });
+  return geraete;
+}
+
+function modalGeraeteListeEinfuegen(kundeId, vorText){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var map = GL_STANDARD.slice();
+  var rows = [];
+  var html = '';
+  html += '<div class="modal-head"><h3>Geräteliste einfügen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">Kunde: <b>' + escapeHtml(k.name) + '</b></div>';
+  html += '<div class="meta" style="margin:6px 0;">Im alten Programm die Tabelle markieren (oder mit Strg+A die ganze Seite), kopieren (Strg+C) und hier einfügen. Jede Zeile wird ein Feuerlöscher.</div>';
+  html += '<textarea id="glText" rows="6" placeholder="Hier einfügen ..." style="width:100%; box-sizing:border-box;"></textarea>';
+  html += '<button class="btn block secondary" id="glVorschauBtn" style="margin-top:8px;">Vorschau anzeigen</button>';
+  html += '<div id="glVorschau"></div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+
+  function vorhandeneNr(){
+    var h = {};
+    state.geraete.forEach(function(g){
+      if(g.kundeId === kundeId && (g.kategorie || 'Feuerlöscher') === 'Feuerlöscher' && !g.ausgeschieden && g.nr) h[g.nr] = true;
+    });
+    return h;
+  }
+
+  function vorschau(){
+    var text = document.getElementById('glText').value;
+    rows = glTabelleLesen(text);
+    // Kopfzeile erkennen
+    for(var r = 0; r < rows.length; r++){
+      var low = rows[r].map(function(x){ return x.toLowerCase(); });
+      if(low.indexOf('hersteller') !== -1 && (low.indexOf('type') !== -1 || low.indexOf('typ') !== -1 || low.indexOf('sn') !== -1)){
+        var neu = low.map(function(x){
+          if(x === 'nr' || x === 'nr.') return 'nr';
+          if(x === 'hersteller') return 'hersteller';
+          if(x === 'sn' || x.indexOf('serien') === 0) return 'sn';
+          if(x === 'type' || x === 'typ') return 'typ';
+          if(x.indexOf('beschreibung') === 0) return 'beschr';
+          if(x === 'ort' || x === 'standort') return 'ort';
+          if(x === 'bj' || x === 'baujahr') return 'bj';
+          if(x.indexOf('kauf') === 0 || x.indexOf('prüf') === 0 || x.indexOf('datum') !== -1) return 'datum';
+          return 'x';
+        });
+        map = neu;
+        break;
+      }
+    }
+    var liste = glAuswerten(rows, map);
+    var ziel = document.getElementById('glVorschau');
+    if(!liste.length){
+      ziel.innerHTML = '<div class="meta" style="margin-top:10px; color:#c23f12;">Keine Gerätezeilen gefunden. Eine Zeile muss mit der Nummer (1, 2, 3 ...) beginnen.</div>';
+      return;
+    }
+    zeichne();
+  }
+
+  function zeichne(){
+    var liste = glAuswerten(rows, map);
+    var ex = vorhandeneNr();
+    var ziel = document.getElementById('glVorschau');
+    var maxCols = 0;
+    rows.forEach(function(c){ if(/^\d{1,4}$/.test(c[0]) && c.length > maxCols) maxCols = c.length; });
+    var intervallAlt = document.getElementById('glIntervall') ? document.getElementById('glIntervall').value : '24';
+    var h = '<div class="meta" style="margin-top:12px;"><b>' + liste.length + ' Geräte erkannt.</b> Falls eine Spalte falsch zugeordnet ist, hier ändern:</div>';
+    h += '<div style="overflow-x:auto;"><div style="display:flex; gap:4px; margin:6px 0;">';
+    for(var i = 0; i < maxCols; i++){
+      h += '<select class="glMapSel" data-i="' + i + '" style="min-width:110px; font-size:12px;">';
+      GL_FELDER.forEach(function(f){ h += '<option value="' + f[0] + '"' + ((map[i] || 'x') === f[0] ? ' selected' : '') + '>' + f[1] + '</option>'; });
+      h += '</select>';
+    }
+    h += '</div></div>';
+    h += '<label style="display:block; margin-top:6px;">Prüfintervall</label><select id="glIntervall">';
+    ['12','24','36'].forEach(function(m){ h += '<option value="' + m + '"' + (m === intervallAlt ? ' selected' : '') + '>' + m + ' Monate</option>'; });
+    h += '</select><div style="margin-top:10px;">';
+    liste.forEach(function(g, idx){
+      var doppelt = g.nr && ex[g.nr];
+      h += '<label style="display:flex; gap:8px; align-items:flex-start; padding:7px 0; border-top:1px solid #eee2d3; font-weight:400;">';
+      h += '<input type="checkbox" class="glHaken" data-i="' + idx + '" style="width:auto; margin-top:3px;"' + (doppelt ? '' : ' checked') + '>';
+      h += '<span><b>Nr. ' + (g.nr || '?') + ' &middot; ' + escapeHtml(g.typ) + '</b><br><span class="meta">' + escapeHtml(g.standort || '-') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.letztePruefung ? ' &middot; geprüft ' + fmtDate(g.letztePruefung) : '') + (g.notiz ? '<br>Notiz: ' + escapeHtml(g.notiz) : '') + '</span>' + (doppelt ? '<br><span class="meta" style="color:#c23f12;">Nr. ' + g.nr + ' gibt es bei diesem Kunden schon (nicht angehakt)</span>' : '') + '</span></label>';
+    });
+    h += '</div><button class="btn block" id="glAnlegenBtn" style="margin-top:12px;">Angehakte Geräte anlegen</button>';
+    ziel.innerHTML = h;
+    document.querySelectorAll('.glMapSel').forEach(function(s){
+      s.onchange = function(){ map[parseInt(s.getAttribute('data-i'), 10)] = s.value; zeichne(); };
+    });
+    document.getElementById('glAnlegenBtn').onclick = anlegen;
+  }
+
+  function anlegen(){
+    var liste = glAuswerten(rows, map);
+    var intervall = parseInt(document.getElementById('glIntervall').value, 10) || 24;
+    var auswahl = [];
+    document.querySelectorAll('.glHaken').forEach(function(cb){
+      if(cb.checked) auswahl.push(liste[parseInt(cb.getAttribute('data-i'), 10)]);
+    });
+    if(!auswahl.length){ toast('Nichts angehakt'); return; }
+    var btn = document.getElementById('glAnlegenBtn');
+    btn.disabled = true; btn.textContent = 'Legt an ...';
+    var jobs = [];
+    auswahl.forEach(function(x){
+      var naechste = x.letztePruefung ? naechsterTerminNach(x.letztePruefung, intervall) : null;
+      var g = {
+        id: uid(), kundeId: kundeId, typ: x.typ, kategorie: 'Feuerlöscher', nr: x.nr, baujahr: x.baujahr,
+        intervallMonate: intervall, erstelltAm: new Date().toISOString(), seriennummer: x.seriennummer, externeId: '',
+        standort: x.standort, letztePruefung: x.letztePruefung, naechstePruefung: naechste, abfuelldatum: null,
+        zusatzdaten: '', maengel: '', notiz: x.notiz || ''
+      };
+      jobs.push(['geraete', g]);
+      if(naechste) jobs.push(['pruefungen', { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: naechste, erledigt: false }]);
+    });
+    var i = 0;
+    (function weiter(){
+      if(i < jobs.length){ var j = jobs[i++]; dbPut(j[0], j[1], weiter); return; }
+      loadAll(function(){ render(); closeModal(); toast(auswahl.length + ' Geräte angelegt'); });
+    })();
+  }
+
+  document.getElementById('glVorschauBtn').onclick = function(){
+    vorschau();
+  };
+  if(vorText){
+    document.getElementById('glText').value = vorText;
+    vorschau();
+  }
+}
+
 function modalKundeAktionen(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
   var html = '';
   html += '<div class="modal-head"><h3>Aktionen</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<button type="button" class="btn block secondary" id="aktEditBtn">Daten bearbeiten</button>';
+  html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="aktListeBtn">Geräteliste einfügen (aus altem Programm)</button>';
   html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="aktZusammenBtn">Mit anderem Kunden zusammenführen</button>';
   if(k.stillgelegt){
     html += '<button type="button" class="btn block" style="margin-top:8px;" id="aktAktivierenBtn">Wieder aktivieren</button>';
@@ -6842,6 +7062,8 @@ function modalKundeAktionen(kundeId){
   var b;
   b = document.getElementById('aktEditBtn');
   if(b) b.onclick = function(){ closeModal(); modalKundeBearbeiten(kundeId); };
+  b = document.getElementById('aktListeBtn');
+  if(b) b.onclick = function(){ closeModal(); modalGeraeteListeEinfuegen(kundeId); };
   b = document.getElementById('aktAktivierenBtn');
   if(b) b.onclick = function(){
     closeModal();
@@ -7145,7 +7367,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 18:40</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 19:40</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -11004,6 +11226,8 @@ function bindDynamic(){
     };
   });
 
+  var geraeteListeBtn = document.getElementById('geraeteListeBtn');
+  if(geraeteListeBtn) geraeteListeBtn.onclick = function(){ modalGeraeteListeEinfuegen(state.activeKundeId); };
   var sammelberichtBtn = document.getElementById('sammelberichtBtn');
   if(sammelberichtBtn) sammelberichtBtn.onclick = function(){ modalSammelbericht(state.activeKundeId); };
 
