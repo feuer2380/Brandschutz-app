@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 19:40</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 20:00</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6975,6 +6975,7 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
     var maxCols = 0;
     rows.forEach(function(c){ if(/^\d{1,4}$/.test(c[0]) && c.length > maxCols) maxCols = c.length; });
     var intervallAlt = document.getElementById('glIntervall') ? document.getElementById('glIntervall').value : '24';
+    var tatsAlt = document.getElementById('glTatsaechlich') ? document.getElementById('glTatsaechlich').value : '';
     var h = '<div class="meta" style="margin-top:12px;"><b>' + liste.length + ' Geräte erkannt.</b> Falls eine Spalte falsch zugeordnet ist, hier ändern:</div>';
     h += '<div style="overflow-x:auto;"><div style="display:flex; gap:4px; margin:6px 0;">';
     for(var i = 0; i < maxCols; i++){
@@ -6985,7 +6986,9 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
     h += '</div></div>';
     h += '<label style="display:block; margin-top:6px;">Prüfintervall</label><select id="glIntervall">';
     ['12','24','36'].forEach(function(m){ h += '<option value="' + m + '"' + (m === intervallAlt ? ' selected' : '') + '>' + m + ' Monate</option>'; });
-    h += '</select><div style="margin-top:10px;">';
+    h += '</select>';
+    h += '<div style="margin-top:12px; padding:10px; background:#fff4d6; border-radius:10px;"><label style="margin:0;">Tatsächliche Prüfung am (für alle Geräte)</label><input type="date" id="glTatsaechlich" value="' + tatsAlt + '"><div class="meta" style="margin-top:4px;">Wenn du hier ein Datum einträgst, gilt es statt der alten Daten aus der Liste. Die Geräte gelten dann als an diesem Tag geprüft (In Ordnung), die nächste Prüfung wird daraus berechnet. Leer lassen = Daten aus der Liste.</div></div>';
+    h += '<div style="margin-top:10px;">';
     liste.forEach(function(g, idx){
       var doppelt = g.nr && ex[g.nr];
       h += '<label style="display:flex; gap:8px; align-items:flex-start; padding:7px 0; border-top:1px solid #eee2d3; font-weight:400;">';
@@ -7003,6 +7006,7 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
   function anlegen(){
     var liste = glAuswerten(rows, map);
     var intervall = parseInt(document.getElementById('glIntervall').value, 10) || 24;
+    var tatsaechlich = document.getElementById('glTatsaechlich').value || '';
     var auswahl = [];
     document.querySelectorAll('.glHaken').forEach(function(cb){
       if(cb.checked) auswahl.push(liste[parseInt(cb.getAttribute('data-i'), 10)]);
@@ -7012,6 +7016,7 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
     btn.disabled = true; btn.textContent = 'Legt an ...';
     var jobs = [];
     auswahl.forEach(function(x){
+      if(tatsaechlich) x.letztePruefung = tatsaechlich;
       var naechste = x.letztePruefung ? naechsterTerminNach(x.letztePruefung, intervall) : null;
       var g = {
         id: uid(), kundeId: kundeId, typ: x.typ, kategorie: 'Feuerlöscher', nr: x.nr, baujahr: x.baujahr,
@@ -7020,6 +7025,7 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
         zusatzdaten: '', maengel: '', notiz: x.notiz || ''
       };
       jobs.push(['geraete', g]);
+      if(tatsaechlich) jobs.push(['pruefungen', { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: tatsaechlich, erledigt: true, erledigtAm: tatsaechlich + 'T12:00:00', bericht: false, ergebnis: 'In Ordnung' }]);
       if(naechste) jobs.push(['pruefungen', { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: naechste, erledigt: false }]);
     });
     var i = 0;
@@ -7367,7 +7373,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 19:40</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 20:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
