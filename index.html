@@ -906,7 +906,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 17:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 18:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -4873,6 +4873,44 @@ function fehlendeTermineNachtragen(kundeId){
   };
 }
 
+// Kopieren/Einfügen-Knöpfe in Formularfeldern (eigene Zwischenablage, geht auch am iPhone zuverlässig)
+function feldKopierHilfe(ids){
+  ids.forEach(function(id){
+    var inp = document.getElementById(id);
+    if(!inp || inp.getAttribute('data-kopierhilfe')) return;
+    inp.setAttribute('data-kopierhilfe', '1');
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;';
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+    inp.style.paddingRight = '78px';
+    inp.style.boxSizing = 'border-box';
+    var box = document.createElement('div');
+    box.style.cssText = 'position:absolute; right:4px; top:50%; transform:translateY(-50%); display:flex; gap:4px;';
+    function mk(txt, titel, fn){
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = txt; b.title = titel;
+      b.style.cssText = 'padding:5px 9px; font-size:14px; line-height:1; border:1px solid var(--line,#ccc); border-radius:8px; background:#f3efe9; color:#1a1410; cursor:pointer;';
+      b.onclick = function(e){ e.preventDefault(); e.stopPropagation(); fn(); };
+      box.appendChild(b);
+    }
+    mk('⧉', 'Kopieren', function(){
+      var v = inp.value;
+      if(!v){ toast('Feld ist leer'); return; }
+      state.feldKopie = v;
+      try{ if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).catch(function(){}); }catch(err){}
+      toast('Kopiert: ' + (v.length > 30 ? v.slice(0, 30) + '...' : v));
+    });
+    mk('⤓', 'Einfügen', function(){
+      if(!state.feldKopie){ toast('Erst ein Feld mit ⧉ kopieren'); return; }
+      inp.value = state.feldKopie;
+      try{ inp.dispatchEvent(new Event('input', {bubbles:true})); }catch(err){}
+    });
+    wrap.appendChild(box);
+  });
+}
+var KUNDE_KOPIERFELDER = ['fName','fVorname','fNachname','fObjekt','fObjektAdresse','fKundennr','fZusatz','fStrasse','fOrt','fEmail'];
+
 function modalNeuerKunde(){
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Kunde</h3><button class="close" id="mClose">&times;</button></div>';
@@ -4885,6 +4923,7 @@ function modalNeuerKunde(){
   html += '<label style="margin-top:10px;">Objekt / Standort (optional)</label><input id="fObjekt" type="text" placeholder="z.B. Werk 13, Filiale Nord">';
   html += '<label>Objekt-Adresse (falls abweichend vom Kunden, optional)</label><input id="fObjektAdresse" type="text" placeholder="z.B. Handelskai 267, 1030 Wien">';
   html += '<label>Kundennummer</label><input id="fKundennr" type="text" placeholder="z.B. K-1024">';
+  html += '<label>Adresszusatz (optional, z.B. p.A. Hausverwaltung)</label><input id="fZusatz" type="text" placeholder="z.B. p.A. Realkanzlei Edlauer GmbH &amp; Co KG">';
   html += '<label>Straße und Hausnummer</label><input id="fStrasse" type="text" placeholder="z.B. Ketzergasse 299">';
   html += '<div style="display:flex; gap:10px;">';
   html += '<div style="flex:0 0 90px;"><label>PLZ</label><input id="fPlz" type="text" inputmode="numeric" placeholder="2380"></div>';
@@ -4896,6 +4935,7 @@ function modalNeuerKunde(){
   html += '<button class="btn block" id="fSave">Kunde speichern</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  feldKopierHilfe(KUNDE_KOPIERFELDER);
   document.getElementById('fTelefonLeerBtn').onclick = function(){
     var f = document.getElementById('fTelefon');
     var pos = f.selectionStart != null ? f.selectionStart : f.value.length;
@@ -4912,7 +4952,8 @@ function modalNeuerKunde(){
     var plz = document.getElementById('fPlz').value.trim();
     var ort = document.getElementById('fOrt').value.trim();
     var strasse = document.getElementById('fStrasse').value.trim();
-    var adresse = strasse;
+    var zusatz = document.getElementById('fZusatz').value.trim();
+    var adresse = (zusatz ? zusatz + (strasse ? ', ' : '') : '') + strasse;
     if(plz || ort) adresse += (adresse ? ', ' : '') + (plz + ' ' + ort).trim();
     var k = {
       id: uid(),
@@ -4923,6 +4964,7 @@ function modalNeuerKunde(){
       objekt: document.getElementById('fObjekt').value.trim(),
       objektAdresse: document.getElementById('fObjektAdresse').value.trim(),
       strasse: strasse,
+      adresszusatz: zusatz,
       plz: plz,
       ort: ort,
       adresse: adresse,
@@ -5001,6 +5043,7 @@ function modalKundeBearbeiten(kundeId){
   html += '<label style="margin-top:10px;">Objekt / Standort (optional)</label><input id="fObjekt" type="text" value="' + escapeHtml(k.objekt || '') + '" placeholder="z.B. Werk 13, Filiale Nord">';
   html += '<label>Objekt-Adresse (falls abweichend vom Kunden, optional)</label><input id="fObjektAdresse" type="text" value="' + escapeHtml(k.objektAdresse || '') + '" placeholder="z.B. Handelskai 267, 1030 Wien">';
   html += '<label>Kundennummer</label><input id="fKundennr" type="text" value="' + escapeHtml(k.kundennummer || '') + '">';
+  html += '<label>Adresszusatz (optional, z.B. p.A. Hausverwaltung)</label><input id="fZusatz" type="text" value="' + escapeHtml(k.adresszusatz || '') + '" placeholder="z.B. p.A. Realkanzlei Edlauer GmbH &amp; Co KG">';
   html += '<label>Straße und Hausnummer</label><input id="fStrasse" type="text" value="' + escapeHtml(k.strasse || '') + '">';
   html += '<div style="display:flex; gap:10px;">';
   html += '<div style="flex:0 0 90px;"><label>PLZ</label><input id="fPlz" type="text" inputmode="numeric" value="' + escapeHtml(k.plz || '') + '"></div>';
@@ -5019,6 +5062,7 @@ function modalKundeBearbeiten(kundeId){
   html += '<button class="btn block secondary" id="fDelete" style="margin-top:10px;">Kunde in Papierkorb verschieben</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  feldKopierHilfe(KUNDE_KOPIERFELDER);
   document.getElementById('fTelefonLeerBtn').onclick = function(){
     var f = document.getElementById('fTelefon');
     var pos = f.selectionStart != null ? f.selectionStart : f.value.length;
@@ -5038,7 +5082,8 @@ function modalKundeBearbeiten(kundeId){
     var plz = document.getElementById('fPlz').value.trim();
     var ort = document.getElementById('fOrt').value.trim();
     var strasse = document.getElementById('fStrasse').value.trim();
-    var adresse = strasse;
+    var zusatz = document.getElementById('fZusatz').value.trim();
+    var adresse = (zusatz ? zusatz + (strasse ? ', ' : '') : '') + strasse;
     if(plz || ort) adresse += (adresse ? ', ' : '') + (plz + ' ' + ort).trim();
     k.name = name;
     k.vorname = vorname;
@@ -5047,6 +5092,7 @@ function modalKundeBearbeiten(kundeId){
     k.objekt = document.getElementById('fObjekt').value.trim();
     k.objektAdresse = document.getElementById('fObjektAdresse').value.trim();
     k.strasse = strasse;
+    k.adresszusatz = zusatz;
     k.plz = plz;
     k.ort = ort;
     k.adresse = adresse;
@@ -7099,7 +7145,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 17:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 18:40</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
