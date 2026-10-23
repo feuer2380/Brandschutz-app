@@ -196,6 +196,29 @@ try {
   .monatKopf{display:flex; align-items:center; justify-content:space-between; margin:24px 0 10px; padding:11px 14px; border-radius:12px; background:#1a1410; color:#fff; font-size:17px; font-weight:800; letter-spacing:.02em; border-left:6px solid #e8541e;}
   .monatKopf.monatNext{border-left-color:#e0a21c;}
   .monatKopf .monatAnz{background:#fff; color:#1a1410; border-radius:999px; min-width:28px; text-align:center; padding:2px 10px; font-size:15px;}
+  .monatBox{margin:22px 0 6px; padding:0 0 4px; border-radius:18px; background:#fdeee3; border:1px solid #f1cfb8; overflow:hidden;}
+  .monatBox.nov{background:#faf3dc; border-color:#ecdca4;}
+  .monatBox.ueb{background:#fde4e0; border-color:#f0b3aa;}
+  .monatBox > .monatKopf{margin:0 0 12px; border-radius:0; border-left-width:8px;}
+  .monatBox > .aufgabe, .monatBox > .empty{margin-left:10px; margin-right:10px;}
+  .monatKopf.ueberKopf{border-left-color:#c23f12; background:#7a1d0a;}
+  .aufgabe{position:relative; background:#fff; border:1px solid var(--line); border-left:6px solid #9bb59f; border-radius:12px; padding:13px 14px 12px 14px; margin-bottom:11px; box-shadow:0 1px 3px rgba(26,20,16,.08);}
+  .aufgabe.warn{border-left-color:#c23f12;}
+  .aufgabe.soon{border-left-color:#e8a21c;}
+  .aufgabe.blau{border-left-color:#3b78c4;}
+  .aufgabe-kopf{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .aufgabe-titel{flex:1; min-width:0;}
+  .aufgabe h3{font-size:18px; line-height:1.25; margin:0 0 3px 0; font-weight:800;}
+  .aufgabe-art{font-size:14px; line-height:1.35; color:#3d352b;}
+  .aufgabe-datum{text-align:right; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:5px;}
+  .aufgabe-datum b{font-size:16px; font-weight:800; white-space:nowrap;}
+  .aufgabe-adr{font-size:13px; color:#6b6050; margin-top:8px;}
+  .aufgabe .baldFaelligZeile{font-size:14px;}
+  .aufgabe .baldFaelligZeile .meta{font-size:14px; color:#3d352b;}
+  .zuordBtn{display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; margin-top:10px; padding:11px 13px; border-radius:10px; border:1px solid #cfe0f3; background:#eef5fd; color:#16497f; font:inherit; font-size:15px; font-weight:700; cursor:pointer;}
+  .zuordBtn.leer{background:#fff4d9; border-color:#f0d58a; color:#8a5a00;}
+  .zuordBtn .zuordWer{flex:1; min-width:0; text-align:left; line-height:1.25; font-size:14.5px;}
+  .zuordBtn .zuordAkt{font-weight:800; white-space:nowrap;}
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center; box-shadow:0 1px 4px rgba(26,20,16,.06);}
@@ -909,7 +932,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 23.10. 18:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 23.10. 19:10</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1011,9 +1034,23 @@ function zuordSelectHtml(p){
   if(!istVollsicht()) return '';
   var g = geraetFuerPruefung(p);
   if(!g) return '';
-  var txt = g.zustaendig ? zustaendigKurz(g.zustaendig) : 'niemand';
-  var h = '<button type="button" class="btn secondary zuordBtn" data-pid="' + p.id + '" style="margin-top:8px; width:100%; justify-content:space-between;">';
-  h += '<span>&#128100; ' + escapeHtml(txt) + (p.zeit ? ' &middot; ' + escapeHtml(p.zeit) + ' Uhr' : '') + '</span><span style="font-weight:700;">Zuteilen / Termin &rsaquo;</span></button>';
+  var nieman = !g.zustaendig;
+  var h = '<button type="button" class="zuordBtn' + (nieman ? ' leer' : '') + '" data-pid="' + p.id + '">';
+  h += '<span class="zuordWer">' + (nieman ? '&#9888; Noch niemand zugeteilt' : '&#128100; ' + escapeHtml(zustaendigKurz(g.zustaendig)) + (p.zeit ? ' &middot; ' + escapeHtml(p.zeit) + ' Uhr' : '')) + '</span>';
+  h += '<span class="zuordAkt">' + (nieman ? 'Zuteilen' : 'Ändern') + ' &rsaquo;</span></button>';
+  return h;
+}
+function aufgabeKarteHtml(p, k, st){
+  var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+  var dObj = new Date(String(p.datum).substring(0, 10) + 'T12:00:00');
+  var kurz = fmtDate(p.datum).substring(0, 6);
+  var h = '<div class="aufgabe ' + st.cls + ' kunde-card" data-id="' + (k ? k.id : '') + '">';
+  h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
+  h += '<div class="aufgabe-art">' + pruefungAnzeigeText(p, true) + '</div></div>';
+  h += '<div class="aufgabe-datum"><b>' + (isNaN(dObj.getTime()) ? '' : wt[dObj.getDay()] + ' ') + kurz + '</b><span class="badge ' + st.cls + '">' + st.label + '</span></div></div>';
+  if(k && k.adresse) h += '<div class="aufgabe-adr">&#128205; ' + escapeHtml(k.adresse) + '</div>';
+  h += zuordSelectHtml(p);
+  h += '</div>';
   return h;
 }
 function modalPruefungZuteilen(pid){
@@ -1060,11 +1097,11 @@ function modalPruefungZuteilen(pid){
 }
 function zustaendigKurz(n){ return n === CHEF_NAME ? 'Chef' : String(n || ''); }
 
-function pruefungAnzeigeText(p){
+function pruefungAnzeigeText(p, ohnePerson){
   var g = geraetFuerPruefung(p);
   if(g){
     var kat = (g.kategorie || 'Feuerlöscher').trim();
-    var text = escapeHtml(kat) + (g.typ ? (' &middot; ' + escapeHtml(g.typ)) : '');
+    var text = escapeHtml(kat) + ((g.typ && g.typ !== kat) ? (' &middot; ' + escapeHtml(g.typ)) : '');
     if(kat === 'Brandschutzbegehung'){
       var kBeg = kundeFuerPruefung(p);
       if(kBeg && kBeg.objekt) text += ' &middot; ' + escapeHtml(kBeg.objekt);
@@ -1074,8 +1111,10 @@ function pruefungAnzeigeText(p){
       if(nrAnzeige) text += ' &middot; ' + nrAnzeige;
       if(g.standort) text += ' &middot; ' + escapeHtml(g.standort);
     }
-    if(g.zustaendig) text += ' &middot; <b style="color:#1d5fa8;">&#128100; ' + escapeHtml(zustaendigKurz(g.zustaendig)) + '</b>';
-    if(p.zeit) text += ' &middot; ' + escapeHtml(p.zeit) + ' Uhr';
+    if(!ohnePerson){
+      if(g.zustaendig) text += ' &middot; <b style="color:#1d5fa8;">&#128100; ' + escapeHtml(zustaendigKurz(g.zustaendig)) + '</b>';
+      if(p.zeit) text += ' &middot; ' + escapeHtml(p.zeit) + ' Uhr';
+    }
     return text;
   }
   return escapeHtml(p.typ || 'Prüfung');
@@ -1105,7 +1144,7 @@ function renderDashboard(){
   var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var diesenMonat = offen.filter(function(p){
     var d = new Date(p.datum);
-    return d.getMonth() === jetzt.getMonth() && d.getFullYear() === jetzt.getFullYear();
+    return d.getMonth() === jetzt.getMonth() && d.getFullYear() === jetzt.getFullYear() && daysUntil(p.datum) >= 0;
   });
   diesenMonat.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
   if(istEingeschraenkt()){
@@ -1218,7 +1257,9 @@ function renderDashboard(){
     });
   }
 
-  html += '<div class="monatKopf">' + monatNamen[jetzt.getMonth()] + ' &ndash; noch offen <span class="monatAnz">' + diesenMonat.length + '</span></div>';
+  var htmlVorOkt = html;
+  html = '';
+  html += '<div class="monatBox okt"><div class="monatKopf">' + monatNamen[jetzt.getMonth()] + ' &ndash; noch offen <span class="monatAnz">' + diesenMonat.length + '</span></div>';
   if(diesenMonat.length === 0){
     html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
   } else {
@@ -1240,16 +1281,10 @@ function renderDashboard(){
       });
       if(eintraege.length === 1){
         var p = eintraege[0];
-        var st = statusForDate(p.datum);
-        html += '<div class="card kunde-card" data-id="' + (k ? k.id : '') + '">';
-        html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-        html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div>';
-        if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
-        html += zuordSelectHtml(p);
-        html += '</div>';
+        html += aufgabeKarteHtml(p, k, statusForDate(p.datum));
       } else {
         var aufgeklappt = true;
-        html += '<div class="card">';
+        html += '<div class="aufgabe ' + schlimmsteCls + '">';
         html += '<div class="row" style="gap:8px;"><h3 style="flex:1;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' fällig</span></div>';
         if(!aufgeklappt && k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
         if(aufgeklappt){
@@ -1266,6 +1301,9 @@ function renderDashboard(){
       }
     });
   }
+  html += '</div>';
+  var htmlOkt = html;
+  html = htmlVorOkt;
 
   function renderPruefungsGruppenHtml(list){
     var innerHtml = '';
@@ -1295,14 +1333,10 @@ function renderDashboard(){
       });
       if(gr.eintraege.length === 1){
         var p = gr.eintraege[0];
-        var st = statusFuerBaldFaellig(p.datum);
-        innerHtml += '<div class="card kunde-card" data-id="' + (gr.kunde ? gr.kunde.id : '') + '">';
-        innerHtml += '<div class="row"><h3>' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-        innerHtml += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div></div>';
-        innerHtml += '</div>';
+        innerHtml += aufgabeKarteHtml(p, gr.kunde, statusFuerBaldFaellig(p.datum));
       } else {
         var aufgeklappt = true;
-        innerHtml += '<div class="card">';
+        innerHtml += '<div class="aufgabe ' + schlimmsteCls + '">';
         innerHtml += '<div class="row" style="gap:8px;"><h3 style="flex:1;">' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig</span></div>';
         if(aufgeklappt){
           gr.eintraege.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
@@ -1319,16 +1353,19 @@ function renderDashboard(){
 
   var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
   if(ueberfaelligPruefungen.length > 0){
-    html += '<div class="section-title">Überfällig</div>';
+    html += '<div class="monatBox ueb"><div class="monatKopf ueberKopf">Überfällig <span class="monatAnz">' + ueberfaelligPruefungen.length + '</span></div>';
     html += renderPruefungsGruppenHtml(ueberfaelligPruefungen);
+    html += '</div>';
   }
+  html += htmlOkt;
 
-  html += '<div class="monatKopf monatNext">' + monatNamen[naechsterMonatIndex] + ' &ndash; kommt als Nächstes <span class="monatAnz">' + bald.length + '</span></div>';
+  html += '<div class="monatBox nov"><div class="monatKopf monatNext">' + monatNamen[naechsterMonatIndex] + ' &ndash; kommt als Nächstes <span class="monatAnz">' + bald.length + '</span></div>';
   if(bald.length === 0){
     html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
   } else {
     html += renderPruefungsGruppenHtml(bald);
   }
+  html += '</div>';
 
   html += '<div class="section-title">Fällige Innenrevisionen</div>';
   var innenrevListe = [];
@@ -7375,7 +7412,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 23.10. 18:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 23.10. 19:10</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
