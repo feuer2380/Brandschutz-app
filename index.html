@@ -193,32 +193,34 @@ try {
     .qr-etikett-firma{font-size:7px; line-height:1.1; font-weight:700; text-align:center; margin-bottom:0.8mm; color:#000;}
     .qr-etikett img, .qr-etikett canvas, .qr-etikett table{ width:22mm !important; height:22mm !important; }
   }
-  .monatKopf{display:flex; align-items:center; justify-content:space-between; margin:24px 0 10px; padding:11px 14px; border-radius:12px; background:#1a1410; color:#fff; font-size:17px; font-weight:800; letter-spacing:.02em; border-left:6px solid #e8541e;}
-  .monatKopf.monatNext{border-left-color:#e0a21c;}
-  .monatKopf .monatAnz{background:#fff; color:#1a1410; border-radius:999px; min-width:28px; text-align:center; padding:2px 10px; font-size:15px;}
-  .monatBox{margin:22px 0 6px; padding:0 0 4px; border-radius:18px; background:#fdeee3; border:1px solid #f1cfb8; overflow:hidden;}
-  .monatBox.nov{background:#faf3dc; border-color:#ecdca4;}
-  .monatBox.ueb{background:#fde4e0; border-color:#f0b3aa;}
-  .monatBox > .monatKopf{margin:0 0 12px; border-radius:0; border-left-width:8px;}
-  .monatBox > .aufgabe, .monatBox > .empty{margin-left:10px; margin-right:10px;}
-  .monatKopf.ueberKopf{border-left-color:#c23f12; background:#7a1d0a;}
-  .aufgabe{position:relative; background:#fff; border:1px solid var(--line); border-left:6px solid #9bb59f; border-radius:12px; padding:13px 14px 12px 14px; margin-bottom:11px; box-shadow:0 1px 3px rgba(26,20,16,.08);}
-  .aufgabe.warn{border-left-color:#c23f12;}
-  .aufgabe.soon{border-left-color:#e8a21c;}
-  .aufgabe.blau{border-left-color:#3b78c4;}
+  .monatBox{margin:20px 0 4px;}
+  .monatKopf{display:flex; align-items:center; gap:8px; margin:0 2px 10px; font-size:13px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#3d352b;}
+  .monatKopf::before{content:""; width:10px; height:10px; border-radius:50%; background:#e8541f; flex-shrink:0;}
+  .monatKopf.monatNext::before{background:#e0a21c;}
+  .monatKopf.ueberKopf{color:#a8310e;}
+  .monatKopf.ueberKopf::before{background:#c23f12;}
+  .monatKopf .monatAnz{margin-left:auto; background:#ece5d9; color:#3d352b; border-radius:999px; min-width:24px; text-align:center; padding:1px 9px; font-size:12px; letter-spacing:0;}
+  .aufgabe{position:relative; background:#fff; border:1px solid #ece5d9; border-radius:14px; padding:11px 13px 10px 16px; margin-bottom:9px; box-shadow:inset 4px 0 0 #8fb596, 0 1px 2px rgba(26,20,16,.05); overflow:hidden;}
+  .aufgabe.warn{box-shadow:inset 4px 0 0 #c23f12, 0 1px 2px rgba(26,20,16,.05);}
+  .aufgabe.soon{box-shadow:inset 4px 0 0 #e8a21c, 0 1px 2px rgba(26,20,16,.05);}
+  .aufgabe.blau{box-shadow:inset 4px 0 0 #3b78c4, 0 1px 2px rgba(26,20,16,.05);}
   .aufgabe-kopf{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
   .aufgabe-titel{flex:1; min-width:0;}
-  .aufgabe h3{font-size:18px; line-height:1.25; margin:0 0 3px 0; font-weight:800;}
-  .aufgabe-art{font-size:14px; line-height:1.35; color:#3d352b;}
-  .aufgabe-datum{text-align:right; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:5px;}
-  .aufgabe-datum b{font-size:16px; font-weight:800; white-space:nowrap;}
-  .aufgabe-adr{font-size:13px; color:#6b6050; margin-top:8px;}
-  .aufgabe .baldFaelligZeile{font-size:14px;}
-  .aufgabe .baldFaelligZeile .meta{font-size:14px; color:#3d352b;}
-  .zuordBtn{display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; margin-top:10px; padding:11px 13px; border-radius:10px; border:1px solid #cfe0f3; background:#eef5fd; color:#16497f; font:inherit; font-size:15px; font-weight:700; cursor:pointer;}
-  .zuordBtn.leer{background:#fff4d9; border-color:#f0d58a; color:#8a5a00;}
-  .zuordBtn .zuordWer{flex:1; min-width:0; text-align:left; line-height:1.25; font-size:14.5px;}
-  .zuordBtn .zuordAkt{font-weight:800; white-space:nowrap;}
+  .aufgabe h3{font-family:inherit; font-size:15.5px; line-height:1.25; margin:0 0 2px 0; font-weight:700; letter-spacing:-.005em;}
+  .aufgabe-art{font-size:12.5px; line-height:1.35; color:#6b6050;}
+  .aufgabe-datum{text-align:right; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px;}
+  .aufgabe-datum b{font-size:13.5px; font-weight:700; white-space:nowrap; color:#1a1410;}
+  .aufgabe-datum .badge{font-size:10.5px; padding:2px 8px;}
+  .aufgabe-adr{font-size:12px; color:#8a7f6f; margin-top:5px;}
+  .aufgabe .baldFaelligZeile{font-size:13px; padding:2px 0;}
+  .aufgabe .baldFaelligZeile .meta{font-size:12.5px; color:#3d352b;}
+  .zuordBtn{display:flex; align-items:center; gap:8px; width:100%; margin-top:8px; padding:5px 6px 5px 5px; border-radius:999px; border:1px solid #dbe6f3; background:#f3f7fc; color:#16497f; font:inherit; font-size:13px; font-weight:600; cursor:pointer; text-align:left;}
+  .zuordBtn .zuordAv{width:24px; height:24px; border-radius:50%; background:#1d5fa8; color:#fff; font-size:10.5px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .zuordBtn .zuordWer{flex:1; min-width:0; line-height:1.2;}
+  .zuordBtn .zuordAkt{font-weight:700; font-size:12px; white-space:nowrap; color:#1d5fa8; padding-right:6px;}
+  .zuordBtn.leer{background:#fffaf0; border:1px dashed #e0b95a; color:#8a5a00;}
+  .zuordBtn.leer .zuordAv{background:#e0a21c;}
+  .zuordBtn.leer .zuordAkt{color:#8a5a00;}
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center; box-shadow:0 1px 4px rgba(26,20,16,.06);}
@@ -932,7 +934,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 23.10. 19:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 23.10. 19:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1035,8 +1037,11 @@ function zuordSelectHtml(p){
   var g = geraetFuerPruefung(p);
   if(!g) return '';
   var nieman = !g.zustaendig;
+  var ini = '!';
+  if(!nieman){ ini = String(zustaendigKurz(g.zustaendig)).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join(''); }
   var h = '<button type="button" class="zuordBtn' + (nieman ? ' leer' : '') + '" data-pid="' + p.id + '">';
-  h += '<span class="zuordWer">' + (nieman ? '&#9888; Noch niemand zugeteilt' : '&#128100; ' + escapeHtml(zustaendigKurz(g.zustaendig)) + (p.zeit ? ' &middot; ' + escapeHtml(p.zeit) + ' Uhr' : '')) + '</span>';
+  h += '<span class="zuordAv">' + escapeHtml(ini) + '</span>';
+  h += '<span class="zuordWer">' + (nieman ? 'Noch niemand zugeteilt' : escapeHtml(zustaendigKurz(g.zustaendig)) + (p.zeit ? ' &middot; ' + escapeHtml(p.zeit) + ' Uhr' : '')) + '</span>';
   h += '<span class="zuordAkt">' + (nieman ? 'Zuteilen' : 'Ändern') + ' &rsaquo;</span></button>';
   return h;
 }
@@ -2573,6 +2578,11 @@ function neuenOffenenTerminAnlegen(g, cb){
   var hatOffene = state.pruefungen.some(function(p){ return p.geraetId === g.id && !p.erledigt; });
   if(hatOffene){ if(cb) cb(); return; }
   var pNeu = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: g.naechstePruefung, erledigt: false };
+  // Zuteilung gilt nur für die erledigte Runde: für den nächsten Termin wird neu eingeteilt
+  if(g.zustaendig){
+    g.zustaendig = null;
+    try{ dbPut('geraete', g, function(){}); }catch(eZ){}
+  }
   dbPut('pruefungen', pNeu, function(){ if(cb) cb(); });
 }
 
@@ -7412,7 +7422,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 23.10. 19:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 23.10. 19:40</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
