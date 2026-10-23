@@ -193,6 +193,9 @@ try {
     .qr-etikett-firma{font-size:7px; line-height:1.1; font-weight:700; text-align:center; margin-bottom:0.8mm; color:#000;}
     .qr-etikett img, .qr-etikett canvas, .qr-etikett table{ width:22mm !important; height:22mm !important; }
   }
+  .monatKopf{display:flex; align-items:center; justify-content:space-between; margin:24px 0 10px; padding:11px 14px; border-radius:12px; background:#1a1410; color:#fff; font-size:17px; font-weight:800; letter-spacing:.02em; border-left:6px solid #e8541e;}
+  .monatKopf.monatNext{border-left-color:#e0a21c;}
+  .monatKopf .monatAnz{background:#fff; color:#1a1410; border-radius:999px; min-width:28px; text-align:center; padding:2px 10px; font-size:15px;}
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center; box-shadow:0 1px 4px rgba(26,20,16,.06);}
@@ -906,7 +909,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 21.10. 20:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 23.10. 18:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1215,7 +1218,7 @@ function renderDashboard(){
     });
   }
 
-  html += '<details style="margin-top:14px;"><summary style="cursor:pointer; font-weight:700; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:8px 0;">Alle offenen diesen Monat (' + monatNamen[jetzt.getMonth()] + ') &middot; ' + diesenMonat.length + '</summary>';
+  html += '<div class="monatKopf">' + monatNamen[jetzt.getMonth()] + ' &ndash; noch offen <span class="monatAnz">' + diesenMonat.length + '</span></div>';
   if(diesenMonat.length === 0){
     html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Diesen Monat stehen keine Prüfungen an</div>';
   } else {
@@ -1245,9 +1248,9 @@ function renderDashboard(){
         html += zuordSelectHtml(p);
         html += '</div>';
       } else {
-        var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['dm_' + kid]);
+        var aufgeklappt = true;
         html += '<div class="card">';
-        html += '<div class="row offenKundeToggle" data-kid="dm_' + kid + '" style="cursor:pointer; gap:8px;"><h3 style="flex:1;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' fällig</span><span class="chev">' + (aufgeklappt ? '&#9660;' : '&#9654;') + '</span></div>';
+        html += '<div class="row" style="gap:8px;"><h3 style="flex:1;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' fällig</span></div>';
         if(!aufgeklappt && k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
         if(aufgeklappt){
           eintraege.forEach(function(p, idx){
@@ -1263,7 +1266,6 @@ function renderDashboard(){
       }
     });
   }
-  html += '</details>';
 
   function renderPruefungsGruppenHtml(list){
     var innerHtml = '';
@@ -1299,9 +1301,9 @@ function renderDashboard(){
         innerHtml += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div></div>';
         innerHtml += '</div>';
       } else {
-        var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt['bf_' + key]);
+        var aufgeklappt = true;
         innerHtml += '<div class="card">';
-        innerHtml += '<div class="row offenKundeToggle" data-kid="bf_' + key + '" style="cursor:pointer; gap:8px;"><h3 style="flex:1;">' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig</span><span class="chev">' + (aufgeklappt ? '&#9660;' : '&#9654;') + '</span></div>';
+        innerHtml += '<div class="row" style="gap:8px;"><h3 style="flex:1;">' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig</span></div>';
         if(aufgeklappt){
           gr.eintraege.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
           gr.eintraege.forEach(function(p){
@@ -1321,7 +1323,7 @@ function renderDashboard(){
     html += renderPruefungsGruppenHtml(ueberfaelligPruefungen);
   }
 
-  html += '<div class="section-title">Bald fällig (' + tageNaechsterMonat + ' Tage, ' + monatNamen[naechsterMonatIndex] + ')</div>';
+  html += '<div class="monatKopf monatNext">' + monatNamen[naechsterMonatIndex] + ' &ndash; kommt als Nächstes <span class="monatAnz">' + bald.length + '</span></div>';
   if(bald.length === 0){
     html += '<div class="empty kompakt"><span class="ic">&#10003;</span>Keine anstehenden Prüfungen</div>';
   } else {
@@ -7373,7 +7375,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 21.10. 20:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 23.10. 18:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
