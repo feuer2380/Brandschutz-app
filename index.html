@@ -934,7 +934,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 24.10. 16:10</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 24.10. 19:00</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7429,7 +7429,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 24.10. 16:10</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 24.10. 19:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -10657,19 +10657,22 @@ function umsatzKarteHtml(k){
   var liste = (k.rechnungen || []).slice().sort(function(a, b){ return String(b.datum).localeCompare(String(a.datum)); });
   var summe = liste.reduce(function(x, r){ return x + (Number(r.betrag) || 0); }, 0);
   var jahr = String(new Date().getFullYear());
+  var summeOffen = liste.filter(function(r){ return !r.bezahlt; }).reduce(function(x, r){ return x + (Number(r.betrag) || 0); }, 0);
   var summeJahr = liste.filter(function(r){ return String(r.datum).substring(0, 4) === jahr; }).reduce(function(x, r){ return x + (Number(r.betrag) || 0); }, 0);
   var heute = new Date().toISOString().substring(0, 10);
   var h = '<div class="card" style="margin-top:14px;">';
   h += '<div class="row"><div class="section-title" style="margin:0;">Rechnungen / Umsatz</div><span class="badge ok">' + eurText(summe) + '</span></div>';
-  if(liste.length) h += '<div class="meta" style="margin-top:4px;">Dieses Jahr: <b>' + eurText(summeJahr) + '</b> &middot; Insgesamt ' + liste.length + ' Rechnung' + (liste.length === 1 ? '' : 'en') + '</div>';
+  if(liste.length) h += '<div class="meta" style="margin-top:4px;">Dieses Jahr: <b>' + eurText(summeJahr) + '</b> &middot; ' + liste.length + ' Rechnung' + (liste.length === 1 ? '' : 'en') + (summeOffen > 0 ? ' &middot; <b style="color:#c23f12;">Offen: ' + eurText(summeOffen) + '</b>' : ' &middot; alles bezahlt') + '</div>';
   else h += '<div class="meta" style="margin-top:4px;">Noch keine Rechnung eingetragen</div>';
   liste.forEach(function(r){
-    h += '<div class="row" style="padding:7px 0; border-bottom:1px solid var(--line);"><div style="flex:1; min-width:0;"><b>' + eurText(r.betrag) + '</b><div class="meta">' + fmtDate(r.datum) + (r.notiz ? ' &middot; ' + escapeHtml(r.notiz) : '') + '</div></div>';
+    h += '<div class="row" style="padding:7px 0; border-bottom:1px solid var(--line);"><div style="flex:1; min-width:0;"><b>' + eurText(r.betrag) + '</b><div class="meta">' + fmtDate(r.datum) + (r.notiz ? ' &middot; ' + escapeHtml(r.notiz) : '') + (r.bezahlt && r.bezahltAm ? ' &middot; bezahlt am ' + fmtDate(r.bezahltAm) : '') + '</div></div>';
+    h += '<button type="button" class="badge ' + (r.bezahlt ? 'ok' : 'warn') + '" data-rgpaid="' + escapeHtml(r.id) + '" style="border:0; cursor:pointer; padding:6px 11px; font-size:12px;">' + (r.bezahlt ? '&#10003; Bezahlt' : 'Offen') + '</button>';
     h += '<button class="btn small secondary" data-rgdel="' + escapeHtml(r.id) + '">&times;</button></div>';
   });
   h += '<div class="row" style="gap:8px; margin-top:12px;"><div style="flex:1;"><label style="margin-top:0;">Betrag (&euro;)</label><input type="text" inputmode="decimal" id="rgBetrag" placeholder="z.B. 245,50" autocomplete="off"></div>';
   h += '<div style="flex:1;"><label style="margin-top:0;">Datum</label><input type="date" id="rgDatum" value="' + heute + '"></div></div>';
   h += '<label>Notiz (optional)</label><input type="text" id="rgNotiz" placeholder="z.B. Rechnungsnummer" autocomplete="off">';
+  h += '<label>Status</label><select id="rgStatus"><option value="offen">Offen (noch nicht bezahlt)</option><option value="bezahlt">Bezahlt</option></select>';
   h += '<button class="btn block" id="rgAdd" style="margin-top:10px;">Rechnung speichern</button>';
   h += '</div>';
   return h;
@@ -10685,9 +10688,18 @@ function bindUmsatz(){
     if(!(betrag > 0)){ toast('Bitte einen Betrag eingeben'); return; }
     var datum = document.getElementById('rgDatum').value || new Date().toISOString().substring(0, 10);
     if(!k.rechnungen) k.rechnungen = [];
-    k.rechnungen.push({ id: uid(), datum: datum, betrag: Math.round(betrag * 100) / 100, notiz: document.getElementById('rgNotiz').value.trim() });
+    k.rechnungen.push({ id: uid(), datum: datum, betrag: Math.round(betrag * 100) / 100, notiz: document.getElementById('rgNotiz').value.trim(), bezahlt: document.getElementById('rgStatus').value === 'bezahlt', bezahltAm: document.getElementById('rgStatus').value === 'bezahlt' ? datum : null });
     dbPut('kunden', k, function(){ render(); toast('Rechnung gespeichert'); });
   };
+  document.querySelectorAll('[data-rgpaid]').forEach(function(b){
+    b.onclick = function(){
+      var r = (k.rechnungen || []).filter(function(x){ return x.id === b.getAttribute('data-rgpaid'); })[0];
+      if(!r) return;
+      r.bezahlt = !r.bezahlt;
+      r.bezahltAm = r.bezahlt ? new Date().toISOString().substring(0, 10) : null;
+      dbPut('kunden', k, function(){ render(); toast(r.bezahlt ? 'Als bezahlt markiert' : 'Wieder offen'); });
+    };
+  });
   document.querySelectorAll('[data-rgdel]').forEach(function(b){
     b.onclick = function(){
       var id = b.getAttribute('data-rgdel');
@@ -10714,8 +10726,9 @@ function statistikKundenHtml(){
     if(k.geloescht) return;
     var rg = (k.rechnungen || []).filter(imZeitraum);
     var summe = rg.reduce(function(x, r){ return x + (Number(r.betrag) || 0); }, 0);
+    var offenK = rg.filter(function(r){ return !r.bezahlt; }).reduce(function(x, r){ return x + (Number(r.betrag) || 0); }, 0);
     var geraete = state.geraete.filter(function(g){ return g.kundeId === k.id && !g.ausgeschieden; }).length;
-    zeilen.push({ k: k, summe: summe, anz: rg.length, geraete: geraete });
+    zeilen.push({ k: k, summe: summe, offen: offenK, anz: rg.length, geraete: geraete });
   });
   var mit = zeilen.filter(function(z){ return z.summe > 0; }).sort(function(a, b){ return b.summe - a.summe; });
   var ohne = zeilen.filter(function(z){ return z.summe <= 0; });
@@ -10725,8 +10738,24 @@ function statistikKundenHtml(){
   var h = '<div class="filter-bar segmented" style="margin-bottom:12px;">';
   opt.forEach(function(o){ h += '<button class="filter-btn' + (zeit === o[0] ? ' active' : '') + '" data-statkundenzeit="' + o[0] + '">' + o[1] + '</button>'; });
   h += '</div>';
+  var gesamtOffen = mit.reduce(function(x, z){ return x + z.offen; }, 0);
   h += '<div class="statrow"><div class="stat"><div class="n">' + eurText(gesamt) + '</div><div class="l">Umsatz</div></div>';
-  h += '<div class="stat"><div class="n">' + mit.length + '</div><div class="l">Kunden mit Rechnung</div></div></div>';
+  h += '<div class="stat"><div class="n" style="color:' + (gesamtOffen > 0 ? '#c23f12' : '#2f7a4f') + ';">' + eurText(gesamtOffen) + '</div><div class="l">Noch offen</div></div></div>';
+  // Alle offenen Rechnungen (unabhängig vom Zeitraum), älteste zuerst
+  var offeneListe = [];
+  state.kunden.forEach(function(k){
+    if(k.geloescht) return;
+    (k.rechnungen || []).forEach(function(r){ if(!r.bezahlt) offeneListe.push({ k: k, r: r }); });
+  });
+  offeneListe.sort(function(a, b){ return String(a.r.datum).localeCompare(String(b.r.datum)); });
+  if(offeneListe.length){
+    h += '<div class="section-title" style="margin-top:6px; color:#c23f12;">Offene Rechnungen (' + offeneListe.length + ')</div>';
+    offeneListe.forEach(function(e){
+      var tage = Math.floor((new Date() - new Date(String(e.r.datum).substring(0, 10) + 'T12:00:00')) / 86400000);
+      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">seit ' + tage + ' Tagen offen</b></div></div>';
+    });
+    h += '<div class="section-title" style="margin-top:14px;">Rangliste nach Umsatz</div>';
+  }
   if(!mit.length){
     h += '<div class="empty">Noch keine Rechnungen eingetragen. Beim Kunden unten bei „Rechnungen / Umsatz“ den Betrag der letzten Rechnung eintragen.</div>';
   }
@@ -10736,7 +10765,7 @@ function statistikKundenHtml(){
     h += '<div class="card kunde-card" data-id="' + z.k.id + '" style="padding:11px 13px;">';
     h += '<div class="row"><div style="display:flex; align-items:center; gap:9px; min-width:0;"><span class="badge ' + (i === 0 ? 'soon' : 'blau') + '" style="min-width:26px; text-align:center;">' + (i + 1) + '</span><h3 style="margin:0; font-size:15px;">' + escapeHtml(z.k.name) + '</h3></div><b style="white-space:nowrap;">' + eurText(z.summe) + '</b></div>';
     h += '<div style="height:7px; border-radius:4px; background:#efe8dc; margin-top:8px;"><div style="height:7px; border-radius:4px; background:#e8541f; width:' + breite + '%;"></div></div>';
-    h += '<div class="meta" style="margin-top:5px;">' + anteil + ' % vom Umsatz &middot; ' + z.anz + ' Rechnung' + (z.anz === 1 ? '' : 'en') + ' &middot; ' + z.geraete + (z.geraete === 1 ? ' Gerät' : ' Geräte') + '</div></div>';
+    h += '<div class="meta" style="margin-top:5px;">' + anteil + ' % vom Umsatz &middot; ' + z.anz + ' Rechnung' + (z.anz === 1 ? '' : 'en') + (z.offen > 0 ? ' &middot; <b style="color:#c23f12;">offen ' + eurText(z.offen) + '</b>' : '') + ' &middot; ' + z.geraete + (z.geraete === 1 ? ' Gerät' : ' Geräte') + '</div></div>';
   });
   if(ohne.length){
     h += '<div class="section-title" style="margin-top:16px;">Ohne Rechnung in diesem Zeitraum (' + ohne.length + ')</div>';
