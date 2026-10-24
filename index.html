@@ -221,6 +221,17 @@ try {
   .zuordBtn.leer{background:#fffaf0; border:1px dashed #e0b95a; color:#8a5a00;}
   .zuordBtn.leer .zuordAv{background:#e0a21c;}
   .zuordBtn.leer .zuordAkt{color:#8a5a00;}
+  .flKacheln{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:12px;}
+  .flKachel{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:9px 2px; border-radius:12px; border:1.5px solid var(--line); background:#fff; font:inherit; cursor:pointer;}
+  .flKachel .flZahl{font-size:22px; font-weight:800; line-height:1.1;}
+  .flKachel .flText{font-size:10.5px; color:#6b6050; margin-top:2px; letter-spacing:.02em;}
+  .flKachel.gruen .flZahl{color:#1e8449;} .flKachel.blau .flZahl{color:#1d5fa8;} .flKachel.rot .flZahl{color:#c23f12;}
+  .flKachel.aktiv{border-color:#1a1410; box-shadow:0 0 0 1px #1a1410 inset; background:#faf6f0;}
+  .flZeile{background:#fff; border:1px solid #ece5d9; border-radius:12px; padding:10px 12px 9px 15px; margin-bottom:8px; box-shadow:inset 4px 0 0 #8fb596; cursor:pointer;}
+  .flZeile.warn{box-shadow:inset 4px 0 0 #c23f12; background:#fffaf9;}
+  .flZeile.blau{box-shadow:inset 4px 0 0 #3b78c4;}
+  .flZeile .flName{font-size:14.5px;}
+  .flZeile .flMeta{font-size:12.5px; color:#4a4136; margin-top:3px; line-height:1.4;}
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center; box-shadow:0 1px 4px rgba(26,20,16,.06);}
@@ -934,7 +945,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 24.10. 19:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 24.10. 23:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -6320,6 +6331,7 @@ function modalFuellhistorieListe(kundeId){
     return reihenfolge.map(function(key){ return monate[key]; });
   }
 
+  var zustandFilter = '';
   function neuZeichnen(suchtext, katFilter){
     var q = (suchtext || '').trim().toLowerCase();
     var alle = alleGeraeteMitKunde();
@@ -6328,74 +6340,90 @@ function modalFuellhistorieListe(kundeId){
       var standort = (e.g.standort || '').toLowerCase();
       var kundeName = (e.k ? e.k.name : '').toLowerCase();
       var typ = (e.g.typ || '').toLowerCase();
-      return standort.indexOf(q) !== -1 || kundeName.indexOf(q) !== -1 || typ.indexOf(q) !== -1;
+      var sn = (e.g.seriennummer || '').toLowerCase();
+      return standort.indexOf(q) !== -1 || kundeName.indexOf(q) !== -1 || typ.indexOf(q) !== -1 || sn.indexOf(q) !== -1;
     }) : alle;
 
+    var zeilenAlle = flaschenZeilen(gefiltert);
+    var anz = flaschenZaehlen(zeilenAlle);
+    function passt(z){
+      if(!zustandFilter) return true;
+      if(zustandFilter === 'voll') return z.key === 'befuellt' || z.key === 'lager';
+      return z.key === zustandFilter;
+    }
+    var zeilenAnzeige = zeilenAlle.filter(passt).sort(function(a, b){
+      if(a.prio !== b.prio) return a.prio - b.prio;
+      var ka = a.k ? a.k.name : '', kb = b.k ? b.k.name : '';
+      if(ka !== kb) return ka.localeCompare(kb);
+      return (a.nr || 0) - (b.nr || 0);
+    });
+
     var html = '';
-    html += '<div class="modal-head"><h3>Füllhistorie</h3><button class="close" id="mClose">&times;</button></div>';
-    html += '<div style="display:flex; gap:6px; margin-bottom:10px;">';
-    html += '<button type="button" class="btn small' + (!katFilter ? '' : ' secondary') + '" data-katfilter="">Alle</button>';
-    html += '<button type="button" class="btn small' + (katFilter === 'Perchtl Zisch' ? '' : ' secondary') + '" data-katfilter="Perchtl Zisch">Perchtl Zisch</button>';
-    html += '<button type="button" class="btn small' + (katFilter === 'CO2-Flaschen' ? '' : ' secondary') + '" data-katfilter="CO2-Flaschen">CO2-Flaschen</button>';
+    html += '<div class="modal-head"><h3>Flaschen-Übersicht</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<div class="filter-bar segmented" style="margin-bottom:10px;">';
+    html += '<button type="button" class="filter-btn' + (!katFilter ? ' active' : '') + '" data-katfilter="">Alle</button>';
+    html += '<button type="button" class="filter-btn' + (katFilter === 'Perchtl Zisch' ? ' active' : '') + '" data-katfilter="Perchtl Zisch">Perchtl Zisch</button>';
+    html += '<button type="button" class="filter-btn' + (katFilter === 'CO2-Flaschen' ? ' active' : '') + '" data-katfilter="CO2-Flaschen">CO2-Flaschen</button>';
     html += '</div>';
-    html += '<input type="text" id="fuellSuche" placeholder="Suche nach Standort, Kunde oder Typ..." value="' + escapeHtml(suchtext || '') + '">';
+    html += '<input type="text" id="fuellSuche" placeholder="Suche nach Standort, Kunde, Typ oder SN ..." value="' + escapeHtml(suchtext || '') + '">';
+
+    var kachel = function(key, zahl, text, cls){
+      return '<button type="button" class="flKachel ' + cls + (zustandFilter === key ? ' aktiv' : '') + '" data-zfilter="' + key + '"><span class="flZahl">' + zahl + '</span><span class="flText">' + text + '</span></button>';
+    };
+    html += '<div class="flKacheln">' + kachel('', anz.gesamt, 'Alle', 'alle') + kachel('angeschlossen', anz.angeschlossen, 'Angeschlossen', 'gruen') + kachel('voll', anz.befuellt + anz.lager, 'Voll / Lager', 'blau') + kachel('leer', anz.leer, 'Leer', 'rot') + '</div>';
+
+    html += '<div style="display:flex; gap:8px; margin:12px 0;">';
+    html += '<button type="button" class="btn small" id="fuellUebersichtBtn" style="flex:1;">Übersicht drucken</button>';
+    html += '<button type="button" class="btn small secondary" id="fuellDruckenBtn" style="flex:1;">Mengen drucken</button>';
+    html += '</div>';
+
+    if(zeilenAnzeige.length === 0){
+      html += '<div class="empty">Keine Flaschen gefunden</div>';
+    } else {
+      zeilenAnzeige.forEach(function(z){
+        var g = z.g;
+        var fuellungen = g.fuellungen || [];
+        var summenGeraet = summeProEinheit([{ g: g, k: z.k }]);
+        var verlauf = flaschenVerlaufText(z);
+        var cls = z.key === 'leer' ? 'warn' : (z.key === 'angeschlossen' ? 'ok' : 'blau');
+        html += '<div class="flZeile ' + cls + '" data-fuellhistoriedetail="' + g.id + '">';
+        html += '<div class="row"><b class="flName">' + z.nr + '. ' + escapeHtml(g.typ || 'Flasche') + '</b><span class="badge ' + cls + '">' + (z.key === 'leer' ? 'Leer' : (z.key === 'angeschlossen' ? 'Angeschlossen' : (z.key === 'lager' ? 'Im Lager' : 'Befüllt'))) + '</span></div>';
+        html += '<div class="flMeta"><b>' + escapeHtml(g.standort || '-') + '</b>' + (z.k ? ' &middot; ' + escapeHtml(z.k.name) : '') + ((g.seriennummer && g.seriennummer !== g.typ) ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div>';
+        if(verlauf.length) html += '<div class="flMeta">' + verlauf.map(escapeHtml).join(' &nbsp;&rsaquo;&nbsp; ') + '</div>';
+        if(fuellungen.length) html += '<div class="flMeta" style="color:#8a7f6f;">' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + ' &middot; ' + formatiereSummen(summenGeraet) + ' &middot; Verlauf ansehen &rsaquo;</div>';
+        html += '</div>';
+      });
+    }
 
     var gesamtFuellungen = 0;
     gefiltert.forEach(function(e){ gesamtFuellungen += (e.g.fuellungen || []).length; });
     var summen = summeProEinheit(gefiltert);
     var zeitraeume = summeProZeitraum(gefiltert);
-    html += '<div class="card" style="margin-top:12px; background:#f3e9da;">';
-    html += '<div class="row"><h3>Gesamt' + ((q || katFilter) ? ' (gefiltert)' : '') + '</h3><span class="badge blau">' + gefiltert.length + ' Flasche' + (gefiltert.length === 1 ? '' : 'n') + '</span></div>';
-    html += '<div class="meta">' + gesamtFuellungen + ' Füllung' + (gesamtFuellungen === 1 ? '' : 'en') + ' insgesamt</div>';
-    html += '<div class="meta">Gesamtmenge: ' + formatiereSummen(summen) + '</div>';
-    html += '<div class="meta" style="margin-top:6px;">Heute abgefüllt: ' + formatiereSummen(zeitraeume.tag) + '</div>';
-    html += '<div class="meta">Diesen Monat abgefüllt: ' + formatiereSummen(zeitraeume.monat) + '</div>';
-    html += '<div class="meta">Dieses Jahr abgefüllt: ' + formatiereSummen(zeitraeume.jahr) + '</div>';
+    html += '<details style="margin-top:16px;"><summary style="cursor:pointer; font-weight:700; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:8px 0;">Mengen &amp; Monatsübersicht</summary>';
+    html += '<div class="card" style="background:#f3e9da;">';
+    html += '<div class="meta">' + gesamtFuellungen + ' Füllung' + (gesamtFuellungen === 1 ? '' : 'en') + ' insgesamt &middot; ' + formatiereSummen(summen) + '</div>';
+    html += '<div class="meta" style="margin-top:6px;">Heute: ' + formatiereSummen(zeitraeume.tag) + ' &middot; Diesen Monat: ' + formatiereSummen(zeitraeume.monat) + ' &middot; Dieses Jahr: ' + formatiereSummen(zeitraeume.jahr) + '</div>';
     html += '</div>';
-
     var monatsListe = summeProMonat(gefiltert);
     if(monatsListe.length > 0){
       var monatNamenKurz = ['Jän','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-      html += '<div class="section-title" style="margin-top:16px;">Monatsübersicht</div>';
       html += '<div class="card">';
       monatsListe.forEach(function(m, idx){
         html += '<div class="meta" style="display:flex; justify-content:space-between; padding:4px 0;' + (idx > 0 ? ' border-top:1px solid var(--line);' : '') + '"><span>' + monatNamenKurz[m.monat] + ' ' + m.jahr + '</span><span>' + formatiereSummen(m.summen) + ' &middot; ' + m.anzahl + ' Füll.</span></div>';
       });
       html += '</div>';
     }
+    html += '</details>';
 
-    html += '<button type="button" class="btn block" id="fuellUebersichtBtn" style="margin-top:14px;">Flaschen-Übersicht drucken (pro Flasche: wo, gefüllt, angeschlossen, leer)</button>';
-    html += '<button type="button" class="btn block secondary" id="fuellDruckenBtn" style="margin-top:10px;">Statistik drucken / als PDF teilen</button>';
-
-    if(gefiltert.length === 0){
-      html += '<div class="empty">Keine Flaschen gefunden</div>';
-    } else {
-      gefiltert.forEach(function(e){
-        var g = e.g;
-        var fuellungen = (g.fuellungen || []);
-        var summenGeraet = summeProEinheit([e]);
-        var sortiert = fuellungen.slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
-        var zeitraum = fuellungen.length > 0 ? (fmtDatumZeitLokal(sortiert[sortiert.length-1].datum) + ' bis ' + fmtDatumZeitLokal(sortiert[0].datum)) : null;
-
-        html += '<div class="card">';
-        html += '<div class="row"><h3>' + escapeHtml(g.typ || 'Flasche') + '</h3><span class="badge blau">' + fuellungen.length + ' Füllung' + (fuellungen.length === 1 ? '' : 'en') + '</span></div>';
-        html += '<div class="meta">' + (e.k ? escapeHtml(e.k.name) + ' &middot; ' : '') + escapeHtml(g.standort || '') + (g.seriennummer ? (' &middot; SN ' + escapeHtml(g.seriennummer)) : '') + '</div>';
-        if(fuellungen.length > 0){
-          html += '<div class="meta">Zeitraum: ' + zeitraum + '</div>';
-          html += '<div class="meta">Gesamtmenge: ' + formatiereSummen(summenGeraet) + '</div>';
-        }
-        html += '<button type="button" class="btn small secondary" data-fuellhistoriedetail="' + g.id + '" style="margin-top:8px;">Details</button>';
-        html += '</div>';
-      });
-    }
     openModal(html);
     document.getElementById('mClose').onclick = closeModal;
     var suchEl = document.getElementById('fuellSuche');
-    suchEl.focus();
-    suchEl.setSelectionRange(suchEl.value.length, suchEl.value.length);
-    suchEl.oninput = function(){ neuZeichnen(suchEl.value, katFilter); };
+    suchEl.oninput = function(){ neuZeichnen(suchEl.value, katFilter); suchEl = document.getElementById('fuellSuche'); suchEl.focus(); suchEl.setSelectionRange(suchEl.value.length, suchEl.value.length); };
     document.querySelectorAll('[data-katfilter]').forEach(function(b){
       b.onclick = function(){ neuZeichnen(suchtext, b.getAttribute('data-katfilter') || null); };
+    });
+    document.querySelectorAll('[data-zfilter]').forEach(function(b){
+      b.onclick = function(){ zustandFilter = b.getAttribute('data-zfilter') || ''; neuZeichnen(suchtext, katFilter); };
     });
     document.getElementById('fuellUebersichtBtn').onclick = function(){
       bsvDruckenOderTeilen(buildFlaschenUebersichtHtml(gefiltert, katFilter), 'Flaschen-Uebersicht.pdf');
@@ -6554,7 +6582,7 @@ function buildFuellstatistikHtml(eintraege, suchtext, katFilter){
 }
 
 // ---------- Flaschen-Übersicht: eine Zeile pro Flasche ----------
-function buildFlaschenUebersichtHtml(eintraege, katFilter){
+function flaschenZeilen(eintraege){
   var heute = new Date();
   var tageZwischen = function(von, bis){
     var a = new Date(von), b = new Date(bis);
@@ -6575,29 +6603,48 @@ function buildFlaschenUebersichtHtml(eintraege, katFilter){
       var g = e.g;
       var nr = g.nr || (idx + 1);
       var lager = istLagerStandort(g.standort);
-      var zustand, farbe = '#111';
+      var zustand, farbe = '#111', key2, sortPrio;
       // Nach dem letzten Anschluss neu abgefüllt = befüllt, aber noch nicht wieder angeschlossen
       var neuBefuellt = !!(g.abfuelldatum && g.letzterAnschluss && String(g.abfuelldatum).substring(0, 10) > String(g.letzterAnschluss).substring(0, 10));
       var anschlussAktuell = !!g.letzterAnschluss && !neuBefuellt && !(lager && !g.leer);
-      if(g.leer){ zustand = 'LEER'; farbe = '#c23f12'; }
-      else if(lager){ zustand = g.abfuelldatum ? 'Voll, im Lager' : 'Im Lager'; farbe = '#1d5fa8'; }
-      else if(neuBefuellt || (!g.letzterAnschluss && g.abfuelldatum)){ zustand = 'Befüllt, nicht angeschlossen'; farbe = '#1d5fa8'; }
-      else if(g.letzterAnschluss){ zustand = 'Angeschlossen'; farbe = '#1e8449'; }
-      else { zustand = 'Befüllt'; }
+      if(g.leer){ zustand = 'LEER'; farbe = '#c23f12'; key2 = 'leer'; sortPrio = 0; }
+      else if(lager){ zustand = g.abfuelldatum ? 'Voll, im Lager' : 'Im Lager'; farbe = '#1d5fa8'; key2 = 'lager'; sortPrio = 2; }
+      else if(neuBefuellt || (!g.letzterAnschluss && g.abfuelldatum)){ zustand = 'Befüllt, nicht angeschlossen'; farbe = '#1d5fa8'; key2 = 'befuellt'; sortPrio = 1; }
+      else if(g.letzterAnschluss){ zustand = 'Angeschlossen'; farbe = '#1e8449'; key2 = 'angeschlossen'; sortPrio = 3; }
+      else { zustand = 'Befüllt'; key2 = 'befuellt'; sortPrio = 1; }
       var tage = null;
       if(anschlussAktuell){
         tage = tageZwischen(g.letzterAnschluss, (g.leer && g.leerSeit) ? g.leerSeit : heute.toISOString());
       }
-      zeilen.push({ nr: nr, g: g, k: e.k, zustand: zustand, farbe: farbe, lager: lager, tage: tage, anschlussAktuell: anschlussAktuell });
+      zeilen.push({ nr: nr, g: g, k: e.k, zustand: zustand, farbe: farbe, key: key2, prio: sortPrio, lager: lager, tage: tage, anschlussAktuell: anschlussAktuell });
     });
   });
+  return zeilen;
+}
+function flaschenZaehlen(zeilen){
   var anz = { gesamt: zeilen.length, leer: 0, angeschlossen: 0, lager: 0, befuellt: 0 };
-  zeilen.forEach(function(z){
-    if(z.g.leer) anz.leer++;
-    else if(z.lager) anz.lager++;
-    else if(z.zustand === 'Angeschlossen') anz.angeschlossen++;
-    else if(z.zustand === 'Befüllt, nicht angeschlossen') anz.befuellt++;
-  });
+  zeilen.forEach(function(z){ if(anz[z.key] !== undefined) anz[z.key]++; });
+  return anz;
+}
+function flaschenDatumKurz(v){
+  if(!v) return '';
+  var d = new Date(v);
+  if(isNaN(d.getTime())) return '';
+  var tt = d.getDate(), mm = d.getMonth() + 1;
+  return (tt < 10 ? '0' : '') + tt + '.' + (mm < 10 ? '0' : '') + mm + '.' + String(d.getFullYear()).substring(2);
+}
+function flaschenVerlaufText(z){
+  var g = z.g, teile = [];
+  if(g.abfuelldatum) teile.push('Abgefüllt ' + flaschenDatumKurz(g.abfuelldatum));
+  if(z.anschlussAktuell) teile.push('Angeschlossen ' + flaschenDatumKurz(g.letzterAnschluss) + (z.tage !== null ? ' (' + z.tage + (z.tage === 1 ? ' Tag' : ' Tage') + ')' : ''));
+  if(g.leer) teile.push('Leer seit ' + (g.leerSeit ? flaschenDatumKurz(g.leerSeit) : '?'));
+  return teile;
+}
+
+function buildFlaschenUebersichtHtml(eintraege, katFilter){
+  var heute = new Date();
+  var zeilen = flaschenZeilen(eintraege);
+  var anz = flaschenZaehlen(zeilen);
 
   var html = '<div class="bericht-brief">';
   html += '<div class="pb-kopfzeile">';
@@ -6605,11 +6652,13 @@ function buildFlaschenUebersichtHtml(eintraege, katFilter){
   html += '<img src="' + ((katFilter === 'CO2-Flaschen') ? LOGO_DATA : LOGO_DATA_PZ) + '" class="pb-logo">';
   html += '</div>';
   html += '<div class="pb-berichtnr">Stand: ' + fmtDate(heute.toISOString()) + ' ' + fmtZeit(heute.toISOString()) + ' Uhr</div>';
-  html += '<div class="pb-kundenbox"><div class="knr">Gesamt</div><div>' + anz.gesamt + ' Flasche' + (anz.gesamt === 1 ? '' : 'n') + ' &middot; angeschlossen: ' + anz.angeschlossen + ' &middot; befüllt, nicht angeschlossen: ' + anz.befuellt + ' &middot; im Lager: ' + anz.lager + ' &middot; <span style="color:#c23f12; font-weight:700;">leer: ' + anz.leer + '</span></div></div>';
+  var kachel = function(zahl, text, farbe){
+    return '<td style="width:25%; padding:8px 6px; text-align:center; border:1px solid #ddd; background:#faf6f0;"><div style="font-size:22px; font-weight:800; color:' + farbe + ';">' + zahl + '</div><div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:#555;">' + text + '</div></td>';
+  };
+  html += '<table style="width:100%; border-collapse:separate; border-spacing:6px 0; margin:0 -6px 16px -6px; table-layout:fixed;"><tr>' + kachel(anz.gesamt, 'Flaschen gesamt', '#111') + kachel(anz.angeschlossen, 'Angeschlossen', '#1e8449') + kachel(anz.befuellt + anz.lager, 'Voll / im Lager', '#1d5fa8') + kachel(anz.leer, 'Leer', '#c23f12') + '</tr></table>';
   if(zeilen.length === 0){
     html += '<div style="margin:16px 0;">Keine Flaschen vorhanden.</div>';
   } else {
-    var kz = function(v){ return fmtDatumZeitLokal(v).replace(', ', '<br>').replace(' Uhr', ''); };
     var gruppen = {}, reihenfolge = [];
     zeilen.forEach(function(z){
       var kat = z.g.kategorie || 'Perchtl Zisch';
@@ -6617,19 +6666,25 @@ function buildFlaschenUebersichtHtml(eintraege, katFilter){
       gruppen[kat].push(z);
     });
     reihenfolge.forEach(function(kat){
-      html += '<h2 style="font-size:15px; margin:14px 0 6px;">' + escapeHtml(kat) + ' (' + gruppen[kat].length + ')</h2>';
-      html += '<table class="pb-tabelle" style="width:100%; table-layout:fixed; font-size:12px;"><colgroup><col style="width:25%"><col style="width:17%"><col style="width:19%"><col style="width:13%"><col style="width:15%"><col style="width:11%"></colgroup>';
-      html += '<thead><tr><th>Flasche</th><th>Wo ist sie?</th><th>Zustand</th><th>Abgefüllt</th><th>Angeschlossen</th><th>Leer seit</th></tr></thead><tbody>';
-      gruppen[kat].forEach(function(z){
+      var liste = gruppen[kat].slice().sort(function(a, b){
+        if(a.prio !== b.prio) return a.prio - b.prio;
+        var ka = a.k ? a.k.name : '', kb = b.k ? b.k.name : '';
+        if(ka !== kb) return ka.localeCompare(kb);
+        return (a.nr || 0) - (b.nr || 0);
+      });
+      html += '<h2 style="font-size:15px; margin:14px 0 6px;">' + escapeHtml(kat) + ' (' + liste.length + ')</h2>';
+      html += '<table class="pb-tabelle" style="width:100%; table-layout:fixed; font-size:12px;"><colgroup><col style="width:30%"><col style="width:26%"><col style="width:16%"><col style="width:28%"></colgroup>';
+      html += '<thead><tr><th>Flasche</th><th>Wo ist sie?</th><th>Zustand</th><th>Verlauf</th></tr></thead><tbody>';
+      liste.forEach(function(z){
         var g = z.g;
-        var sn = (g.seriennummer && g.seriennummer !== g.typ) ? '<br><span style="font-size:10.5px; color:#555;">' + escapeHtml(g.seriennummer) + '</span>' : '';
-        var wo = escapeHtml(g.standort || '-') + (z.k ? '<br><span style="font-size:10.5px; color:#555;">' + escapeHtml(z.k.name) + '</span>' : '');
-        html += '<tr style="page-break-inside:avoid; break-inside:avoid;"><td style="word-wrap:break-word;"><b>' + z.nr + '.</b> ' + escapeHtml(g.typ || '-') + sn + '</td>';
+        var sn = (g.seriennummer && g.seriennummer !== g.typ) ? ' <span style="font-size:10.5px; color:#555;">SN ' + escapeHtml(g.seriennummer) + '</span>' : '';
+        var wo = '<b>' + escapeHtml(g.standort || '-') + '</b>' + (z.k ? '<br><span style="font-size:10.5px; color:#555;">' + escapeHtml(z.k.name) + '</span>' : '');
+        var verlauf = flaschenVerlaufText(z).map(function(t){ return escapeHtml(t); }).join('<br>') || '-';
+        var tint = z.key === 'leer' ? ' background:#fdecea;' : '';
+        html += '<tr style="page-break-inside:avoid; break-inside:avoid;' + tint + '"><td style="word-wrap:break-word;"><b>' + z.nr + '.</b> ' + escapeHtml(g.typ || '-') + '<br>' + sn + '</td>';
         html += '<td style="word-wrap:break-word;">' + wo + '</td>';
         html += '<td style="font-weight:700; color:' + z.farbe + ';">' + z.zustand + '</td>';
-        html += '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td>';
-        html += '<td>' + (z.anschlussAktuell ? kz(g.letzterAnschluss) + (z.tage !== null ? '<br><span style="font-size:10.5px; color:#555;">' + z.tage + (z.tage === 1 ? ' Tag' : ' Tage') + '</span>' : '') : '-') + '</td>';
-        html += '<td>' + (g.leer && g.leerSeit ? kz(g.leerSeit) : (g.leer ? 'ja' : '-')) + '</td></tr>';
+        html += '<td style="font-size:11px; line-height:1.45;">' + verlauf + '</td></tr>';
       });
       html += '</tbody></table>';
     });
@@ -7429,7 +7484,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 24.10. 19:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 24.10. 23:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
