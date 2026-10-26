@@ -945,7 +945,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 24.10. 23:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 26.10. 12:15</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -3062,6 +3062,40 @@ function renderKundenListe(query){
   return html;
 }
 
+function kundenDoppelteFinden(){
+  var gruppen = {};
+  state.kunden.forEach(function(k){
+    if(k.geloescht) return;
+    var key = (k.name || '').trim().toLowerCase() + '|' + (k.kundennummer || '').trim() + '|' + (k.adresse || '').trim().toLowerCase();
+    (gruppen[key] = gruppen[key] || []).push(k);
+  });
+  var res = [];
+  Object.keys(gruppen).forEach(function(key){ if(gruppen[key].length > 1) res.push(gruppen[key]); });
+  return res;
+}
+function kundenDoppelteBereinigen(){
+  var gruppen = kundenDoppelteFinden();
+  var stores = ['geraete','pruefungen','sammelberichte','begehungsberichte','dokumente','brandschutzplaene','tagesberichte','termine'];
+  var anzahl = 0;
+  gruppen.forEach(function(liste){
+    var zaehle = function(k){ return state.geraete.filter(function(g){ return g.kundeId === k.id; }).length; };
+    // Behalten wird der Eintrag mit den meisten Geräten (bei Gleichstand der mit den meisten Daten bzw. der erste)
+    var daten = function(k){ return Object.keys(k).filter(function(f){ return k[f]; }).length + (k.rechnungen ? k.rechnungen.length * 3 : 0) + (k.vermerke ? k.vermerke.length * 3 : 0); };
+    liste.sort(function(a, b){ return (zaehle(b) - zaehle(a)) || (daten(b) - daten(a)); });
+    var behalten = liste[0];
+    liste.slice(1).forEach(function(q){
+      stores.forEach(function(store){
+        (state[store] || []).forEach(function(o){
+          if(o.kundeId === q.id){ o.kundeId = behalten.id; try{ dbPut(store, o, function(){}); }catch(e){} }
+        });
+      });
+      q.geloescht = true; q.geloeschtAm = new Date().toISOString();
+      dbPut('kunden', q, function(){});
+      anzahl++;
+    });
+  });
+  return anzahl;
+}
 function renderKunden(){
   var html = '';
   html += '<div style="display:flex; gap:8px;">';
@@ -3074,6 +3108,11 @@ function renderKunden(){
   });
   html += '</select>';
   html += '</div>';
+  var doppelGruppen = kundenDoppelteFinden();
+  if(doppelGruppen.length && (state.rolle === 'chef' || istVollsicht())){
+    var doppelAnz = 0; doppelGruppen.forEach(function(l){ doppelAnz += l.length - 1; });
+    html += '<div class="card" style="background:#fff4e5; border:1px solid #f0c987;"><div style="font-weight:700;">' + doppelAnz + ' doppelte Kunden gefunden</div><div class="meta">z.B. ' + escapeHtml(doppelGruppen[0][0].name) + ' (' + doppelGruppen[0].length + 'x). Gleicher Name, gleiche Nr. und Adresse. Geräte und Daten werden in einen Eintrag zusammengeführt, die anderen kommen in den Papierkorb.</div><button class="btn small" id="kundenDoppeltBtn" style="margin-top:8px;">Doppelte bereinigen</button></div>';
+  }
   html += '<div id="kundenListContainer">' + renderKundenListe(state.kundenSuche) + '</div>';
 
   var verwaist = state.geraete.filter(function(g){
@@ -5038,8 +5077,12 @@ function modalNeuerKunde(){
       telefon: document.getElementById('fTelefon').value.trim(),
       email: document.getElementById('fEmail').value.trim()
     };
+    if(window.__kundeSpeichertGerade){ return; }
+    window.__kundeSpeichertGerade = true;
+    setTimeout(function(){ window.__kundeSpeichertGerade = false; }, 6000);
     dbPut('kunden', k, function(){
       loadAll(function(){
+        window.__kundeSpeichertGerade = false;
         state.activeKundeId = k.id;
         state.tab = 'kundeDetail';
         render(); closeModal(); toast('Kunde gespeichert');
@@ -7484,7 +7527,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 24.10. 23:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 26.10. 12:15</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -10949,6 +10992,13 @@ function bindDynamic(){
       bindKundenCards(container);
     };
   }
+  var doppeltBtn = document.getElementById('kundenDoppeltBtn');
+  if(doppeltBtn) doppeltBtn.onclick = function(){
+    customConfirm('Doppelte Kunden jetzt zusammenführen? Geräte und Daten bleiben erhalten, die überzähligen Einträge kommen in den Papierkorb.', function(){
+      var n = kundenDoppelteBereinigen();
+      setTimeout(function(){ loadAll(function(){ render(); toast(n + ' doppelte Kunden bereinigt'); }); }, 1500);
+    });
+  };
   var sortSelect = document.getElementById('kundenSortSelect');
   if(sortSelect){
     sortSelect.onchange = function(){
