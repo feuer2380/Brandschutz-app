@@ -746,18 +746,52 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         if(kaputt){ var ph = document.createElement('div'); ph.style.height = '60px'; if(im.parentNode) im.parentNode.replaceChild(ph, im); }
       });
     } catch(eImg){}
-    var pdfVersuch = function(skala){ return html2canvas(pa, {
-      scale: skala,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      logging: false,
-      windowWidth: 780,
-      // Leere Zeichenflächen (Breite/Höhe 0, z.B. versteckte Unterschriftsfelder) lassen html2canvas auf iOS abstürzen
-      ignoreElements: function(el){ return !!el && el.tagName === 'CANVAS' && (!el.width || !el.height); }
-    }); };
+    var fehlerListe = [];
+    var pdfVersuch = function(skala, extra){
+      var o = {
+        scale: skala,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+        windowWidth: 780,
+        // Zeichenflächen (canvas) werden im Bericht nicht gebraucht (Unterschriften sind Bilder) und lassen html2canvas auf iOS abstürzen
+        ignoreElements: function(el){ return !!el && el.tagName === 'CANVAS'; }
+      };
+      if(extra) Object.keys(extra).forEach(function(k2){ o[k2] = extra[k2]; });
+      return html2canvas(pa, o);
+    };
+    // Alle canvas-Elemente der Seite kurz aus dem DOM nehmen und danach wieder einsetzen
+    var canvasWeg = function(){
+      var liste = [];
+      document.querySelectorAll('canvas').forEach(function(c){
+        if(!c.parentNode) return;
+        var marker = document.createComment('c');
+        c.parentNode.insertBefore(marker, c);
+        c.parentNode.removeChild(c);
+        liste.push([c, marker]);
+      });
+      return function(){ liste.forEach(function(p){ try{ if(p[1].parentNode){ p[1].parentNode.insertBefore(p[0], p[1]); p[1].parentNode.removeChild(p[1]); } }catch(e){} }); };
+    };
+    var versuch2 = function(){
+      var zurueck = canvasWeg();
+      return pdfVersuch(2).then(function(c){ zurueck(); return c; }, function(e){ zurueck(); throw e; });
+    };
     pdfVersuch(3).catch(function(e1){
-      console.error('PDF Versuch 1 fehlgeschlagen', e1);
-      return pdfVersuch(2);
+      fehlerListe.push('V1: ' + (e1 && e1.message ? e1.message : e1));
+      return versuch2();
+    }).catch(function(e2){
+      fehlerListe.push('V2: ' + (e2 && e2.message ? e2.message : e2));
+      return pdfVersuch(2, { foreignObjectRendering: true });
+    }).catch(function(e3){
+      fehlerListe.push('V3: ' + (e3 && e3.message ? e3.message : e3));
+      var d = [];
+      try{
+        document.querySelectorAll('canvas').forEach(function(c){ d.push('canvas ' + (c.id || c.className || '-') + ' ' + c.width + 'x' + c.height); });
+        pa.querySelectorAll('img').forEach(function(im){ d.push('img ' + im.naturalWidth + 'x' + im.naturalHeight + ' ' + (im.getAttribute('src') || '').substring(0, 30)); });
+        d.push('pa ' + pa.scrollWidth + 'x' + pa.scrollHeight);
+      }catch(eD){}
+      var err = new Error(fehlerListe.concat(d).join(' | '));
+      throw err;
     }).then(function(canvas){
       aufraeumen();
       if(!canvas || !canvas.width || !canvas.height) throw new Error('Leeres Bild (Bericht konnte nicht gezeichnet werden)');
@@ -825,7 +859,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
     }).catch(function(err){
       aufraeumen();
       console.error('PDF-Erstellung fehlgeschlagen', err);
-      toast('PDF-Fehler: ' + (err && err.message ? err.message : String(err)));
+      try{ openModal('<div class="modal-head"><h3>PDF-Fehler</h3><button class="close" id="mClose">&times;</button></div><div class="meta" style="margin-bottom:8px;">Bitte Screenshot an Wolfgang schicken:</div><div style="font-size:12px; word-break:break-word; background:#fff; padding:10px; border-radius:8px;">' + escapeHtml((err && err.message ? err.message : String(err)) + ((err && err.message && err.message.indexOf('V1:') === -1 && err.stack) ? ' | STACK: ' + String(err.stack).substring(0, 400) : '')) + '</div>'); var mc = document.getElementById('mClose'); if(mc) mc.onclick = closeModal; }catch(eM){ toast('PDF-Fehler: ' + (err && err.message ? err.message : String(err))); }
       // Ausweg: Bericht als eigene Seite öffnen (dort: Teilen-Symbol -> Drucken / Als PDF sichern)
       setTimeout(function(){
         try{
@@ -966,7 +1000,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 09:50</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 10:15</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7580,7 +7614,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 09:50</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 10:15</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
