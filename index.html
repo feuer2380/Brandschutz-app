@@ -1327,6 +1327,40 @@ function renderDashboard(){
     html += '</div>';
   }
 
+  // ---- Kalender-Termine heute und morgen ----
+  var tmHeuteKey = kalHeuteKey();
+  var tmMorgenD = new Date(); tmMorgenD.setDate(tmMorgenD.getDate() + 1);
+  var tmMorgenKey = tmMorgenD.getFullYear() + '-' + ('0' + (tmMorgenD.getMonth() + 1)).slice(-2) + '-' + ('0' + tmMorgenD.getDate()).slice(-2);
+  var tmIch = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
+  var tmVoll = istVollsicht();
+  var tmListe = (state.termine || []).filter(function(t){
+    var dk = String(t.datum || '').substring(0, 10);
+    if(dk !== tmHeuteKey && dk !== tmMorgenKey) return false;
+    if(tmVoll) return true;
+    var pl = t.personen || [];
+    return pl.indexOf('alle') >= 0 || pl.indexOf(tmIch) >= 0;
+  });
+  tmListe.sort(function(a, b){
+    var ka = String(a.datum).substring(0, 10) + ' ' + (a.zeit || '99:99');
+    var kb = String(b.datum).substring(0, 10) + ' ' + (b.zeit || '99:99');
+    return ka.localeCompare(kb);
+  });
+  if(tmListe.length){
+    html += '<div class="section-title" style="margin-top:16px;">Termine heute und morgen (' + tmListe.length + ')</div>';
+    tmListe.forEach(function(t){
+      var dk = String(t.datum).substring(0, 10);
+      var pl = t.personen || [];
+      var farbe = kalFarbe(pl.indexOf('alle') >= 0 ? 'alle' : (pl[0] || ''));
+      var kt = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+      html += '<div class="card" data-dashtermin="' + dk + '" style="cursor:pointer; border-left:6px solid ' + farbe + ';">';
+      html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3><span class="badge blau">' + (dk === tmHeuteKey ? 'Heute' : 'Morgen') + (t.zeit ? ' ' + escapeHtml(t.zeit) + ' Uhr' : '') + '</span></div>';
+      if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
+      html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + (pl.indexOf('alle') >= 0 ? ['alle'] : pl).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
+      if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
+      html += '</div>';
+    });
+  }
+
   // ---- Tagesübersicht: was wurde an einem Tag erledigt (blättern mit Pfeilen), dazu heute/morgen geplant ----
   var htmlVorTagesuebersicht = html.length;
   var tagOffset = state.dashTagOffset || 0;
@@ -11409,6 +11443,13 @@ function bindDynamic(){
   var logoutBtn = document.getElementById('logoutBtn');
   var agBox = document.getElementById('alleGeraeteBox');
   if(agBox) agBox.addEventListener('toggle', function(){ state.alleGeraeteBoxOffen = agBox.open; });
+  document.querySelectorAll('[data-dashtermin]').forEach(function(c){
+    c.onclick = function(){
+      var dk = c.getAttribute('data-dashtermin');
+      state.kalTag = dk; state.kalMonat = dk.substring(0, 7); state.tab = 'kalender';
+      render();
+    };
+  });
   var dtz = document.getElementById('dashTagZurueck');
   if(dtz) dtz.onclick = function(){ state.dashTagOffset = (state.dashTagOffset || 0) - 1; render(); };
   var dtf = document.getElementById('dashTbFormularBtn');
