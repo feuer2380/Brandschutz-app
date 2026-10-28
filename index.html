@@ -1016,7 +1016,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 19:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 19:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7630,7 +7630,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 19:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 19:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -10026,6 +10026,11 @@ function modalSammelbericht(kundeId){
   });
 
   document.getElementById('sbSpeichern').onclick = function(){
+    // Native Abfrage, damit das ausgefüllte Formular (Unterschriften, Daten) erhalten bleibt
+    if(!confirm('Achtung: Damit werden alle ' + geraeteSortiert.length + ' Geräte als GEPRÜFT eingetragen (Prüfdatum und nächster Termin). Wenn du nur ausdrucken willst: Abbrechen und die Ausstattungsliste verwenden. Prüfbericht wirklich erstellen?')) return;
+    sbErstellenStarten();
+  };
+  function sbErstellenStarten(){
     var sbBtn = document.getElementById('sbSpeichern');
     sbBtn.disabled = true;
     sbBtn.textContent = 'Wird gespeichert...';
@@ -10231,7 +10236,7 @@ function modalSammelbericht(kundeId){
       console.error('Sammelbericht-Fehler', err);
       toast('Fehler beim Erstellen: ' + (err && err.message ? err.message : err));
     }
-  };
+  }
 }
 
 function buildSammelberichtHtml(sb, k){
@@ -10744,6 +10749,49 @@ function tagesberichtLeerDrucken(kundeId){
   }
 }
 
+function sammelberichtRueckgaengig(sb, cb){
+  var kats = {};
+  (sb.geraeteSnapshot || []).forEach(function(x){ kats[(x.kategorie || 'Feuerlöscher').trim()] = true; });
+  var treffer = state.pruefungen.filter(function(p){
+    if(!p.erledigt || !p.bericht || p.kundeId !== sb.kundeId) return false;
+    if(p.unterschriftKunde !== sb.unterschriftKunde || p.unterschriftTechniker !== sb.unterschriftTechniker) return false;
+    var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    return !!g && kats[(g.kategorie || 'Feuerlöscher').trim()];
+  });
+  var trefferIds = {};
+  treffer.forEach(function(p){ trefferIds[p.id] = true; });
+  var jobs = [];
+  treffer.forEach(function(p){
+    var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    if(!g) return;
+    var frueher = state.pruefungen.filter(function(x){ return x.geraetId === g.id && x.erledigt && x.erledigtAm && !trefferIds[x.id]; })
+      .sort(function(a, b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
+    g.letztePruefung = frueher.length ? frueher[0].erledigtAm.substring(0, 10) : '';
+    if(p.ergebnis === 'Ausgeschieden'){ g.ausgeschieden = false; g.ausgeschiedenAm = null; }
+    // neu angelegten offenen Folgetermin entfernen
+    state.pruefungen.filter(function(x){ return x.geraetId === g.id && !x.erledigt && x.id !== p.id; }).forEach(function(x){ jobs.push(['del', 'pruefungen', x.id]); });
+    var neuAngelegt = (p.datum || '').substring(0, 10) === (p.erledigtAm || '').substring(0, 10);
+    if(neuAngelegt){
+      g.naechstePruefung = '';
+      jobs.push(['del', 'pruefungen', p.id]);
+    } else {
+      g.naechstePruefung = p.datum;
+      p.erledigt = false;
+      delete p.erledigtAm; delete p.erledigtVon; delete p.bericht; delete p.ergebnis; delete p.bemerkung; delete p.unterschriftKunde; delete p.unterschriftTechniker;
+      jobs.push(['put', 'pruefungen', p]);
+    }
+    jobs.push(['put', 'geraete', g]);
+  });
+  jobs.push(['del', 'sammelberichte', sb.id]);
+  var i = 0;
+  var weiter = function(){
+    if(i >= jobs.length){ loadAll(function(){ if(cb) cb(treffer.length); }); return; }
+    var j = jobs[i++];
+    if(j[0] === 'del') dbDelete(j[1], j[2], weiter); else dbPut(j[1], j[2], weiter);
+  };
+  weiter();
+}
+
 function modalSammelberichtAnsicht(sbId){
   var sb = state.sammelberichte.filter(function(x){ return x.id === sbId; })[0];
   if(!sb) return;
@@ -10756,9 +10804,15 @@ function modalSammelberichtAnsicht(sbId){
   html += '<button class="btn block" id="druckBtnSb">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtnSb" style="margin-top:10px;">Per E-Mail senden</button>';
   html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
+  html += '<button class="btn block secondary" id="sbRueckBtn" style="margin-top:16px; color:#c23f12; border-color:#e6b19d;">Versehentlich erstellt? Prüfungen zurücksetzen und Bericht löschen</button>';
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('sbRueckBtn').onclick = function(){
+    customConfirm('Alle Geräte dieses Berichts wieder auf "nicht geprüft" zurücksetzen (letzte Prüfung und Termin wie vorher) und den Bericht löschen?', function(){
+      sammelberichtRueckgaengig(sb, function(n){ closeModal(); render(); toast(n + ' Prüfungen zurückgesetzt'); });
+    });
+  };
   document.getElementById('sbNrSpeichern').onclick = function(){
     sb.berichtNr = document.getElementById('sbNrBearbeiten').value.trim();
     dbPut('sammelberichte', sb, function(){
