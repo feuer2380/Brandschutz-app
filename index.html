@@ -1111,7 +1111,7 @@ function renderInner(){
   else if(state.tab === 'kunden') m.innerHTML = renderKunden();
   else if(state.tab === 'pruefungen') m.innerHTML = renderPruefungen();
   else if(state.tab === 'berichte') m.innerHTML = renderBerichte();
-  else if(state.tab === 'statistik') m.innerHTML = renderStatistik();
+  else if(state.tab === 'statistik') m.innerHTML = darfStatistik() ? renderStatistik() : '<div class="empty">Keine Berechtigung</div>';
   else if(state.tab === 'kundeDetail') m.innerHTML = renderKundeDetail(state.activeKundeId);
   else if(state.tab === 'scan') m.innerHTML = renderScan();
   else if(state.tab === 'geraetCheck') m.innerHTML = renderGeraetCheck(state.activeGeraetId);
@@ -1744,6 +1744,13 @@ function darfStundenSehen(){
   if(state.rolle === 'chef') return true;
   var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
   return !!(m && m.stundenSehen);
+}
+
+// Statistik ausblenden fuer Mitarbeiter mit keineStatistik: true
+function darfStatistik(){
+  if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !(m && m.keineStatistik);
 }
 
 function lagerAktuellerBenutzer(){
@@ -3089,7 +3096,7 @@ var MITARBEITER_LISTE = [
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
   { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true },
-  { name: 'Harris Sandra', pin: '8280', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true }
+  { name: 'Harris Sandra', pin: '8280', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
 var ZEIT_ALTE_NAMEN = {
@@ -9006,6 +9013,7 @@ function modalMehrMenu(){
     { tab:'zeit', label:'Zeiterfassung', svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' },
     { tab:'lager', label:'Lager', svg:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' }
   ];
+  if(!darfStatistik()) eintraege = eintraege.filter(function(e){ return e.tab !== 'statistik'; });
   eintraege.forEach(function(e){
     html += '<button type="button" class="btn block secondary" style="justify-content:flex-start; gap:10px; margin-top:8px;" data-mehrtab="' + e.tab + '">';
     html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px; height:19px; flex-shrink:0;">' + e.svg + '</svg>';
