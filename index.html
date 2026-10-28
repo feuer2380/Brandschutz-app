@@ -703,7 +703,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
 
   pa.style.display = 'block';
   pa.style.position = 'absolute';
-  pa.style.left = '-9999px';
+  pa.style.left = '0';
   pa.style.top = '0';
   pa.style.width = '780px';
   pa.style.background = '#fff';
@@ -750,14 +750,8 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       scale: skala,
       backgroundColor: '#ffffff',
       useCORS: true,
-      x: 0,
-      y: 0,
-      scrollX: 0,
-      scrollY: 0,
-      width: pa.scrollWidth,
-      height: pa.scrollHeight,
-      windowWidth: pa.scrollWidth,
-      windowHeight: pa.scrollHeight
+      logging: false,
+      windowWidth: 780
     }); };
     pdfVersuch(3).catch(function(e1){
       console.error('PDF Versuch 1 fehlgeschlagen', e1);
@@ -829,9 +823,18 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
     }).catch(function(err){
       aufraeumen();
       console.error('PDF-Erstellung fehlgeschlagen', err);
-      toast('PDF-Erstellung nicht möglich – normaler Druck wird geöffnet');
-      // Ausweg: normaler Druck-Dialog (dort: Teilen-Symbol -> Als PDF sichern)
-      setTimeout(function(){ try{ window.print(); }catch(e2){} if(cb) cb(); }, 600);
+      toast('PDF-Fehler: ' + (err && err.message ? err.message : String(err)));
+      // Ausweg: Bericht als eigene Seite öffnen (dort: Teilen-Symbol -> Drucken / Als PDF sichern)
+      setTimeout(function(){
+        try{
+          var css = '';
+          document.querySelectorAll('style').forEach(function(st){ css += st.textContent + '\n'; });
+          var doc = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + (dateiname || 'Bericht') + '</title><style>' + css + '</style><style>#printArea{display:block !important; position:static !important; width:auto !important; max-width:780px; margin:0 auto; padding:10px; background:#fff;} body{background:#fff !important; display:block !important;} .no-print{display:none !important;}</style></head><body><div id="printArea">' + pa.innerHTML + '</div></body></html>';
+          var u = URL.createObjectURL(new Blob([doc], { type: 'text/html' }));
+          window.open(u, '_blank');
+        }catch(e2){ console.error(e2); }
+        if(cb) cb();
+      }, 1500);
     });
   }, 60);
 }
@@ -961,7 +964,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 09:00</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 09:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7575,7 +7578,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 09:00</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 09:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
