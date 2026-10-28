@@ -298,6 +298,20 @@ try {
   .pb-tabelle th{background:var(--ink); color:#f5efe6; text-align:left; padding:9px 8px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
   .pb-tabelle td{padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top;}
   .pb-tabelle tbody tr:nth-child(even){background:#faf6f0;}
+  #printArea.kompakt .pb-kopfzeile{padding-bottom:6px; border-bottom-width:2px; gap:10px;}
+  #printArea.kompakt .pb-titel h1{font-size:17px; margin:0 0 1px 0;}
+  #printArea.kompakt .pb-titel .sub{font-size:10.5px; margin:0;}
+  #printArea.kompakt .pb-logo{max-width:90px;}
+  #printArea.kompakt .pb-berichtnr{margin:4px 0 8px 0; font-size:10px;}
+  #printArea.kompakt .pb-kundenbox{padding:6px 12px; margin-bottom:8px; font-size:11.5px;}
+  #printArea.kompakt .pb-kundenbox .knr{font-size:9px;}
+  #printArea.kompakt .pb-kundenreihe{margin-bottom:8px;}
+  #printArea.kompakt h3{margin:8px 0 4px 0 !important; font-size:13px !important;}
+  #printArea.kompakt .pb-tabelle{font-size:10px; margin-bottom:8px;}
+  #printArea.kompakt .pb-tabelle th{padding:5px 6px; font-size:8px;}
+  #printArea.kompakt .pb-tabelle td{padding:3px 6px;}
+  #printArea.kompakt .pb-tabelle td span[style*="inline-block"]{width:11px !important; height:11px !important;}
+  #printArea.kompakt .bericht-fuss{margin-top:8px; padding-top:6px; font-size:8.5px;}
   @media screen and (max-width:700px){
     .modal .pb-tabelle{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; font-size:11.5px; }
     .modal .pb-tabelle th{ padding:7px 6px; font-size:9px; letter-spacing:0; white-space:nowrap; }
@@ -696,6 +710,8 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   }
 
   var eigenstaendig = !!window.navigator.standalone;
+  // Listen (Tabellen) kompakt drucken: kleinere Schrift, weniger Platz oben
+  try{ if(pa.querySelector('.pb-tabelle')) pa.classList.add('kompakt'); else pa.classList.remove('kompakt'); }catch(eK){}
 
   // Safari ignoriert Querformat im Druckdialog -> bei aktivem Querformat immer ueber das PDF (jsPDF) gehen
   var querWunsch = bsvQuerformat() && !pa.querySelector('.qr-etikett');
@@ -736,10 +752,10 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   }
 
   setTimeout(function(){
-    var bruchCss = [];
+    var bruchCss = { p: [], t: [] };
     var cssBreite = quer ? 1100 : 780;
     var messeBruch = function(wurzel){
-      var liste = [];
+      var liste = [], tabellen = [];
       try {
         var box = wurzel.getBoundingClientRect();
         var sammle = function(sel, kante){
@@ -755,8 +771,14 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         sammle('.card', 'oben');
         sammle('.bericht-fuss', 'oben');
         liste.sort(function(x, y){ return x - y; });
-      } catch(e){ liste = []; }
-      return liste;
+        wurzel.querySelectorAll('table').forEach(function(t){
+          var th = t.querySelector('thead');
+          if(!th) return;
+          var rt = t.getBoundingClientRect(), rh = th.getBoundingClientRect();
+          tabellen.push({ top: rt.top - box.top, kopfOben: rh.top - box.top, kopfUnten: rh.bottom - box.top, unten: rt.bottom - box.top });
+        });
+      } catch(e){ liste = []; tabellen = []; }
+      return { p: liste, t: tabellen };
     };
     bruchCss = messeBruch(pa);
     // Defekte / leere Bilder (z.B. leere Unterschrift 'data:,') würden die PDF-Erstellung abbrechen -> durch Platzhalter ersetzen
@@ -779,7 +801,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         ignoreElements: function(el){ return !!el && el.tagName === 'CANVAS'; },
         // Seitenumbruch-Stellen direkt im gezeichneten Abbild messen (genau dieselbe Anordnung wie im PDF)
         onclone: function(klonDoc, klonEl){
-          try{ var m = messeBruch(klonEl); if(m.length) bruchCss = m; }catch(eM){}
+          try{ var m = messeBruch(klonEl); if(m.p.length) bruchCss = m; }catch(eM){}
         }
       };
       if(extra) Object.keys(extra).forEach(function(k2){ o[k2] = extra[k2]; });
@@ -829,36 +851,51 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       var nutzhoehe = pageHeight - (rand * 2);
       // Seitenumbruch nur an sauberen Stellen (zwischen Tabellenzeilen / Kästen), nie mitten durch eine Zeile
       var faktorPx = canvas.width / cssBreite;
-      var bruchPunkte = bruchCss.map(function(v){ return Math.round(v * faktorPx); });
+      var bruchPunkte = bruchCss.p.map(function(v){ return Math.round(v * faktorPx); });
+      var tabellenPx = bruchCss.t.map(function(t){ return { top: Math.round(t.top * faktorPx), kopfOben: Math.round(t.kopfOben * faktorPx), kopfUnten: Math.round(t.kopfUnten * faktorPx), unten: Math.round(t.unten * faktorPx) }; });
+      // Kopfzeile der Tabelle, in der eine Folgeseite beginnt (wird dort oben wiederholt)
+      var kopfFuer = function(startPx){
+        if(startPx <= 0) return null;
+        for(var ti = 0; ti < tabellenPx.length; ti++){
+          var tb = tabellenPx[ti];
+          if(startPx > tb.kopfUnten - 2 && startPx < tb.unten - 4) return tb;
+        }
+        return null;
+      };
       var seitePx = Math.floor(nutzhoehe * canvas.width / nutzbreite);
       var gesamtPx = canvas.height;
       var umbrueche = [];
       var seg = 0;
       while(seg < gesamtPx){
-        var ziel = seg + seitePx;
+        var kopfT = kopfFuer(seg);
+        var kopfH = kopfT ? (kopfT.kopfUnten - kopfT.kopfOben) : 0;
+        var platz = seitePx - kopfH;
+        var ziel = seg + platz;
         var ende = gesamtPx;
         if(ziel < gesamtPx){
           ende = ziel;
           for(var ci = bruchPunkte.length - 1; ci >= 0; ci--){
-            if(bruchPunkte[ci] <= ziel && bruchPunkte[ci] > seg + seitePx * 0.35){ ende = bruchPunkte[ci]; break; }
+            if(bruchPunkte[ci] <= ziel && bruchPunkte[ci] > seg + platz * 0.35){ ende = bruchPunkte[ci]; break; }
           }
         }
-        umbrueche.push([seg, ende]);
+        umbrueche.push([seg, ende, kopfT]);
         seg = ende;
       }
       umbrueche.forEach(function(teil, idx){
         var startPx = Math.max(0, Math.min(teil[0], canvas.height - 1));
         var hoehePx = Math.max(1, Math.min(teil[1], canvas.height) - startPx);
-        teil[0] = startPx;
+        var kt = teil[2];
+        var kHoehe = kt ? (kt.kopfUnten - kt.kopfOben) : 0;
         var tc = document.createElement('canvas');
         tc.width = canvas.width;
-        tc.height = hoehePx;
+        tc.height = hoehePx + kHoehe;
         var tctx = tc.getContext('2d');
         tctx.fillStyle = '#ffffff';
         tctx.fillRect(0, 0, tc.width, tc.height);
-        tctx.drawImage(canvas, 0, teil[0], canvas.width, hoehePx, 0, 0, canvas.width, hoehePx);
+        if(kt) tctx.drawImage(canvas, 0, kt.kopfOben, canvas.width, kHoehe, 0, 0, canvas.width, kHoehe);
+        tctx.drawImage(canvas, 0, startPx, canvas.width, hoehePx, 0, kHoehe, canvas.width, hoehePx);
         if(idx > 0) pdf.addPage();
-        pdf.addImage(tc.toDataURL('image/png'), 'PNG', rand, rand, nutzbreite, hoehePx * nutzbreite / canvas.width);
+        pdf.addImage(tc.toDataURL('image/png'), 'PNG', rand, rand, nutzbreite, (hoehePx + kHoehe) * nutzbreite / canvas.width);
       });
 
       var blob = pdf.output('blob');
@@ -1027,7 +1064,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 20:45</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 21:50</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7641,7 +7678,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 20:45</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 21:50</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
