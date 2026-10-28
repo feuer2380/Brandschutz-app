@@ -675,6 +675,12 @@ function loadAll(cb){
   });
 }
 
+function bsvQuerformat(){
+  try{ return localStorage.getItem('bsvQuerformat') === '1'; }catch(e){ return false; }
+}
+function bsvQuerformatSetzen(an){
+  try{ localStorage.setItem('bsvQuerformat', an ? '1' : '0'); }catch(e){}
+}
 function bsvDruckenOderTeilen(html, dateiname, cb){
   var pa = document.getElementById('printArea');
   if(!pa){ if(cb) cb(); return; }
@@ -690,7 +696,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       var istEtikett = !!pa.querySelector('.qr-etikett');
       var st = document.createElement('style');
       st.id = 'bsvSeitenStil';
-      st.textContent = istEtikett ? '@page{ size:40mm 30mm; margin:0; }' : '@page{ margin:12mm; }';
+      st.textContent = istEtikett ? '@page{ size:40mm 30mm; margin:0; }' : (bsvQuerformat() ? '@page{ size:A4 landscape; margin:12mm; }' : '@page{ margin:12mm; }');
       document.head.appendChild(st);
       var weg = function(){ var x = document.getElementById('bsvSeitenStil'); if(x && x.parentNode) x.parentNode.removeChild(x); window.removeEventListener('afterprint', weg); };
       window.addEventListener('afterprint', weg);
@@ -705,7 +711,8 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   pa.style.position = 'absolute';
   pa.style.left = '0';
   pa.style.top = '0';
-  pa.style.width = '780px';
+  var quer = bsvQuerformat() && !pa.querySelector('.qr-etikett');
+  pa.style.width = (quer ? '1100' : '780') + 'px';
   pa.style.background = '#fff';
   pa.style.zIndex = '-1';
 
@@ -753,7 +760,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         backgroundColor: '#ffffff',
         useCORS: true,
         logging: false,
-        windowWidth: 780,
+        windowWidth: (quer ? 1100 : 780),
         // Zeichenflächen (canvas) werden im Bericht nicht gebraucht (Unterschriften sind Bilder) und lassen html2canvas auf iOS abstürzen
         ignoreElements: function(el){ return !!el && el.tagName === 'CANVAS'; }
       };
@@ -796,7 +803,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       aufraeumen();
       if(!canvas || !canvas.width || !canvas.height) throw new Error('Leeres Bild (Bericht konnte nicht gezeichnet werden)');
 
-      var pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      var pdf = new window.jspdf.jsPDF({ orientation: (quer ? 'landscape' : 'portrait'), unit: 'pt', format: 'a4' });
       var rand = 28;
       var pageWidth = pdf.internal.pageSize.getWidth();
       var pageHeight = pdf.internal.pageSize.getHeight();
@@ -1000,7 +1007,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 10:15</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 18:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7614,7 +7621,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 10:15</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 18:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8937,8 +8944,10 @@ function modalMehrMenu(){
     html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px; height:19px; flex-shrink:0;">' + e.svg + '</svg>';
     html += e.label + '</button>';
   });
+  html += '<label style="display:flex; align-items:center; gap:10px; margin-top:16px; font-size:15px;"><input type="checkbox" id="mehrQuer" style="width:22px; height:22px;"' + (bsvQuerformat() ? ' checked' : '') + '> Berichte im Querformat drucken</label>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mehrQuer').onchange = function(){ bsvQuerformatSetzen(this.checked); toast(this.checked ? 'Querformat ein' : 'Hochformat'); };
   document.querySelectorAll('[data-mehrtab]').forEach(function(b){
     b.onclick = function(){
       state.tab = b.getAttribute('data-mehrtab');
