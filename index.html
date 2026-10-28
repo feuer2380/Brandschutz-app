@@ -738,8 +738,16 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       sammle('.bericht-fuss', 'oben');
       bruchPunkte.sort(function(x, y){ return x - y; });
     } catch(e){ bruchPunkte = []; }
-    html2canvas(pa, {
-      scale: 3,
+    // Defekte / leere Bilder (z.B. leere Unterschrift 'data:,') würden die PDF-Erstellung abbrechen -> durch Platzhalter ersetzen
+    try {
+      pa.querySelectorAll('img').forEach(function(im){
+        var src = im.getAttribute('src') || '';
+        var kaputt = !src || src === 'data:,' || (im.complete && im.naturalWidth === 0);
+        if(kaputt){ var ph = document.createElement('div'); ph.style.height = '60px'; if(im.parentNode) im.parentNode.replaceChild(ph, im); }
+      });
+    } catch(eImg){}
+    var pdfVersuch = function(skala){ return html2canvas(pa, {
+      scale: skala,
       backgroundColor: '#ffffff',
       useCORS: true,
       x: 0,
@@ -750,8 +758,13 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       height: pa.scrollHeight,
       windowWidth: pa.scrollWidth,
       windowHeight: pa.scrollHeight
+    }); };
+    pdfVersuch(3).catch(function(e1){
+      console.error('PDF Versuch 1 fehlgeschlagen', e1);
+      return pdfVersuch(2);
     }).then(function(canvas){
       aufraeumen();
+      if(!canvas || !canvas.width || !canvas.height) throw new Error('Leeres Bild (Bericht konnte nicht gezeichnet werden)');
 
       var pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
       var rand = 28;
@@ -777,7 +790,9 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         seg = ende;
       }
       umbrueche.forEach(function(teil, idx){
-        var hoehePx = Math.max(1, teil[1] - teil[0]);
+        var startPx = Math.max(0, Math.min(teil[0], canvas.height - 1));
+        var hoehePx = Math.max(1, Math.min(teil[1], canvas.height) - startPx);
+        teil[0] = startPx;
         var tc = document.createElement('canvas');
         tc.width = canvas.width;
         tc.height = hoehePx;
@@ -814,8 +829,9 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
     }).catch(function(err){
       aufraeumen();
       console.error('PDF-Erstellung fehlgeschlagen', err);
-      toast('PDF-Erstellung fehlgeschlagen: ' + (err && err.message ? err.message : String(err)));
-      if(cb) cb();
+      toast('PDF-Erstellung nicht möglich – normaler Druck wird geöffnet');
+      // Ausweg: normaler Druck-Dialog (dort: Teilen-Symbol -> Als PDF sichern)
+      setTimeout(function(){ try{ window.print(); }catch(e2){} if(cb) cb(); }, 600);
     });
   }, 60);
 }
@@ -945,7 +961,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 26.10. 12:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 09:00</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7559,7 +7575,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 26.10. 12:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 09:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
