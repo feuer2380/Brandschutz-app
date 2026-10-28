@@ -298,6 +298,13 @@ try {
   .pb-tabelle th{background:var(--ink); color:#f5efe6; text-align:left; padding:9px 8px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
   .pb-tabelle td{padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top;}
   .pb-tabelle tbody tr:nth-child(even){background:#faf6f0;}
+  @media screen and (max-width:700px){
+    .modal .pb-tabelle{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; font-size:11.5px; }
+    .modal .pb-tabelle th{ padding:7px 6px; font-size:9px; letter-spacing:0; white-space:nowrap; }
+    .modal .pb-tabelle td{ padding:7px 6px; }
+    .modal .pb-tabelle td:nth-child(2){ min-width:120px; }
+    .modal .pb-tabelle td:nth-child(3){ min-width:80px; }
+  }
   .pb-tabelle tbody tr:last-child td{border-bottom:2px solid var(--ink);}
   .pb-pos{background:#f0e2d4; font-weight:700; color:var(--ember-dark); text-align:center;}
   .al-karte{border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:10px; page-break-inside:avoid; break-inside:avoid;}
@@ -1009,7 +1016,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 18:45</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 28.10. 19:00</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7623,7 +7630,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 18:45</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 19:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
