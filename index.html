@@ -1739,6 +1739,13 @@ function darfLagerbuch(){
   return !!(m && m.lagerbuch);
 }
 
+// Stundenlisten aller Mitarbeiter ansehen und drucken (ohne Korrigieren): Chef und stundenSehen: true
+function darfStundenSehen(){
+  if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !!(m && m.stundenSehen);
+}
+
 function lagerAktuellerBenutzer(){
   return (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
 }
@@ -3081,7 +3088,8 @@ var MITARBEITER_LISTE = [
   { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true, vollzugriff: true },
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
-  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true }
+  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true },
+  { name: 'Harris Sandra', pin: '8280', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
 var ZEIT_ALTE_NAMEN = {
@@ -7678,7 +7686,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 21:50</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 28.10. 22:00</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -7686,6 +7694,8 @@ function renderZeit(){
     html += '<button class="btn small" id="zeitNachtragBtn">Tag nachtragen</button>';
     html += '<button class="btn small" id="zeitUrlaubBtn" style="background:#2a6fb0;">Urlaub eintragen</button>';
     html += '</div>';
+  } else if(darfStundenSehen()){
+    html += '<div style="margin-bottom:12px;"><button class="btn small secondary" id="zeitMonatBtn">Monatslisten (alle Mitarbeiter)</button></div>';
   } else {
     html += '<div style="margin-bottom:12px;"><button class="btn small secondary" id="zeitMonatBtn">Meine Monatsliste</button></div>';
   }
@@ -7831,7 +7841,7 @@ function modalZeitMonat(name, jahr, monat){
   var daten = zeitMonatDaten(name, jahr, monat);
   var html = '';
   html += '<div class="modal-head"><h3>Zeitliste</h3><button class="close" id="mClose">&times;</button></div>';
-  if(istChef){
+  if(istChef || darfStundenSehen()){
     html += '<select id="zmName" style="margin-bottom:8px;">';
     zeitMitarbeiterNamen().forEach(function(n){
       html += '<option value="' + escapeHtml(n) + '"' + (n === name ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
@@ -8735,7 +8745,7 @@ function kalHeuteKey(){
   var d = new Date();
   return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
 }
-var KAL_FARBEN = { 'Janiba Wolfgang': '#1d5fa8', 'Janiba Wolfgang sen.': '#2f7a4f', 'Prominzer Tobias': '#d9731a', 'Mayerhofer Tobias': '#7b3fa0', 'Holakovsky Manuela': '#c2185b' };
+var KAL_FARBEN = { 'Janiba Wolfgang': '#1d5fa8', 'Janiba Wolfgang sen.': '#2f7a4f', 'Prominzer Tobias': '#d9731a', 'Mayerhofer Tobias': '#7b3fa0', 'Holakovsky Manuela': '#c2185b', 'Harris Sandra': '#00897b' };
 function kalFarbe(name){
   if(name === 'alle') return '#555555';
   if(!name) return '#9a9a9a';
