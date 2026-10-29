@@ -27,6 +27,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
@@ -440,12 +441,87 @@ function openDb(cb){
       console.warn('Offline-Speicher nicht verfügbar:', err && err.code);
     });
     syncStatus = 'verbunden';
-    cb();
+    geraeteAnmeldungPruefen(cb);
   } catch(err){
     console.error('Firebase Fehler', err);
     zeigeStartFehler('Die Cloud-Verbindung konnte nicht hergestellt werden: ' + (err && err.message ? err.message : 'Unbekannt') + '. Bitte Internetverbindung prüfen und Seite neu laden.');
     cb();
   }
+}
+
+// ---------- Geräte-Anmeldung (Firebase Auth) ----------
+// Jedes Gerät meldet sich EINMAL mit dem Firmen-Konto an und bleibt dann angemeldet.
+// Ohne diese Anmeldung lässt die Datenbank (mit den neuen Regeln) niemanden an die Daten.
+var wartetAufGeraeteLogin = false;
+function geraeteAnmeldungPruefen(cb){
+  if(!firebase.auth){ cb(); return; }
+  var erledigt = false;
+  var abmelden = firebase.auth().onAuthStateChanged(function(user){
+    if(erledigt) return;
+    if(user){
+      erledigt = true; wartetAufGeraeteLogin = false;
+      try{ abmelden(); }catch(e){}
+      cb();
+    } else {
+      wartetAufGeraeteLogin = true;
+      zeigeGeraeteLogin(function(){
+        erledigt = true; wartetAufGeraeteLogin = false;
+        try{ abmelden(); }catch(e){}
+        cb();
+      });
+    }
+  });
+}
+function geraeteLoginFehlerText(err){
+  var c = err && err.code ? err.code : '';
+  if(c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials') return 'E-Mail oder Passwort falsch.';
+  if(c === 'auth/invalid-email') return 'Die E-Mail-Adresse ist ungültig.';
+  if(c === 'auth/network-request-failed') return 'Keine Internetverbindung. Für die erste Anmeldung braucht das Gerät Internet.';
+  if(c === 'auth/too-many-requests') return 'Zu viele Versuche. Bitte ein paar Minuten warten.';
+  if(c === 'auth/operation-not-allowed') return 'Die Anmeldung mit E-Mail/Passwort ist in Firebase noch nicht eingeschaltet.';
+  return 'Anmeldung fehlgeschlagen: ' + (err && err.message ? err.message : 'Unbekannt');
+}
+function zeigeGeraeteLogin(fertig){
+  var tabsEl = document.querySelector('.tabs');
+  if(tabsEl) tabsEl.style.display = 'none';
+  var fabEl = document.querySelector('.fab');
+  if(fabEl) fabEl.style.display = 'none';
+  var m = document.getElementById('main');
+  if(!m) return;
+  var h = '<div class="card" style="max-width:380px; margin:40px auto 0; padding:22px;">';
+  h += '<div class="section-title" style="text-align:center;">Gerät freischalten</div>';
+  h += '<div class="meta" style="text-align:center; margin-bottom:12px;">Einmalig pro Gerät. Danach bleibt das Gerät angemeldet und es geht wie gewohnt mit dem PIN weiter.</div>';
+  h += '<label>Firmen-E-Mail</label><input id="glEmail" type="email" autocomplete="username" autocapitalize="off" autocorrect="off">';
+  h += '<label>Passwort</label><input id="glPass" type="password" autocomplete="current-password">';
+  h += '<div id="glFehler" style="color:#c23f12; font-size:14px; min-height:20px; margin-top:8px;"></div>';
+  h += '<button class="btn block" id="glBtn" style="margin-top:6px;">Gerät freischalten</button>';
+  h += '</div>';
+  m.innerHTML = h;
+  var btn = document.getElementById('glBtn');
+  var los = function(){
+    var em = document.getElementById('glEmail').value.trim();
+    var pw = document.getElementById('glPass').value;
+    var fe = document.getElementById('glFehler');
+    if(!em || !pw){ fe.textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
+    btn.disabled = true; btn.textContent = 'Bitte warten ...'; fe.textContent = '';
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){
+      return firebase.auth().signInWithEmailAndPassword(em, pw);
+    }).then(function(){
+      if(tabsEl) tabsEl.style.display = '';
+      m.innerHTML = '';
+      fertig();
+    }).catch(function(err){
+      btn.disabled = false; btn.textContent = 'Gerät freischalten';
+      fe.textContent = geraeteLoginFehlerText(err);
+    });
+  };
+  btn.onclick = los;
+  document.getElementById('glPass').addEventListener('keydown', function(e){ if(e.key === 'Enter') los(); });
+}
+function geraetAbmelden(){
+  customConfirm('Dieses Gerät wirklich abmelden? Danach muss es mit Firmen-E-Mail und Passwort neu freigeschaltet werden.', function(){
+    try{ firebase.auth().signOut().then(function(){ location.reload(); }); }catch(e){ location.reload(); }
+  });
 }
 
 function zeigeStartFehler(text){
@@ -723,7 +799,9 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
 
   // Safari ignoriert Querformat im Druckdialog -> bei aktivem Querformat immer ueber das PDF (jsPDF) gehen
   var querWunsch = bsvQuerformat() && !pa.querySelector('.qr-etikett');
-  if((!eigenstaendig && !querWunsch) || !window.html2canvas || !window.jspdf){
+  var pdfErzwingen = !!window.__bsvPdfErzwingen;
+  window.__bsvPdfErzwingen = false;
+  if((!eigenstaendig && !querWunsch && !pdfErzwingen) || !window.html2canvas || !window.jspdf){
     setTimeout(function(){
       // Seitengröße je nach Druckart setzen (Etikett 40x30 mm oder normale Seite) und danach wieder entfernen
       var istEtikett = !!pa.querySelector('.qr-etikett');
@@ -1072,7 +1150,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 29.10. 08:05</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 29.10. 15:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1332,6 +1410,7 @@ function renderDashboard(){
     lagerNiedrig.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); }).forEach(function(a, idx){
       html += '<div class="row" style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : '') + '"><span class="meta" style="font-size:14px; color:var(--ink);">' + escapeHtml(a.name) + '</span><span class="badge warn">' + a.bestand + ' ' + escapeHtml(a.einheit || 'Stk') + ' (Min. ' + a.mindestbestand + ')</span></div>';
     });
+    html += '<button type="button" class="btn block secondary" id="lagerBestellBtn" style="margin-top:10px;">Bestellliste drucken / teilen</button>';
     html += '</div>';
   }
 
@@ -1360,11 +1439,27 @@ function renderDashboard(){
       var pl = t.personen || [];
       var farbe = kalFarbe(pl.indexOf('alle') >= 0 ? 'alle' : (pl[0] || ''));
       var kt = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
-      html += '<div class="card" data-dashtermin="' + dk + '" style="cursor:pointer; border-left:6px solid ' + farbe + ';">';
-      html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3><span class="badge blau">' + (dk === tmHeuteKey ? 'Heute' : 'Morgen') + (t.zeit ? ' ' + escapeHtml(t.zeit) + ' Uhr' : '') + '</span></div>';
+      html += '<div class="card" style="border-left:6px solid ' + (t.erledigt ? '#2f7a4f' : farbe) + ';' + (t.erledigt ? ' opacity:.75;' : '') + '">';
+      html += '<div data-dashtermin="' + dk + '" style="cursor:pointer;">';
+      html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : '<span class="badge blau">' + (dk === tmHeuteKey ? 'Heute' : 'Morgen') + (t.zeit ? ' ' + escapeHtml(t.zeit) + ' Uhr' : '') + '</span>') + '</div>';
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
       html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + (pl.indexOf('alle') >= 0 ? ['alle'] : pl).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
       if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
+      if(t.erledigt) html += '<div class="meta" style="color:#2f7a4f;">erledigt von ' + escapeHtml(zustaendigKurz(t.erledigtVon || '')) + ' am ' + fmtDate(t.erledigtAm) + ' ' + fmtZeit(t.erledigtAm) + '</div>';
+      html += '</div>';
+      var bs = 'flex:1 1 auto; padding:8px 10px; font-size:13px; white-space:nowrap;';
+      html += '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">';
+      if(!kt) html += '<button type="button" class="btn small secondary" style="' + bs + '" data-tmkundeneu="' + t.id + '">+ Kunde anlegen</button>';
+      else if(terminKundeUnvollstaendig(kt)) html += '<button type="button" class="btn small secondary" style="' + bs + ' color:#c23f12; border-color:#e6b19d;" data-tmkundeedit="' + kt.id + '">Kunde vervollständigen</button>';
+      else html += '<button type="button" class="btn small secondary" style="' + bs + '" data-tmkundeauf="' + kt.id + '">Kunde öffnen</button>';
+      if(t.erledigt){
+        if(t.tagesberichtId) html += '<button type="button" class="btn small secondary" style="' + bs + '" data-tmtbansehen="' + t.tagesberichtId + '">Tagesbericht ansehen</button>';
+        html += '<button type="button" class="btn small secondary" style="' + bs + '" data-tmrueck="' + t.id + '">Rückgängig</button>';
+      } else {
+        html += '<button type="button" class="btn small" style="' + bs + ' background:#2f7a4f;" data-tmtb="' + t.id + '">&#10003; Fertig + Tagesbericht</button>';
+        html += '<button type="button" class="btn small secondary" style="' + bs + '" data-tmab="' + t.id + '">&#10003; Nur abhaken</button>';
+      }
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -5251,10 +5346,10 @@ function feldKopierHilfe(ids){
 }
 var KUNDE_KOPIERFELDER = ['fName','fVorname','fNachname','fObjekt','fObjektAdresse','fKundennr','fZusatz','fStrasse','fOrt','fEmail'];
 
-function modalNeuerKunde(){
+function modalNeuerKunde(vorgabeName, terminId){
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Kunde</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<label>Name / Firma</label><input id="fName" type="text" placeholder="z.B. Kindergarten Sonnenschein">';
+  html += '<label>Name / Firma</label><input id="fName" type="text" placeholder="z.B. Kindergarten Sonnenschein" value="' + escapeHtml(typeof vorgabeName === 'string' ? vorgabeName : '') + '">';
   html += '<div style="display:flex; gap:10px;">';
   html += '<div style="flex:1;"><label>Vorname (optional)</label><input id="fVorname" type="text" placeholder="z.B. Georg"></div>';
   html += '<div style="flex:1;"><label>Nachname (optional)</label><input id="fNachname" type="text" placeholder="z.B. Sommerbauer"></div>';
@@ -5314,13 +5409,23 @@ function modalNeuerKunde(){
     if(window.__kundeSpeichertGerade){ return; }
     window.__kundeSpeichertGerade = true;
     setTimeout(function(){ window.__kundeSpeichertGerade = false; }, 6000);
-    dbPut('kunden', k, function(){
+    var nachKundeGespeichert = function(){
       loadAll(function(){
         window.__kundeSpeichertGerade = false;
+        if(terminId){
+          state.tab = 'dashboard';
+          render(); closeModal(); toast('Kunde gespeichert und mit Termin verknüpft');
+          return;
+        }
         state.activeKundeId = k.id;
         state.tab = 'kundeDetail';
         render(); closeModal(); toast('Kunde gespeichert');
       });
+    };
+    dbPut('kunden', k, function(){
+      var tv = terminId ? (state.termine || []).filter(function(x){ return x.id === terminId; })[0] : null;
+      if(tv){ tv.kundeId = k.id; dbPut('termine', tv, nachKundeGespeichert); }
+      else nachKundeGespeichert();
     });
   };
 }
@@ -7761,7 +7866,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 29.10. 08:05</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 29.10. 15:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8927,7 +9032,7 @@ function renderKalender(){
       var pers = (t.personen || []).indexOf('alle') >= 0 ? 'Alle Mitarbeiter' : (t.personen || []).map(zustaendigKurz).join(', ');
       var tf = kalFarbe(kalEintragFarben(e)[0]);
       html += '<div class="card"' + (voll ? ' data-kaltermin="' + t.id + '" style="cursor:pointer; border-left:6px solid ' + tf + ';"' : ' style="border-left:6px solid ' + tf + ';"') + '>';
-      html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '') + '</div>';
+      html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '')) + '</div>';
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
       html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
       if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
@@ -8944,6 +9049,38 @@ function renderKalender(){
   });
   if(voll) html += '<button type="button" class="btn block secondary" id="kalNeuTag" style="margin-top:10px;">+ Neuer Termin an diesem Tag</button>';
   return html;
+}
+
+var KAL_WDH = [
+  { key:'', label:'Nicht wiederholen' },
+  { key:'w1', label:'Jede Woche' },
+  { key:'w2', label:'Alle 2 Wochen' },
+  { key:'m1', label:'Jeden Monat' },
+  { key:'m3', label:'Vierteljährlich (alle 3 Monate)' },
+  { key:'m6', label:'Halbjährlich' },
+  { key:'m12', label:'Jährlich' }
+];
+function kalWdhLabel(k){ var w = KAL_WDH.filter(function(x){ return x.key === k; })[0]; return w ? w.label : 'Serie'; }
+// liefert die Folgetermine (ohne den ersten) bis einschliesslich bis-Datum, max. 104
+function kalSerieDaten(start, art, bis){
+  var p = start.split('-');
+  var j = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, tag = parseInt(p[2], 10);
+  var res = [];
+  var key = function(d){ return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+  for(var n = 1; n <= 104; n++){
+    var d;
+    if(art.charAt(0) === 'w'){
+      d = new Date(j, m, tag + n * 7 * parseInt(art.substring(1), 10), 12);
+    } else {
+      var schritt = parseInt(art.substring(1), 10) * n;
+      var letzter = new Date(j, m + schritt + 1, 0, 12).getDate();
+      d = new Date(j, m + schritt, Math.min(tag, letzter), 12);
+    }
+    var k = key(d);
+    if(k > bis) break;
+    res.push(k);
+  }
+  return res;
 }
 
 function modalKalenderTermin(terminId, datumVorgabe){
@@ -8970,10 +9107,22 @@ function modalKalenderTermin(terminId, datumVorgabe){
     html += '<label style="' + zeilenStil + '"><input type="checkbox" data-ktwer="' + escapeHtml(n) + '" style="' + cbStil + '"' + (emp.indexOf(n) > -1 ? ' checked' : '') + '> ' + escapeHtml(n) + '</label>';
   });
   html += '</div>';
+  if(!t){
+    html += '<label>Wiederholen</label><select id="ktWdh">';
+    KAL_WDH.forEach(function(w){ html += '<option value="' + w.key + '">' + w.label + '</option>'; });
+    html += '</select>';
+    var bisVorg = new Date(); bisVorg.setFullYear(bisVorg.getFullYear() + 1);
+    html += '<div id="ktBisBox" style="display:none;"><label>Wiederholen bis</label><input id="ktBis" type="date" value="' + bisVorg.getFullYear() + '-' + ('0' + (bisVorg.getMonth() + 1)).slice(-2) + '-' + ('0' + bisVorg.getDate()).slice(-2) + '"></div>';
+  } else if(t.serieId){
+    html += '<div class="meta" style="margin-bottom:8px;">&#8635; Teil einer Terminserie (' + escapeHtml(kalWdhLabel(t.serieArt)) + ')</div>';
+  }
   html += '<button class="btn block" id="ktSpeichern">Speichern</button>';
   if(t) html += '<button class="btn block secondary" id="ktLoeschen" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Termin löschen</button>';
+  if(t && t.serieId) html += '<button class="btn block secondary" id="ktSerieLoeschen" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">Diesen und alle folgenden der Serie löschen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  var wdhSel = document.getElementById('ktWdh');
+  if(wdhSel) wdhSel.onchange = function(){ document.getElementById('ktBisBox').style.display = wdhSel.value ? '' : 'none'; };
   document.querySelectorAll('[data-ktwer]').forEach(function(c){
     c.onchange = function(){
       var istAlle = c.getAttribute('data-ktwer') === 'alle';
@@ -9009,8 +9158,53 @@ function modalKalenderTermin(terminId, datumVorgabe){
     if(!state.termine) state.termine = [];
     if(!state.termine.some(function(x){ return x.id === obj.id; })) state.termine.push(obj);
     state.kalTag = datum; state.kalMonat = datum.substring(0, 7);
-    var speichereTermin = function(){ dbPut('termine', obj, function(){ closeModal(); toast(neuerKunde ? 'Termin gespeichert, neuer Kunde angelegt' : 'Termin gespeichert'); render(); }); };
+    var serie = [];
+    var wdhArt = wdhSel ? wdhSel.value : '';
+    if(!t && wdhArt){
+      var bis = document.getElementById('ktBis').value;
+      if(!bis || bis <= datum){ toast('Bitte ein Enddatum nach dem ersten Termin wählen'); return; }
+      obj.serieId = uid(); obj.serieArt = wdhArt;
+      var daten = kalSerieDaten(datum, wdhArt, bis);
+      daten.forEach(function(d){
+        var kopie = { id: uid(), erstelltAm: obj.erstelltAm, erstelltVon: obj.erstelltVon, titel: obj.titel, datum: d, zeit: obj.zeit, notiz: obj.notiz, personen: obj.personen.slice(), kundeId: obj.kundeId, serieId: obj.serieId, serieArt: wdhArt };
+        serie.push(kopie);
+        state.termine.push(kopie);
+      });
+    }
+    var speichereTermin = function(){
+      dbPut('termine', obj, function(){
+        var i = 0;
+        var weiter = function(){
+          if(i >= serie.length){
+            closeModal();
+            toast((serie.length ? (serie.length + 1) + ' Termine gespeichert' : 'Termin gespeichert') + (neuerKunde ? ', neuer Kunde angelegt' : ''));
+            render();
+            return;
+          }
+          dbPut('termine', serie[i++], weiter);
+        };
+        weiter();
+      });
+    };
     if(neuerKunde){ dbPut('kunden', neuerKunde, speichereTermin); } else { speichereTermin(); }
+  };
+  var serDel = document.getElementById('ktSerieLoeschen');
+  if(serDel) serDel.onclick = function(){
+    var ab = String(t.datum).substring(0, 10);
+    var weg = (state.termine || []).filter(function(x){ return x.serieId === t.serieId && String(x.datum).substring(0, 10) >= ab && !x.erledigt; });
+    customConfirm(weg.length + ' Termine dieser Serie (ab ' + fmtDate(ab) + ', erledigte bleiben) löschen?', function(){
+      var i = 0;
+      var weiter = function(){
+        if(i >= weg.length){
+          var ids = {}; weg.forEach(function(x){ ids[x.id] = true; });
+          state.termine = (state.termine || []).filter(function(x){ return !ids[x.id]; });
+          closeModal(); toast(weg.length + ' Termine gelöscht'); render();
+          return;
+        }
+        dbDelete('termine', weg[i++].id, weiter);
+      };
+      weiter();
+    });
   };
   var del = document.getElementById('ktLoeschen');
   if(del) del.onclick = function(){
@@ -9088,8 +9282,10 @@ function modalMehrMenu(){
     html += e.label + '</button>';
   });
   html += '<label style="display:flex; align-items:center; gap:10px; margin-top:16px; font-size:15px;"><input type="checkbox" id="mehrQuer" style="width:22px; height:22px;"' + (bsvQuerformat() ? ' checked' : '') + '> Berichte im Querformat drucken</label>';
+  html += '<button type="button" class="btn block secondary" id="mehrGeraetAbmelden" style="margin-top:16px; color:#c23f12;">Gerät abmelden (Firmen-Konto)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mehrGeraetAbmelden').onclick = function(){ closeModal(); geraetAbmelden(); };
   document.getElementById('mehrQuer').onchange = function(){ bsvQuerformatSetzen(this.checked); toast(this.checked ? 'Querformat ein' : 'Hochformat'); };
   document.querySelectorAll('[data-mehrtab]').forEach(function(b){
     b.onclick = function(){
@@ -10551,6 +10747,17 @@ function modalTagesberichtListe(kundeId){
   });
 }
 
+function terminAbhaken(t, tagesberichtId, cb){
+  t.erledigt = true;
+  t.erledigtAm = new Date().toISOString();
+  t.erledigtVon = (state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || 'Mitarbeiter'));
+  if(tagesberichtId) t.tagesberichtId = tagesberichtId;
+  dbPut('termine', t, function(){ if(cb) cb(); });
+}
+function terminKundeUnvollstaendig(k){
+  return !k || !String(k.adresse || '').trim();
+}
+
 function tagesberichtVorgabe(kundeId){
   var heuteKey = kalHeuteKey();
   var ich = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
@@ -10577,9 +10784,10 @@ function tagesberichtVorgabe(kundeId){
   return { datum: pick ? pick.datum : heuteKey, techniker: pick ? pick.wer : ich, von: pick ? pick.zeit : '' };
 }
 
-function modalTagesberichtNeu(kundeId){
+function modalTagesberichtNeu(kundeId, terminId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
+  var tbTermin = terminId ? (state.termine || []).filter(function(x){ return x.id === terminId; })[0] : null;
   var tbVg = tagesberichtVorgabe(kundeId);
   var heute = tbVg.datum;
 
@@ -10649,6 +10857,14 @@ function modalTagesberichtNeu(kundeId){
     };
     dbPut('tagesberichte', tb, function(){
       state.tagesberichte.push(tb);
+      if(tbTermin){
+        terminAbhaken(tbTermin, tb.id, function(){
+          toast('Tagesbericht gespeichert, Termin erledigt');
+          render();
+          modalTagesberichtAnsicht(tb.id);
+        });
+        return;
+      }
       toast('Tagesbericht gespeichert');
       modalTagesberichtAnsicht(tb.id);
     });
@@ -10780,11 +10996,31 @@ function modalTagesberichtAnsicht(tbId){
   html += '<div class="modal-head no-print"><h3>Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
   html += buildTagesberichtDruckHtml(tb, k, qrIdAnsicht);
   html += '<div class="no-print" style="margin-top:16px;">';
-  html += '<button class="btn block" id="druckBtnTb">Drucken / Als PDF teilen</button>';
+  html += '<button class="btn block" id="sendenBtnTb" style="background:#2f7a4f;">&#9993; An Kunden senden (PDF)</button>';
+  if(k && k.email) html += '<div class="meta" style="text-align:center; margin-top:4px;">E-Mail des Kunden: ' + escapeHtml(k.email) + '</div>';
+  html += '<button class="btn block secondary" id="druckBtnTb" style="margin-top:10px;">Drucken / Als PDF teilen</button>';
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   tbQrEinfuegen(qrIdAnsicht, k);
+  document.getElementById('sendenBtnTb').onclick = function(){
+    var btn = document.getElementById('sendenBtnTb');
+    btn.disabled = true;
+    btn.textContent = 'PDF wird erstellt ...';
+    var qrIdDruck = 'tbqr_druck_' + tb.id;
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildTagesberichtDruckHtml(tb, k, qrIdDruck);
+    tbQrEinfuegen(qrIdDruck, k);
+    var dn = 'Tagesbericht_' + String(k ? k.name : 'Kunde').replace(/[^A-Za-z0-9ÄÖÜäöüß]+/g, '_').substring(0, 40) + '_' + String(tb.datum || '').substring(0, 10) + '.pdf';
+    if(k && k.email){ try{ navigator.clipboard.writeText(k.email); toast('E-Mail-Adresse kopiert'); }catch(eC){} }
+    setTimeout(function(){
+      window.__bsvPdfErzwingen = true;
+      bsvDruckenOderTeilen(null, dn, function(){
+        btn.disabled = false;
+        btn.innerHTML = '&#9993; An Kunden senden (PDF)';
+      });
+    }, 300);
+  };
   document.getElementById('druckBtnTb').onclick = function(){
     var btn = document.getElementById('druckBtnTb');
     btn.disabled = true;
@@ -11146,7 +11382,7 @@ function statistikKundenHtml(){
       var heuteT = new Date(); heuteT.setHours(12, 0, 0, 0);
       var tage = Math.round((heuteT - new Date(parseInt(rdT[0], 10), parseInt(rdT[1], 10) - 1, parseInt(rdT[2], 10), 12, 0, 0)) / 86400000);
       var tageText = tage <= 0 ? 'seit heute offen' : ('seit ' + tage + (tage === 1 ? ' Tag' : ' Tagen') + ' offen');
-      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div></div>';
+      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div>' + (tage >= 30 ? '<button type="button" class="btn small secondary" data-rgmahnung="' + escapeHtml(e.k.id) + '|' + escapeHtml(e.r.id) + '" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">&#9993; Zahlungserinnerung</button>' : '') + '</div>';
     });
     h += '<div class="section-title" style="margin-top:14px;">Rangliste nach Umsatz</div>';
   }
@@ -11235,9 +11471,73 @@ function bindVermerke(){
   });
 }
 
+function lagerBestelllisteHtml(){
+  var liste = state.lagerartikel.filter(function(a){ return (a.mindestbestand != null) && (a.bestand < a.mindestbestand); });
+  liste.sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); });
+  var html = '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile"><div class="pb-titel"><h1>Bestellliste</h1><div class="sub">Lagerartikel unter Mindestbestand</div></div><img src="' + LOGO_DATA + '" class="pb-logo"></div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+  html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Artikel</th><th>Art.-Nr.</th><th>Bestand</th><th>Mindestbestand</th><th>Bestellen</th><th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+  liste.forEach(function(a, i){
+    var eh = escapeHtml(a.einheit || 'Stk');
+    html += '<tr><td class="pb-pos">' + (i + 1) + '</td><td>' + escapeHtml(a.name || '') + '</td><td>' + escapeHtml(a.externeId || '-') + '</td><td>' + a.bestand + ' ' + eh + '</td><td>' + a.mindestbestand + ' ' + eh + '</td><td><b>' + Math.max(1, a.mindestbestand - a.bestand) + ' ' + eh + '</b></td><td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
+  });
+  html += '</tbody></table>';
+  html += '<div class="meta" style="margin-top:6px;">&bdquo;Bestellen&ldquo; = Menge bis zum Mindestbestand. Bei Bedarf mehr bestellen.</div>';
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
+  html += '</div>';
+  return html;
+}
+function modalZahlungserinnerung(kundeId, rechnungId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var r = (k.rechnungen || []).filter(function(x){ return x.id === rechnungId; })[0];
+  if(!r) return;
+  var anrede = 'Sehr geehrte Damen und Herren,';
+  var text = anrede + '\n\n'
+    + 'bei der Durchsicht unserer Unterlagen haben wir festgestellt, dass folgende Rechnung noch offen ist:\n\n'
+    + 'Rechnung vom ' + fmtDate(r.datum) + (r.notiz ? ' (' + r.notiz + ')' : '') + ' über ' + eurText(r.betrag).replace(/&nbsp;/g, ' ') + '\n\n'
+    + 'Sicher handelt es sich um ein Versehen. Wir bitten Sie, den offenen Betrag innerhalb von 14 Tagen zu überweisen. Sollten Sie die Zahlung bereits veranlasst haben, betrachten Sie dieses Schreiben bitte als gegenstandslos.\n\n'
+    + 'Mit freundlichen Grüßen\n\n'
+    + 'Wolfgang Janiba Brandschutztechnik GmbH\nKetzergasse 299, 2380 Perchtoldsdorf\nTel 0676/305 83 98 · info@loeschtechnik.at';
+  var betreff = 'Zahlungserinnerung – Rechnung vom ' + fmtDate(r.datum);
+  var html = '<div class="modal-head"><h3>Zahlungserinnerung</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + escapeHtml(k.name) + (k.email ? ' &middot; ' + escapeHtml(k.email) : ' &middot; <span style="color:#c23f12;">keine E-Mail beim Kunden hinterlegt</span>') + '</div>';
+  html += '<label>Betreff</label><input id="zeBetreff" type="text" value="' + escapeHtml(betreff) + '">';
+  html += '<label>Text (kannst du anpassen)</label><textarea id="zeText" rows="14" style="width:100%; font-size:14px;">' + escapeHtml(text) + '</textarea>';
+  html += '<button class="btn block" id="zeMail" style="margin-top:10px;">In Mail-App öffnen</button>';
+  html += '<button class="btn block secondary" id="zeKopie" style="margin-top:8px;">Text kopieren (für WhatsApp o.ä.)</button>';
+  html += '<button class="btn block secondary" id="zeVermerk" style="margin-top:8px;">Als &bdquo;Erinnerung verschickt&ldquo; beim Kunden vermerken</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('zeMail').onclick = function(){
+    var b = document.getElementById('zeBetreff').value, t = document.getElementById('zeText').value;
+    location.href = 'mailto:' + encodeURIComponent(k.email || '') + '?subject=' + encodeURIComponent(b) + '&body=' + encodeURIComponent(t);
+  };
+  document.getElementById('zeKopie').onclick = function(){
+    var t = document.getElementById('zeText').value;
+    try{ navigator.clipboard.writeText(t).then(function(){ toast('Text kopiert'); }, function(){ toast('Kopieren nicht möglich'); }); }catch(e){ toast('Kopieren nicht möglich'); }
+  };
+  document.getElementById('zeVermerk').onclick = function(){
+    if(!k.vermerke) k.vermerke = [];
+    k.vermerke.push({ id: uid(), text: 'Zahlungserinnerung verschickt (Rechnung vom ' + fmtDate(r.datum) + ', ' + eurText(r.betrag).replace(/&nbsp;/g, ' ') + ')', erstelltAm: new Date().toISOString(), erstelltVon: lagerAktuellerBenutzer(), erledigt: true, erledigtAm: new Date().toISOString() });
+    r.erinnertAm = new Date().toISOString();
+    dbPut('kunden', k, function(){ closeModal(); toast('Beim Kunden vermerkt'); render(); });
+  };
+}
+
 function bindDynamic(){
   if(state.tab === 'kundeDetail'){ bindVermerke(); bindUmsatz(); }
   bindKundenCards(document);
+  var lbb = document.getElementById('lagerBestellBtn');
+  if(lbb) lbb.onclick = function(){ bsvDruckenOderTeilen(lagerBestelllisteHtml(), 'Bestellliste_' + kalHeuteKey() + '.pdf'); };
+  document.querySelectorAll('[data-rgmahnung]').forEach(function(b){
+    b.onclick = function(ev){
+      ev.stopPropagation();
+      var teile = b.getAttribute('data-rgmahnung').split('|');
+      modalZahlungserinnerung(teile[0], teile[1]);
+    };
+  });
 
   document.querySelectorAll('[data-zuweisen-geraet]').forEach(function(b){
     b.onclick = function(){
@@ -11480,6 +11780,44 @@ function bindDynamic(){
   var logoutBtn = document.getElementById('logoutBtn');
   var agBox = document.getElementById('alleGeraeteBox');
   if(agBox) agBox.addEventListener('toggle', function(){ state.alleGeraeteBoxOffen = agBox.open; });
+  var tmFinde = function(id){ return (state.termine || []).filter(function(x){ return x.id === id; })[0]; };
+  document.querySelectorAll('[data-tmkundeneu]').forEach(function(b){
+    b.onclick = function(){ var t = tmFinde(b.getAttribute('data-tmkundeneu')); if(t) modalNeuerKunde(t.titel || '', t.id); };
+  });
+  document.querySelectorAll('[data-tmkundeedit]').forEach(function(b){
+    b.onclick = function(){ modalKundeBearbeiten(b.getAttribute('data-tmkundeedit')); };
+  });
+  document.querySelectorAll('[data-tmkundeauf]').forEach(function(b){
+    b.onclick = function(){ state.activeKundeId = b.getAttribute('data-tmkundeauf'); state.tab = 'kundeDetail'; render(); };
+  });
+  document.querySelectorAll('[data-tmtb]').forEach(function(b){
+    b.onclick = function(){
+      var t = tmFinde(b.getAttribute('data-tmtb'));
+      if(!t) return;
+      if(!t.kundeId || !state.kunden.some(function(x){ return x.id === t.kundeId; })){ toast('Bitte zuerst den Kunden anlegen'); return; }
+      modalTagesberichtNeu(t.kundeId, t.id);
+    };
+  });
+  document.querySelectorAll('[data-tmab]').forEach(function(b){
+    b.onclick = function(){
+      var t = tmFinde(b.getAttribute('data-tmab'));
+      if(!t) return;
+      customConfirm('Termin „' + escapeHtml(t.titel || 'Termin') + '“ ohne Tagesbericht als erledigt abhaken?', function(){
+        terminAbhaken(t, null, function(){ toast('Termin erledigt'); render(); });
+      });
+    };
+  });
+  document.querySelectorAll('[data-tmrueck]').forEach(function(b){
+    b.onclick = function(){
+      var t = tmFinde(b.getAttribute('data-tmrueck'));
+      if(!t) return;
+      t.erledigt = false; t.erledigtAm = null; t.erledigtVon = null;
+      dbPut('termine', t, function(){ toast('Termin wieder offen'); render(); });
+    };
+  });
+  document.querySelectorAll('[data-tmtbansehen]').forEach(function(b){
+    b.onclick = function(){ modalTagesberichtAnsicht(b.getAttribute('data-tmtbansehen')); };
+  });
   document.querySelectorAll('[data-dashtermin]').forEach(function(c){
     c.onclick = function(){
       var dk = c.getAttribute('data-dashtermin');
@@ -11983,7 +12321,7 @@ try {
   zeigeStartFehler('Fehler beim Öffnen der Datenbank: ' + (err && err.message ? err.message : err) + '. Bitte Seite neu laden.');
 }
 setTimeout(function(){
-  if(!appGestartet){
+  if(!appGestartet && !wartetAufGeraeteLogin){
     zeigeStartFehler('Die App braucht ungewöhnlich lange zum Laden. Bitte alle anderen offenen Tabs/Instanzen dieser App schließen und danach diese Seite neu laden.');
   }
 }, 6000);
