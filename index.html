@@ -135,7 +135,7 @@ try {
   .empty.kompakt{text-align:left; padding:8px 2px; display:flex; align-items:center; gap:8px;}
   .empty.kompakt .ic{font-size:16px; display:inline; margin-bottom:0;}
   .modal-bg{
-    position:fixed; inset:0; background:rgba(26,20,16,.5); z-index:100;
+    position:fixed; top:0; right:0; bottom:0; left:0; inset:0; background:rgba(26,20,16,.5); z-index:100;
     display:flex; align-items:flex-end;
   }
   .modal{
@@ -1150,7 +1150,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 29.10. 15:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 29.10. 23:40</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -7866,7 +7866,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 29.10. 15:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 29.10. 23:40</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
