@@ -311,6 +311,13 @@ try {
   #printArea.kompakt .pb-tabelle th{padding:5px 6px; font-size:8px;}
   #printArea.kompakt .pb-tabelle td{padding:3px 6px;}
   #printArea.kompakt .pb-tabelle td span[style*="inline-block"]{width:11px !important; height:11px !important;}
+  /* Ausstattungsliste: Schrift beim Ausdruck eine Spur groesser */
+  #printArea.kompakt .ausstattung .pb-tabelle{font-size:11.5px;}
+  #printArea.kompakt .ausstattung .pb-tabelle th{font-size:9.5px; padding:6px 6px;}
+  #printArea.kompakt .ausstattung .pb-tabelle td{padding:4px 6px;}
+  #printArea.kompakt .ausstattung .pb-kundenbox{font-size:13px;}
+  #printArea.kompakt .ausstattung .pb-kundenbox .knr{font-size:10px;}
+  #printArea.kompakt .ausstattung .bericht-fuss{font-size:10px;}
   #printArea.kompakt .bericht-fuss{margin-top:8px; padding-top:6px; font-size:8.5px;}
   @media screen and (max-width:700px){
     .modal .pb-tabelle{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; font-size:11.5px; }
@@ -3845,7 +3852,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
   });
 
   var html = '';
-  html += '<div class="bericht-brief">';
+  html += '<div class="bericht-brief ausstattung">';
   html += '<div class="pb-kopfzeile">';
   html += '<div class="pb-titel"><h1>Ausstattungsliste</h1><div class="sub">' + (nurKategorie ? escapeHtml(nurKategorie) : 'Übersicht Brandschutzeinrichtungen im Gebäude') + '</div></div>';
   html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
