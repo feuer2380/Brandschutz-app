@@ -318,6 +318,7 @@ try {
   #printArea.kompakt .ausstattung .pb-kundenbox{font-size:13px;}
   #printArea.kompakt .ausstattung .pb-kundenbox .knr{font-size:10px;}
   #printArea.kompakt .ausstattung .bericht-fuss{font-size:10px;}
+  #printArea.kompakt .ausstattung .ausst-fehlt{font-size:11px; padding:6px 10px !important;}
   #printArea.kompakt .bericht-fuss{margin-top:8px; padding-top:6px; font-size:8.5px;}
   @media screen and (max-width:700px){
     .modal .pb-tabelle{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; font-size:11.5px; }
@@ -3851,6 +3852,11 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
     gruppen[kat].push(g);
   });
 
+  var fehlListe = [];
+  var ausstLeer = function(v){
+    var t = String(v === null || v === undefined ? '' : v).trim().toLowerCase();
+    return t === '' || t === '-' || t === '?' || t.indexOf('nachtragen') === 0;
+  };
   var html = '';
   html += '<div class="bericht-brief ausstattung">';
   html += '<div class="pb-kopfzeile">';
@@ -3911,7 +3917,28 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
         html += '<tr' + zeilenStil + '><td class="pb-pos">' + geraeteNummerWert(g) + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.standort||'-') + '</td>' + (istBegehung ? '' : ('<td>' + escapeHtml(g.seriennummer||'-') + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
       });
       html += '</tbody></table>';
+      // fehlende Angaben in dieser Kategorie sammeln (Liste unten)
+      if(!istPZ && !istBegehung){
+        gruppen[kat].forEach(function(g){
+          var fehlt = [];
+          if(ausstLeer(g.standort)) fehlt.push('Standort');
+          if(ausstLeer(g.seriennummer)) fehlt.push('Seriennummer');
+          if(ausstLeer(g.baujahr)) fehlt.push('Baujahr');
+          if(fehlt.length) fehlListe.push({ kat: kat, nr: geraeteNummerWert(g), typ: g.typ || '', fehlt: fehlt });
+        });
+      }
     });
+  }
+
+  if(fehlListe.length){
+    html += '<div class="ausst-fehlt" style="margin-top:14px; border:1.5px solid #c23f12; border-radius:6px; padding:8px 12px; page-break-inside:avoid; break-inside:avoid;">';
+    html += '<div style="font-weight:700; color:#c23f12; margin-bottom:4px;">Fehlende Angaben &ndash; bitte nachtragen (' + fehlListe.length + ' Ger&auml;t' + (fehlListe.length === 1 ? '' : 'e') + ')</div>';
+    html += '<div style="margin-bottom:6px;">Gibt es am Ger&auml;t keine Angabe (z.B. keine Seriennummer), bitte &bdquo;keine&ldquo; eintragen.</div>';
+    var mehrKat = fehlListe.some(function(f){ return f.kat !== fehlListe[0].kat; });
+    fehlListe.forEach(function(f){
+      html += '<div style="padding:2px 0; border-top:1px solid #eee2d3;">' + (mehrKat ? escapeHtml(f.kat) + ' ' : '') + 'Nr. ' + f.nr + (f.typ ? ' (' + escapeHtml(f.typ) + ')' : '') + ': <b>' + f.fehlt.join(', ') + '</b></div>';
+    });
+    html += '</div>';
   }
 
   html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
