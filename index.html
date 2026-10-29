@@ -235,7 +235,7 @@ try {
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center; box-shadow:0 1px 4px rgba(26,20,16,.06);}
-  .stat .n{font-size:26px; font-family:Georgia,serif; color:var(--ember-dark);}
+  .stat .n{font-size:26px; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif; font-weight:700; font-variant-numeric:lining-nums tabular-nums; letter-spacing:-0.01em; color:var(--ember-dark);}
   .stat .l{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
   .statrow{display:flex; gap:10px; margin-bottom:16px;}
   .ergebnis-chart{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px;}
@@ -1904,7 +1904,7 @@ function modalLagerArtikelAnpassen(artikelId){
   var einheit = escapeHtml(a.einheit || 'Stk');
   var html = '';
   html += '<div class="modal-head"><h3>' + escapeHtml(a.name) + '</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div style="text-align:center; margin:10px 0;"><span style="font-size:40px; font-family:Georgia,serif; color:var(--ember-dark);">' + a.bestand + '</span><div class="meta">' + einheit + ' aktuell im Lager</div></div>';
+  html += '<div style="text-align:center; margin:10px 0;"><span style="font-size:40px; font-weight:700; font-variant-numeric:lining-nums; color:var(--ember-dark);">' + a.bestand + '</span><div class="meta">' + einheit + ' aktuell im Lager</div></div>';
   html += '<div class="meta" style="text-align:center;">Gebucht von: <strong>' + escapeHtml(lagerAktuellerBenutzer()) + '</strong></div>';
 
   html += '<label style="margin-top:14px;">Menge</label>';
@@ -11142,8 +11142,11 @@ function statistikKundenHtml(){
   if(offeneListe.length){
     h += '<div class="section-title" style="margin-top:6px; color:#c23f12;">Offene Rechnungen (' + offeneListe.length + ')</div>';
     offeneListe.forEach(function(e){
-      var tage = Math.floor((new Date() - new Date(String(e.r.datum).substring(0, 10) + 'T12:00:00')) / 86400000);
-      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">seit ' + tage + ' Tagen offen</b></div></div>';
+      var rdT = String(e.r.datum).substring(0, 10).split('-');
+      var heuteT = new Date(); heuteT.setHours(12, 0, 0, 0);
+      var tage = Math.round((heuteT - new Date(parseInt(rdT[0], 10), parseInt(rdT[1], 10) - 1, parseInt(rdT[2], 10), 12, 0, 0)) / 86400000);
+      var tageText = tage <= 0 ? 'seit heute offen' : ('seit ' + tage + (tage === 1 ? ' Tag' : ' Tagen') + ' offen');
+      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div></div>';
     });
     h += '<div class="section-title" style="margin-top:14px;">Rangliste nach Umsatz</div>';
   }
