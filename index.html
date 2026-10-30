@@ -1126,6 +1126,15 @@ function renderInner(){
   document.querySelectorAll('[data-dashtermin]').forEach(function(c){
     c.onclick = function(){ state.kalTag = c.getAttribute('data-dashtermin'); state.kalMonat = state.kalTag.substring(0, 7); state.tab = 'kalender'; render(); };
   });
+  document.querySelectorAll('[data-dtbearb]').forEach(function(b){
+    b.onclick = function(ev){ ev.stopPropagation(); modalKalenderTermin(b.getAttribute('data-dtbearb')); };
+  });
+  document.querySelectorAll('[data-dtkunde]').forEach(function(b){
+    b.onclick = function(ev){ ev.stopPropagation(); dashTerminKunde(b.getAttribute('data-dtkunde')); };
+  });
+  document.querySelectorAll('[data-dttb]').forEach(function(b){
+    b.onclick = function(ev){ ev.stopPropagation(); dashTerminTagesbericht(b.getAttribute('data-dttb')); };
+  });
   if(state.tab === 'zeit') bindZeit();
   if(state.tab === 'aufgaben') bindAufgaben();
   if(state.tab === 'kalender') bindKalender();
@@ -1420,6 +1429,13 @@ function renderDashboard(){
       if(kT) html += '<div class="meta">' + escapeHtml(kT.name) + '</div>';
       if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
       html += '<div class="meta">' + escapeHtml(wer) + '</div>';
+      var tbStil = 'flex:1 1 0; min-width:0; padding:10px 6px; font-size:14px; margin:0;';
+      html += '<div style="display:flex; gap:8px; margin-top:10px;">';
+      if(istVollsicht()) html += '<button type="button" class="btn secondary" data-dtbearb="' + t.id + '" style="' + tbStil + '">Bearbeiten</button>';
+      var kLabel = !kT ? 'Als Kunde anlegen' : (dashKundeUnvollstaendig(kT) ? 'Kunde ergänzen' : 'Kunde öffnen');
+      if(kT || istVollsicht()) html += '<button type="button" class="btn secondary" data-dtkunde="' + t.id + '" style="' + tbStil + '">' + kLabel + '</button>';
+      html += '<button type="button" class="btn" data-dttb="' + t.id + '" style="' + tbStil + '">Tagesbericht</button>';
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -5200,10 +5216,11 @@ function feldKopierHilfe(ids){
 }
 var KUNDE_KOPIERFELDER = ['fName','fVorname','fNachname','fObjekt','fObjektAdresse','fKundennr','fZusatz','fStrasse','fOrt','fEmail'];
 
-function modalNeuerKunde(){
+function modalNeuerKunde(opts){
+  opts = opts || {};
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Kunde</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<label>Name / Firma</label><input id="fName" type="text" placeholder="z.B. Kindergarten Sonnenschein">';
+  html += '<label>Name / Firma</label><input id="fName" type="text" placeholder="z.B. Kindergarten Sonnenschein" value="' + escapeHtml(opts.name || '') + '">';
   html += '<div style="display:flex; gap:10px;">';
   html += '<div style="flex:1;"><label>Vorname (optional)</label><input id="fVorname" type="text" placeholder="z.B. Georg"></div>';
   html += '<div style="flex:1;"><label>Nachname (optional)</label><input id="fNachname" type="text" placeholder="z.B. Sommerbauer"></div>';
@@ -5266,6 +5283,7 @@ function modalNeuerKunde(){
     dbPut('kunden', k, function(){
       loadAll(function(){
         window.__kundeSpeichertGerade = false;
+        if(opts.nachSpeichern){ closeModal(); opts.nachSpeichern(k); return; }
         state.activeKundeId = k.id;
         state.tab = 'kundeDetail';
         render(); closeModal(); toast('Kunde gespeichert');
@@ -8897,6 +8915,52 @@ function renderKalender(){
   return html;
 }
 
+// ---- Termin-Karten auf der Übersicht: Bearbeiten / Kunde / Tagesbericht ----
+function dashTerminFinden(id){
+  return (state.termine || []).filter(function(x){ return x.id === id; })[0] || null;
+}
+function dashKundeUnvollstaendig(k){
+  return !k.strasse && !k.adresse && !k.telefon && !k.email && !k.kundennummer;
+}
+function dashTerminKundeAnlegen(t, danach){
+  modalNeuerKunde({
+    name: t.notiz || '',
+    nachSpeichern: function(k){
+      t.kundeId = k.id;
+      dbPut('termine', t, function(){
+        toast('Kunde angelegt und mit Termin verknüpft');
+        render();
+        if(danach) danach(k);
+      });
+    }
+  });
+}
+function dashTerminKunde(id){
+  var t = dashTerminFinden(id);
+  if(!t) return;
+  var k = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+  if(!k){ dashTerminKundeAnlegen(t, null); return; }
+  if(dashKundeUnvollstaendig(k) && (istVollsicht())){ modalKundeBearbeiten(k.id); return; }
+  state.activeKundeId = k.id;
+  state.tab = 'kundeDetail';
+  render();
+}
+function dashTerminVorgabe(t){
+  var ich = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
+  var pl = t.personen || [];
+  var wer = (pl.length && pl.indexOf('alle') < 0) ? (pl.indexOf(ich) >= 0 ? ich : pl[0]) : ich;
+  return { datum: String(t.datum || kalHeuteKey()).substring(0, 10), techniker: wer, von: t.zeit || '' };
+}
+function dashTerminTagesbericht(id){
+  var t = dashTerminFinden(id);
+  if(!t) return;
+  var k = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+  if(k){ modalTagesberichtNeu(k.id, dashTerminVorgabe(t)); return; }
+  customConfirm('Für den Tagesbericht brauchst du einen Kunden. Jetzt anlegen?', function(){
+    dashTerminKundeAnlegen(t, function(nk){ modalTagesberichtNeu(nk.id, dashTerminVorgabe(t)); });
+  });
+}
+
 function modalKalenderTermin(terminId, datumVorgabe){
   var t = terminId ? (state.termine || []).filter(function(x){ return x.id === terminId; })[0] : null;
   var emp = t ? (t.personen || []) : [];
@@ -10527,10 +10591,10 @@ function tagesberichtVorgabe(kundeId){
   return { datum: pick ? pick.datum : heuteKey, techniker: pick ? pick.wer : ich, von: pick ? pick.zeit : '' };
 }
 
-function modalTagesberichtNeu(kundeId){
+function modalTagesberichtNeu(kundeId, vorgabe){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
-  var tbVg = tagesberichtVorgabe(kundeId);
+  var tbVg = vorgabe || tagesberichtVorgabe(kundeId);
   var heute = tbVg.datum;
 
   var html = '';
