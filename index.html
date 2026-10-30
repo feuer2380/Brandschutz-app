@@ -1064,7 +1064,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 30.10. 07:15</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 30.10. 08:45</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1123,6 +1123,9 @@ function renderInner(){
 
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
+  document.querySelectorAll('[data-dashtermin]').forEach(function(c){
+    c.onclick = function(){ state.kalTag = c.getAttribute('data-dashtermin'); state.kalMonat = state.kalTag.substring(0, 7); state.tab = 'kalender'; render(); };
+  });
   if(state.tab === 'zeit') bindZeit();
   if(state.tab === 'aufgaben') bindAufgaben();
   if(state.tab === 'kalender') bindKalender();
@@ -1389,6 +1392,35 @@ function renderDashboard(){
     html += '<div class="section-title" style="margin-top:14px; color:#c23f12;">Vermerke fällig (' + vmFaellig.length + ')</div>';
     vmFaellig.forEach(function(e){
       html += '<div class="card kunde-card" data-id="' + e.k.id + '"><div class="row"><h3>' + escapeHtml(e.k.name) + '</h3><span class="badge soon">' + escapeHtml(vermerkFaelligText(e.v.faellig)) + '</span></div><div class="meta">' + escapeHtml(e.v.text) + '</div></div>';
+    });
+  }
+
+  // Kalender-Termine (heute und die nächsten 6 Tage) für mich bzw. alle
+  var terminTage = [];
+  for(var tt = 0; tt < 7; tt++){
+    var tDat = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate() + tt);
+    var tKey = tDat.getFullYear() + '-' + ('0' + (tDat.getMonth() + 1)).slice(-2) + '-' + ('0' + tDat.getDate()).slice(-2);
+    (state.termine || []).forEach(function(t){
+      if(String(t.datum || '').substring(0, 10) !== tKey) return;
+      var pl = t.personen || [];
+      if(istEingeschraenkt() && pl.indexOf('alle') < 0 && pl.indexOf(state.mitarbeiterName) < 0) return;
+      terminTage.push({ key: tKey, offset: tt, t: t });
+    });
+  }
+  if(terminTage.length){
+    terminTage.sort(function(a, b){ return a.key.localeCompare(b.key) || (a.t.zeit || '99:99').localeCompare(b.t.zeit || '99:99'); });
+    html += '<div class="section-title" style="margin-top:14px;">Termine (' + terminTage.length + ')</div>';
+    terminTage.forEach(function(e){
+      var t = e.t;
+      var kT = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+      var tagText = e.offset === 0 ? 'Heute' : (e.offset === 1 ? 'Morgen' : fmtDate(e.key + 'T12:00:00').substring(0, 6));
+      var wer = (t.personen || []).indexOf('alle') >= 0 ? 'Alle' : (t.personen || []).map(function(n){ return zustaendigKurz(n); }).join(', ');
+      html += '<div class="card" data-dashtermin="' + e.key + '" style="cursor:pointer; border-left:6px solid ' + (e.offset === 0 ? '#d9531e' : '#c9bfae') + ';">';
+      html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3><span class="badge ' + (e.offset === 0 ? 'soon' : 'blau') + '">' + tagText + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span></div>';
+      if(kT) html += '<div class="meta">' + escapeHtml(kT.name) + '</div>';
+      if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
+      html += '<div class="meta">' + escapeHtml(wer) + '</div>';
+      html += '</div>';
     });
   }
 
@@ -7678,7 +7710,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 30.10. 07:15</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 30.10. 08:45</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
