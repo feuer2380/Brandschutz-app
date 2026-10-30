@@ -1432,7 +1432,7 @@ function renderDashboard(){
       var tbStil = 'flex:1 1 0; min-width:0; padding:10px 6px; font-size:14px; margin:0;';
       html += '<div style="display:flex; gap:8px; margin-top:10px;">';
       if(istVollsicht()) html += '<button type="button" class="btn secondary" data-dtbearb="' + t.id + '" style="' + tbStil + '">Bearbeiten</button>';
-      var kLabel = !kT ? 'Als Kunde anlegen' : (dashKundeUnvollstaendig(kT) ? 'Kunde ergänzen' : 'Kunde öffnen');
+      var kLabel = !kT ? 'Kunde zuordnen' : (dashKundeUnvollstaendig(kT) ? 'Kunde ergänzen' : 'Kunde öffnen');
       if(kT || istVollsicht()) html += '<button type="button" class="btn secondary" data-dtkunde="' + t.id + '" style="' + tbStil + '">' + kLabel + '</button>';
       html += '<button type="button" class="btn" data-dttb="' + t.id + '" style="' + tbStil + '">Tagesbericht</button>';
       html += '</div>';
@@ -8939,11 +8939,116 @@ function dashTerminKunde(id){
   var t = dashTerminFinden(id);
   if(!t) return;
   var k = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
-  if(!k){ dashTerminKundeAnlegen(t, null); return; }
-  if(dashKundeUnvollstaendig(k) && (istVollsicht())){ modalKundeBearbeiten(k.id); return; }
+  if(!k){ if(istVollsicht()) modalTerminKundeZuordnen(t, null); else dashTerminKundeAnlegen(t, null); return; }
+  if(dashKundeUnvollstaendig(k) && (istVollsicht())){ modalTerminKundeZuordnen(t, k); return; }
   state.activeKundeId = k.id;
   state.tab = 'kundeDetail';
   render();
+}
+// Kunde per Kundennummer suchen und mit dem Termin verknuepfen
+function tkzNorm(s){ return String(s || '').toLowerCase().replace(/\s+/g, ''); }
+function tkzPlatzhalterLeer(kAlt, t){
+  if(!kAlt || !dashKundeUnvollstaendig(kAlt)) return false;
+  if((kAlt.rechnungen && kAlt.rechnungen.length) || (kAlt.vermerke && kAlt.vermerke.length)) return false;
+  var stores = ['geraete','pruefungen','sammelberichte','begehungsberichte','dokumente','brandschutzplaene','tagesberichte','termine'];
+  for(var i = 0; i < stores.length; i++){
+    var liste = state[stores[i]] || [];
+    for(var j = 0; j < liste.length; j++){
+      var o = liste[j];
+      if(o.kundeId !== kAlt.id) continue;
+      if(stores[i] === 'termine' && o.id === t.id) continue;
+      if(o.geloescht) continue;
+      return false;
+    }
+  }
+  return true;
+}
+function modalTerminKundeZuordnen(t, kAlt){
+  var gewaehlt = null;
+  var html = '';
+  html += '<div class="modal-head"><h3>Kunde zuordnen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:6px;">Termin: <b>' + escapeHtml(t.titel || 'Termin') + '</b>' + (kAlt ? ' &middot; bisher: ' + escapeHtml(kAlt.name || '') : '') + '</div>';
+  html += '<label>Kundennummer</label>';
+  html += '<input id="tkzNr" type="text" inputmode="numeric" autocomplete="off" placeholder="z.B. 210271" style="font-size:22px; font-weight:700; letter-spacing:1px;">';
+  html += '<div class="meta" style="margin-top:-4px;">Auch ein Teil vom Namen geht.</div>';
+  html += '<div id="tkzTreffer" style="margin:10px 0;"></div>';
+  html += '<button class="btn block" id="tkzSpeichern" disabled style="opacity:.45;">Diesen Kunden übernehmen &amp; speichern</button>';
+  if(kAlt) html += '<button class="btn block secondary" id="tkzErgaenzen" style="margin-top:10px;">Stattdessen Daten von &bdquo;' + escapeHtml(kAlt.name || '') + '&ldquo; ergänzen</button>';
+  else html += '<button class="btn block secondary" id="tkzNeu" style="margin-top:10px;">Neuen Kunden anlegen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var eing = document.getElementById('tkzNr');
+  var box = document.getElementById('tkzTreffer');
+  var btn = document.getElementById('tkzSpeichern');
+
+  function karte(k, aktiv){
+    var adr = k.adresse || ((k.strasse || '') + (k.ort ? ', ' + (k.plz ? k.plz + ' ' : '') + k.ort : ''));
+    return '<div class="card" data-tkzid="' + k.id + '" style="cursor:pointer; margin-bottom:8px; ' + (aktiv ? 'border:2px solid #2e8b57; background:#eef8f1;' : '') + '">' +
+      '<div class="row"><h3>' + (aktiv ? '&#10003; ' : '') + escapeHtml(k.name || '') + '</h3>' + (k.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>' +
+      (k.objekt ? '<div class="meta">' + escapeHtml(k.objekt) + '</div>' : '') +
+      (adr ? '<div class="meta">' + escapeHtml(adr) + '</div>' : '') + '</div>';
+  }
+  function setzeGewaehlt(k){
+    gewaehlt = k;
+    btn.disabled = !k;
+    btn.style.opacity = k ? '1' : '.45';
+  }
+  function suche(){
+    var q = tkzNorm(eing.value);
+    setzeGewaehlt(null);
+    if(!q){ box.innerHTML = ''; return; }
+    var aktive = state.kunden.filter(function(k){ return !k.geloescht && (!kAlt || k.id !== kAlt.id); });
+    var exakt = aktive.filter(function(k){ return k.kundennummer && tkzNorm(k.kundennummer) === q; });
+    var liste;
+    if(exakt.length){
+      liste = exakt;
+    } else {
+      liste = aktive.filter(function(k){
+        return tkzNorm(k.kundennummer).indexOf(q) > -1 || tkzNorm(k.name).indexOf(q) > -1 || tkzNorm(k.objekt).indexOf(q) > -1;
+      }).slice(0, 6);
+    }
+    if(!liste.length){ box.innerHTML = '<div class="meta" style="color:#c23f12;">Kein Kunde mit dieser Nummer gefunden</div>'; return; }
+    if(liste.length === 1) setzeGewaehlt(liste[0]);
+    var h = '';
+    for(var i = 0; i < liste.length; i++) h += karte(liste[i], gewaehlt && gewaehlt.id === liste[i].id);
+    if(liste.length > 1) h = '<div class="meta" style="margin-bottom:6px;">Mehrere Treffer &ndash; bitte antippen:</div>' + h;
+    box.innerHTML = h;
+    box.querySelectorAll('[data-tkzid]').forEach(function(c){
+      c.onclick = function(){
+        var id = c.getAttribute('data-tkzid');
+        var k = state.kunden.filter(function(x){ return x.id === id; })[0];
+        setzeGewaehlt(k);
+        box.innerHTML = karte(k, true);
+      };
+    });
+  }
+  eing.oninput = suche;
+  eing.onkeydown = function(ev){ if(ev.key === 'Enter' && gewaehlt){ ev.preventDefault(); btn.onclick(); } };
+  setTimeout(function(){ try{ eing.focus(); }catch(e){} }, 150);
+
+  btn.onclick = function(){
+    if(!gewaehlt) return;
+    var k = gewaehlt;
+    var platzhalterWeg = tkzPlatzhalterLeer(kAlt, t);
+    t.kundeId = k.id;
+    dbPut('termine', t, function(){
+      var fertig = function(){
+        closeModal();
+        loadAll(function(){ render(); toast('Termin mit ' + (k.name || 'Kunde') + ' verknüpft'); });
+      };
+      if(platzhalterWeg){
+        kAlt.geloescht = true;
+        kAlt.geloeschtAm = new Date().toISOString();
+        dbPut('kunden', kAlt, fertig);
+      } else {
+        fertig();
+      }
+    });
+  };
+  var bE = document.getElementById('tkzErgaenzen');
+  if(bE) bE.onclick = function(){ closeModal(); modalKundeBearbeiten(kAlt.id); };
+  var bN = document.getElementById('tkzNeu');
+  if(bN) bN.onclick = function(){ closeModal(); dashTerminKundeAnlegen(t, null); };
 }
 function dashTerminVorgabe(t){
   var ich = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
