@@ -27,6 +27,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
@@ -134,7 +135,7 @@ try {
   .empty.kompakt{text-align:left; padding:8px 2px; display:flex; align-items:center; gap:8px;}
   .empty.kompakt .ic{font-size:16px; display:inline; margin-bottom:0;}
   .modal-bg{
-    position:fixed; inset:0; background:rgba(26,20,16,.5); z-index:100;
+    position:fixed; top:0; right:0; bottom:0; left:0; inset:0; background:rgba(26,20,16,.5); z-index:100;
     display:flex; align-items:flex-end;
   }
   .modal{
@@ -235,7 +236,7 @@ try {
   .qr-hinweis{-webkit-user-select:none; user-select:none;}
   .qr-box img{-webkit-touch-callout:default;}
   .stat{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; flex:1; text-align:center; box-shadow:0 1px 4px rgba(26,20,16,.06);}
-  .stat .n{font-size:26px; font-family:Georgia,serif; color:var(--ember-dark);}
+  .stat .n{font-size:26px; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif; font-weight:700; font-variant-numeric:lining-nums tabular-nums; letter-spacing:-0.01em; color:var(--ember-dark);}
   .stat .l{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
   .statrow{display:flex; gap:10px; margin-bottom:16px;}
   .ergebnis-chart{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px;}
@@ -311,6 +312,14 @@ try {
   #printArea.kompakt .pb-tabelle th{padding:5px 6px; font-size:8px;}
   #printArea.kompakt .pb-tabelle td{padding:3px 6px;}
   #printArea.kompakt .pb-tabelle td span[style*="inline-block"]{width:11px !important; height:11px !important;}
+  /* Ausstattungsliste: Schrift beim Ausdruck eine Spur groesser */
+  #printArea.kompakt .ausstattung .pb-tabelle{font-size:11.5px;}
+  #printArea.kompakt .ausstattung .pb-tabelle th{font-size:9.5px; padding:6px 6px;}
+  #printArea.kompakt .ausstattung .pb-tabelle td{padding:4px 6px;}
+  #printArea.kompakt .ausstattung .pb-kundenbox{font-size:13px;}
+  #printArea.kompakt .ausstattung .pb-kundenbox .knr{font-size:10px;}
+  #printArea.kompakt .ausstattung .bericht-fuss{font-size:10px;}
+  #printArea.kompakt .ausstattung .ausst-fehlt{font-size:11px; padding:6px 10px !important;}
   #printArea.kompakt .bericht-fuss{margin-top:8px; padding-top:6px; font-size:8.5px;}
   @media screen and (max-width:700px){
     .modal .pb-tabelle{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; font-size:11.5px; }
@@ -432,12 +441,87 @@ function openDb(cb){
       console.warn('Offline-Speicher nicht verfügbar:', err && err.code);
     });
     syncStatus = 'verbunden';
-    cb();
+    geraeteAnmeldungPruefen(cb);
   } catch(err){
     console.error('Firebase Fehler', err);
     zeigeStartFehler('Die Cloud-Verbindung konnte nicht hergestellt werden: ' + (err && err.message ? err.message : 'Unbekannt') + '. Bitte Internetverbindung prüfen und Seite neu laden.');
     cb();
   }
+}
+
+// ---------- Geräte-Anmeldung (Firebase Auth) ----------
+// Jedes Gerät meldet sich EINMAL mit dem Firmen-Konto an und bleibt dann angemeldet.
+// Ohne diese Anmeldung lässt die Datenbank (mit den neuen Regeln) niemanden an die Daten.
+var wartetAufGeraeteLogin = false;
+function geraeteAnmeldungPruefen(cb){
+  if(!firebase.auth){ cb(); return; }
+  var erledigt = false;
+  var abmelden = firebase.auth().onAuthStateChanged(function(user){
+    if(erledigt) return;
+    if(user){
+      erledigt = true; wartetAufGeraeteLogin = false;
+      try{ abmelden(); }catch(e){}
+      cb();
+    } else {
+      wartetAufGeraeteLogin = true;
+      zeigeGeraeteLogin(function(){
+        erledigt = true; wartetAufGeraeteLogin = false;
+        try{ abmelden(); }catch(e){}
+        cb();
+      });
+    }
+  });
+}
+function geraeteLoginFehlerText(err){
+  var c = err && err.code ? err.code : '';
+  if(c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials') return 'E-Mail oder Passwort falsch.';
+  if(c === 'auth/invalid-email') return 'Die E-Mail-Adresse ist ungültig.';
+  if(c === 'auth/network-request-failed') return 'Keine Internetverbindung. Für die erste Anmeldung braucht das Gerät Internet.';
+  if(c === 'auth/too-many-requests') return 'Zu viele Versuche. Bitte ein paar Minuten warten.';
+  if(c === 'auth/operation-not-allowed') return 'Die Anmeldung mit E-Mail/Passwort ist in Firebase noch nicht eingeschaltet.';
+  return 'Anmeldung fehlgeschlagen: ' + (err && err.message ? err.message : 'Unbekannt');
+}
+function zeigeGeraeteLogin(fertig){
+  var tabsEl = document.querySelector('.tabs');
+  if(tabsEl) tabsEl.style.display = 'none';
+  var fabEl = document.querySelector('.fab');
+  if(fabEl) fabEl.style.display = 'none';
+  var m = document.getElementById('main');
+  if(!m) return;
+  var h = '<div class="card" style="max-width:380px; margin:40px auto 0; padding:22px;">';
+  h += '<div class="section-title" style="text-align:center;">Gerät freischalten</div>';
+  h += '<div class="meta" style="text-align:center; margin-bottom:12px;">Einmalig pro Gerät. Danach bleibt das Gerät angemeldet und es geht wie gewohnt mit dem PIN weiter.</div>';
+  h += '<label>Firmen-E-Mail</label><input id="glEmail" type="email" autocomplete="username" autocapitalize="off" autocorrect="off">';
+  h += '<label>Passwort</label><input id="glPass" type="password" autocomplete="current-password">';
+  h += '<div id="glFehler" style="color:#c23f12; font-size:14px; min-height:20px; margin-top:8px;"></div>';
+  h += '<button class="btn block" id="glBtn" style="margin-top:6px;">Gerät freischalten</button>';
+  h += '</div>';
+  m.innerHTML = h;
+  var btn = document.getElementById('glBtn');
+  var los = function(){
+    var em = document.getElementById('glEmail').value.trim();
+    var pw = document.getElementById('glPass').value;
+    var fe = document.getElementById('glFehler');
+    if(!em || !pw){ fe.textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
+    btn.disabled = true; btn.textContent = 'Bitte warten ...'; fe.textContent = '';
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){
+      return firebase.auth().signInWithEmailAndPassword(em, pw);
+    }).then(function(){
+      if(tabsEl) tabsEl.style.display = '';
+      m.innerHTML = '';
+      fertig();
+    }).catch(function(err){
+      btn.disabled = false; btn.textContent = 'Gerät freischalten';
+      fe.textContent = geraeteLoginFehlerText(err);
+    });
+  };
+  btn.onclick = los;
+  document.getElementById('glPass').addEventListener('keydown', function(e){ if(e.key === 'Enter') los(); });
+}
+function geraetAbmelden(){
+  customConfirm('Dieses Gerät wirklich abmelden? Danach muss es mit Firmen-E-Mail und Passwort neu freigeschaltet werden.', function(){
+    try{ firebase.auth().signOut().then(function(){ location.reload(); }); }catch(e){ location.reload(); }
+  });
 }
 
 function zeigeStartFehler(text){
@@ -715,7 +799,9 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
 
   // Safari ignoriert Querformat im Druckdialog -> bei aktivem Querformat immer ueber das PDF (jsPDF) gehen
   var querWunsch = bsvQuerformat() && !pa.querySelector('.qr-etikett');
-  if((!eigenstaendig && !querWunsch) || !window.html2canvas || !window.jspdf){
+  var pdfErzwingen = !!window.__bsvPdfErzwingen;
+  window.__bsvPdfErzwingen = false;
+  if((!eigenstaendig && !querWunsch && !pdfErzwingen) || !window.html2canvas || !window.jspdf){
     setTimeout(function(){
       // Seitengröße je nach Druckart setzen (Etikett 40x30 mm oder normale Seite) und danach wieder entfernen
       var istEtikett = !!pa.querySelector('.qr-etikett');
@@ -1064,7 +1150,7 @@ function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 30.10. 08:45</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 30.10. 13:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1111,7 +1197,7 @@ function renderInner(){
   else if(state.tab === 'kunden') m.innerHTML = renderKunden();
   else if(state.tab === 'pruefungen') m.innerHTML = renderPruefungen();
   else if(state.tab === 'berichte') m.innerHTML = renderBerichte();
-  else if(state.tab === 'statistik') m.innerHTML = renderStatistik();
+  else if(state.tab === 'statistik') m.innerHTML = darfStatistik() ? renderStatistik() : '<div class="empty">Keine Berechtigung</div>';
   else if(state.tab === 'kundeDetail') m.innerHTML = renderKundeDetail(state.activeKundeId);
   else if(state.tab === 'scan') m.innerHTML = renderScan();
   else if(state.tab === 'geraetCheck') m.innerHTML = renderGeraetCheck(state.activeGeraetId);
@@ -1134,6 +1220,28 @@ function renderInner(){
   });
   document.querySelectorAll('[data-dttb]').forEach(function(b){
     b.onclick = function(ev){ ev.stopPropagation(); dashTerminTagesbericht(b.getAttribute('data-dttb')); };
+  });
+  document.querySelectorAll('[data-dttbansehen]').forEach(function(b){
+    b.onclick = function(ev){ ev.stopPropagation(); modalTagesberichtAnsicht(b.getAttribute('data-dttbansehen')); };
+  });
+  document.querySelectorAll('[data-dtab]').forEach(function(b){
+    b.onclick = function(ev){
+      ev.stopPropagation();
+      var t = dashTerminFinden(b.getAttribute('data-dtab'));
+      if(!t) return;
+      customConfirm('Termin „' + escapeHtml(t.titel || 'Termin') + '“ ohne Tagesbericht als erledigt abhaken?', function(){
+        terminAbhaken(t, null, function(){ toast('Termin erledigt'); render(); });
+      });
+    };
+  });
+  document.querySelectorAll('[data-dtrueck]').forEach(function(b){
+    b.onclick = function(ev){
+      ev.stopPropagation();
+      var t = dashTerminFinden(b.getAttribute('data-dtrueck'));
+      if(!t) return;
+      t.erledigt = false; t.erledigtAm = null; t.erledigtVon = null;
+      dbPut('termine', t, function(){ toast('Termin wieder offen'); render(); });
+    };
   });
   if(state.tab === 'zeit') bindZeit();
   if(state.tab === 'aufgaben') bindAufgaben();
@@ -1336,6 +1444,7 @@ function renderDashboard(){
     lagerNiedrig.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); }).forEach(function(a, idx){
       html += '<div class="row" style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : '') + '"><span class="meta" style="font-size:14px; color:var(--ink);">' + escapeHtml(a.name) + '</span><span class="badge warn">' + a.bestand + ' ' + escapeHtml(a.einheit || 'Stk') + ' (Min. ' + a.mindestbestand + ')</span></div>';
     });
+    html += '<button type="button" class="btn block secondary" id="lagerBestellBtn" style="margin-top:10px;">Bestellliste drucken / teilen</button>';
     html += '</div>';
   }
 
@@ -1424,8 +1533,9 @@ function renderDashboard(){
       var kT = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
       var tagText = e.offset === 0 ? 'Heute' : (e.offset === 1 ? 'Morgen' : fmtDate(e.key + 'T12:00:00').substring(0, 6));
       var wer = (t.personen || []).indexOf('alle') >= 0 ? 'Alle' : (t.personen || []).map(function(n){ return zustaendigKurz(n); }).join(', ');
-      html += '<div class="card" data-dashtermin="' + e.key + '" style="cursor:pointer; border-left:6px solid ' + (e.offset === 0 ? '#d9531e' : '#c9bfae') + ';">';
-      html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3><span class="badge ' + (e.offset === 0 ? 'soon' : 'blau') + '">' + tagText + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span></div>';
+      html += '<div class="card" data-dashtermin="' + e.key + '" style="cursor:pointer; border-left:6px solid ' + (t.erledigt ? '#2f7a4f' : (e.offset === 0 ? '#d9531e' : '#c9bfae')) + ';' + (t.erledigt ? ' opacity:.8;' : '') + '">';
+      html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : '<span class="badge ' + (e.offset === 0 ? 'soon' : 'blau') + '">' + tagText + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span>') + '</div>';
+      if(t.erledigt) html += '<div class="meta" style="color:#2f7a4f;">erledigt von ' + escapeHtml(zustaendigKurz(t.erledigtVon || '')) + ' am ' + fmtDate(t.erledigtAm) + '</div>';
       if(kT) html += '<div class="meta">' + escapeHtml(kT.name) + '</div>';
       if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
       html += '<div class="meta">' + escapeHtml(wer) + '</div>';
@@ -1434,8 +1544,10 @@ function renderDashboard(){
       if(istVollsicht()) html += '<button type="button" class="btn secondary" data-dtbearb="' + t.id + '" style="' + tbStil + '">Bearbeiten</button>';
       var kLabel = !kT ? 'Kunde zuordnen' : (dashKundeUnvollstaendig(kT) ? 'Kunde ergänzen' : 'Kunde öffnen');
       if(kT || istVollsicht()) html += '<button type="button" class="btn secondary" data-dtkunde="' + t.id + '" style="' + tbStil + '">' + kLabel + '</button>';
-      html += '<button type="button" class="btn" data-dttb="' + t.id + '" style="' + tbStil + '">Tagesbericht</button>';
+      if(t.erledigt && t.tagesberichtId) html += '<button type="button" class="btn secondary" data-dttbansehen="' + t.tagesberichtId + '" style="' + tbStil + '">Bericht ansehen</button>';
+      else if(!t.erledigt) html += '<button type="button" class="btn" data-dttb="' + t.id + '" style="' + tbStil + ' background:#2f7a4f;">&#10003; Tagesbericht</button>';
       html += '</div>';
+      html += t.erledigt ? '<button type="button" class="btn small secondary block" data-dtrueck="' + t.id + '" style="margin-top:8px;">Wieder öffnen</button>' : '<button type="button" class="btn small secondary block" data-dtab="' + t.id + '" style="margin-top:8px;">&#10003; Ohne Bericht abhaken</button>';
       html += '</div>';
     });
   }
@@ -1787,6 +1899,20 @@ function darfLagerbuch(){
   return !!(m && m.lagerbuch);
 }
 
+// Stundenlisten aller Mitarbeiter ansehen und drucken (ohne Korrigieren): Chef und stundenSehen: true
+function darfStundenSehen(){
+  if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !!(m && m.stundenSehen);
+}
+
+// Statistik ausblenden fuer Mitarbeiter mit keineStatistik: true
+function darfStatistik(){
+  if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !(m && m.keineStatistik);
+}
+
 function lagerAktuellerBenutzer(){
   return (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
 }
@@ -1896,7 +2022,7 @@ function modalLagerArtikelAnpassen(artikelId){
   var einheit = escapeHtml(a.einheit || 'Stk');
   var html = '';
   html += '<div class="modal-head"><h3>' + escapeHtml(a.name) + '</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div style="text-align:center; margin:10px 0;"><span style="font-size:40px; font-family:Georgia,serif; color:var(--ember-dark);">' + a.bestand + '</span><div class="meta">' + einheit + ' aktuell im Lager</div></div>';
+  html += '<div style="text-align:center; margin:10px 0;"><span style="font-size:40px; font-weight:700; font-variant-numeric:lining-nums; color:var(--ember-dark);">' + a.bestand + '</span><div class="meta">' + einheit + ' aktuell im Lager</div></div>';
   html += '<div class="meta" style="text-align:center;">Gebucht von: <strong>' + escapeHtml(lagerAktuellerBenutzer()) + '</strong></div>';
 
   html += '<label style="margin-top:14px;">Menge</label>';
@@ -3129,7 +3255,8 @@ var MITARBEITER_LISTE = [
   { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true, vollzugriff: true },
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
-  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true }
+  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true },
+  { name: 'Harris Sandra', pin: '8280', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
 var ZEIT_ALTE_NAMEN = {
@@ -3843,8 +3970,13 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
     gruppen[kat].push(g);
   });
 
+  var fehlListe = [];
+  var ausstLeer = function(v){
+    var t = String(v === null || v === undefined ? '' : v).trim().toLowerCase();
+    return t === '' || t === '-' || t === '?' || t.indexOf('nachtragen') === 0;
+  };
   var html = '';
-  html += '<div class="bericht-brief">';
+  html += '<div class="bericht-brief ausstattung">';
   html += '<div class="pb-kopfzeile">';
   html += '<div class="pb-titel"><h1>Ausstattungsliste</h1><div class="sub">' + (nurKategorie ? escapeHtml(nurKategorie) : 'Übersicht Brandschutzeinrichtungen im Gebäude') + '</div></div>';
   html += '<img src="' + LOGO_DATA + '" class="pb-logo">';
@@ -3903,7 +4035,28 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
         html += '<tr' + zeilenStil + '><td class="pb-pos">' + geraeteNummerWert(g) + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.standort||'-') + '</td>' + (istBegehung ? '' : ('<td>' + escapeHtml(g.seriennummer||'-') + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
       });
       html += '</tbody></table>';
+      // fehlende Angaben in dieser Kategorie sammeln (Liste unten)
+      if(!istPZ && !istBegehung){
+        gruppen[kat].forEach(function(g){
+          var fehlt = [];
+          if(ausstLeer(g.standort)) fehlt.push('Standort');
+          if(ausstLeer(g.seriennummer)) fehlt.push('Seriennummer');
+          if(ausstLeer(g.baujahr)) fehlt.push('Baujahr');
+          if(fehlt.length) fehlListe.push({ kat: kat, nr: geraeteNummerWert(g), typ: g.typ || '', fehlt: fehlt });
+        });
+      }
     });
+  }
+
+  if(fehlListe.length){
+    html += '<div class="ausst-fehlt" style="margin-top:14px; border:1.5px solid #c23f12; border-radius:6px; padding:8px 12px; page-break-inside:avoid; break-inside:avoid;">';
+    html += '<div style="font-weight:700; color:#c23f12; margin-bottom:4px;">Fehlende Angaben &ndash; bitte nachtragen (' + fehlListe.length + ' Ger&auml;t' + (fehlListe.length === 1 ? '' : 'e') + ')</div>';
+    html += '<div style="margin-bottom:6px;">Gibt es am Ger&auml;t keine Angabe (z.B. keine Seriennummer), bitte &bdquo;keine&ldquo; eintragen.</div>';
+    var mehrKat = fehlListe.some(function(f){ return f.kat !== fehlListe[0].kat; });
+    fehlListe.forEach(function(f){
+      html += '<div style="padding:2px 0; border-top:1px solid #eee2d3;">' + (mehrKat ? escapeHtml(f.kat) + ' ' : '') + 'Nr. ' + f.nr + (f.typ ? ' (' + escapeHtml(f.typ) + ')' : '') + ': <b>' + f.fehlt.join(', ') + '</b></div>';
+    });
+    html += '</div>';
   }
 
   html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
@@ -5280,7 +5433,7 @@ function modalNeuerKunde(opts){
     if(window.__kundeSpeichertGerade){ return; }
     window.__kundeSpeichertGerade = true;
     setTimeout(function(){ window.__kundeSpeichertGerade = false; }, 6000);
-    dbPut('kunden', k, function(){
+    var nachKundeGespeichert = function(){
       loadAll(function(){
         window.__kundeSpeichertGerade = false;
         if(opts.nachSpeichern){ closeModal(); opts.nachSpeichern(k); return; }
@@ -5288,7 +5441,8 @@ function modalNeuerKunde(opts){
         state.tab = 'kundeDetail';
         render(); closeModal(); toast('Kunde gespeichert');
       });
-    });
+    };
+    dbPut('kunden', k, nachKundeGespeichert);
   };
 }
 
@@ -7728,7 +7882,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 30.10. 08:45</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 30.10. 13:30</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -7736,6 +7890,8 @@ function renderZeit(){
     html += '<button class="btn small" id="zeitNachtragBtn">Tag nachtragen</button>';
     html += '<button class="btn small" id="zeitUrlaubBtn" style="background:#2a6fb0;">Urlaub eintragen</button>';
     html += '</div>';
+  } else if(darfStundenSehen()){
+    html += '<div style="margin-bottom:12px;"><button class="btn small secondary" id="zeitMonatBtn">Monatslisten (alle Mitarbeiter)</button></div>';
   } else {
     html += '<div style="margin-bottom:12px;"><button class="btn small secondary" id="zeitMonatBtn">Meine Monatsliste</button></div>';
   }
@@ -7881,7 +8037,7 @@ function modalZeitMonat(name, jahr, monat){
   var daten = zeitMonatDaten(name, jahr, monat);
   var html = '';
   html += '<div class="modal-head"><h3>Zeitliste</h3><button class="close" id="mClose">&times;</button></div>';
-  if(istChef){
+  if(istChef || darfStundenSehen()){
     html += '<select id="zmName" style="margin-bottom:8px;">';
     zeitMitarbeiterNamen().forEach(function(n){
       html += '<option value="' + escapeHtml(n) + '"' + (n === name ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
@@ -8789,7 +8945,7 @@ function kalHeuteKey(){
   var d = new Date();
   return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
 }
-var KAL_FARBEN = { 'Janiba Wolfgang': '#1d5fa8', 'Janiba Wolfgang sen.': '#2f7a4f', 'Prominzer Tobias': '#d9731a', 'Mayerhofer Tobias': '#7b3fa0', 'Holakovsky Manuela': '#c2185b' };
+var KAL_FARBEN = { 'Janiba Wolfgang': '#1d5fa8', 'Janiba Wolfgang sen.': '#2f7a4f', 'Prominzer Tobias': '#d9731a', 'Mayerhofer Tobias': '#7b3fa0', 'Holakovsky Manuela': '#c2185b', 'Harris Sandra': '#00897b' };
 function kalFarbe(name){
   if(name === 'alle') return '#555555';
   if(!name) return '#9a9a9a';
@@ -8896,7 +9052,7 @@ function renderKalender(){
       var pers = (t.personen || []).indexOf('alle') >= 0 ? 'Alle Mitarbeiter' : (t.personen || []).map(zustaendigKurz).join(', ');
       var tf = kalFarbe(kalEintragFarben(e)[0]);
       html += '<div class="card"' + (voll ? ' data-kaltermin="' + t.id + '" style="cursor:pointer; border-left:6px solid ' + tf + ';"' : ' style="border-left:6px solid ' + tf + ';"') + '>';
-      html += '<div class="row"><h3>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '') + '</div>';
+      html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '')) + '</div>';
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
       html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
       if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
@@ -8913,6 +9069,38 @@ function renderKalender(){
   });
   if(voll) html += '<button type="button" class="btn block secondary" id="kalNeuTag" style="margin-top:10px;">+ Neuer Termin an diesem Tag</button>';
   return html;
+}
+
+var KAL_WDH = [
+  { key:'', label:'Nicht wiederholen' },
+  { key:'w1', label:'Jede Woche' },
+  { key:'w2', label:'Alle 2 Wochen' },
+  { key:'m1', label:'Jeden Monat' },
+  { key:'m3', label:'Vierteljährlich (alle 3 Monate)' },
+  { key:'m6', label:'Halbjährlich' },
+  { key:'m12', label:'Jährlich' }
+];
+function kalWdhLabel(k){ var w = KAL_WDH.filter(function(x){ return x.key === k; })[0]; return w ? w.label : 'Serie'; }
+// liefert die Folgetermine (ohne den ersten) bis einschliesslich bis-Datum, max. 104
+function kalSerieDaten(start, art, bis){
+  var p = start.split('-');
+  var j = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, tag = parseInt(p[2], 10);
+  var res = [];
+  var key = function(d){ return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+  for(var n = 1; n <= 104; n++){
+    var d;
+    if(art.charAt(0) === 'w'){
+      d = new Date(j, m, tag + n * 7 * parseInt(art.substring(1), 10), 12);
+    } else {
+      var schritt = parseInt(art.substring(1), 10) * n;
+      var letzter = new Date(j, m + schritt + 1, 0, 12).getDate();
+      d = new Date(j, m + schritt, Math.min(tag, letzter), 12);
+    }
+    var k = key(d);
+    if(k > bis) break;
+    res.push(k);
+  }
+  return res;
 }
 
 // ---- Termin-Karten auf der Übersicht: Bearbeiten / Kunde / Tagesbericht ----
@@ -9054,7 +9242,7 @@ function dashTerminVorgabe(t){
   var ich = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
   var pl = t.personen || [];
   var wer = (pl.length && pl.indexOf('alle') < 0) ? (pl.indexOf(ich) >= 0 ? ich : pl[0]) : ich;
-  return { datum: String(t.datum || kalHeuteKey()).substring(0, 10), techniker: wer, von: t.zeit || '' };
+  return { datum: String(t.datum || kalHeuteKey()).substring(0, 10), techniker: wer, von: t.zeit || '', terminId: t.id };
 }
 function dashTerminTagesbericht(id){
   var t = dashTerminFinden(id);
@@ -9090,10 +9278,22 @@ function modalKalenderTermin(terminId, datumVorgabe){
     html += '<label style="' + zeilenStil + '"><input type="checkbox" data-ktwer="' + escapeHtml(n) + '" style="' + cbStil + '"' + (emp.indexOf(n) > -1 ? ' checked' : '') + '> ' + escapeHtml(n) + '</label>';
   });
   html += '</div>';
+  if(!t){
+    html += '<label>Wiederholen</label><select id="ktWdh">';
+    KAL_WDH.forEach(function(w){ html += '<option value="' + w.key + '">' + w.label + '</option>'; });
+    html += '</select>';
+    var bisVorg = new Date(); bisVorg.setFullYear(bisVorg.getFullYear() + 1);
+    html += '<div id="ktBisBox" style="display:none;"><label>Wiederholen bis</label><input id="ktBis" type="date" value="' + bisVorg.getFullYear() + '-' + ('0' + (bisVorg.getMonth() + 1)).slice(-2) + '-' + ('0' + bisVorg.getDate()).slice(-2) + '"></div>';
+  } else if(t.serieId){
+    html += '<div class="meta" style="margin-bottom:8px;">&#8635; Teil einer Terminserie (' + escapeHtml(kalWdhLabel(t.serieArt)) + ')</div>';
+  }
   html += '<button class="btn block" id="ktSpeichern">Speichern</button>';
   if(t) html += '<button class="btn block secondary" id="ktLoeschen" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Termin löschen</button>';
+  if(t && t.serieId) html += '<button class="btn block secondary" id="ktSerieLoeschen" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">Diesen und alle folgenden der Serie löschen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  var wdhSel = document.getElementById('ktWdh');
+  if(wdhSel) wdhSel.onchange = function(){ document.getElementById('ktBisBox').style.display = wdhSel.value ? '' : 'none'; };
   document.querySelectorAll('[data-ktwer]').forEach(function(c){
     c.onchange = function(){
       var istAlle = c.getAttribute('data-ktwer') === 'alle';
@@ -9129,8 +9329,53 @@ function modalKalenderTermin(terminId, datumVorgabe){
     if(!state.termine) state.termine = [];
     if(!state.termine.some(function(x){ return x.id === obj.id; })) state.termine.push(obj);
     state.kalTag = datum; state.kalMonat = datum.substring(0, 7);
-    var speichereTermin = function(){ dbPut('termine', obj, function(){ closeModal(); toast(neuerKunde ? 'Termin gespeichert, neuer Kunde angelegt' : 'Termin gespeichert'); render(); }); };
+    var serie = [];
+    var wdhArt = wdhSel ? wdhSel.value : '';
+    if(!t && wdhArt){
+      var bis = document.getElementById('ktBis').value;
+      if(!bis || bis <= datum){ toast('Bitte ein Enddatum nach dem ersten Termin wählen'); return; }
+      obj.serieId = uid(); obj.serieArt = wdhArt;
+      var daten = kalSerieDaten(datum, wdhArt, bis);
+      daten.forEach(function(d){
+        var kopie = { id: uid(), erstelltAm: obj.erstelltAm, erstelltVon: obj.erstelltVon, titel: obj.titel, datum: d, zeit: obj.zeit, notiz: obj.notiz, personen: obj.personen.slice(), kundeId: obj.kundeId, serieId: obj.serieId, serieArt: wdhArt };
+        serie.push(kopie);
+        state.termine.push(kopie);
+      });
+    }
+    var speichereTermin = function(){
+      dbPut('termine', obj, function(){
+        var i = 0;
+        var weiter = function(){
+          if(i >= serie.length){
+            closeModal();
+            toast((serie.length ? (serie.length + 1) + ' Termine gespeichert' : 'Termin gespeichert') + (neuerKunde ? ', neuer Kunde angelegt' : ''));
+            render();
+            return;
+          }
+          dbPut('termine', serie[i++], weiter);
+        };
+        weiter();
+      });
+    };
     if(neuerKunde){ dbPut('kunden', neuerKunde, speichereTermin); } else { speichereTermin(); }
+  };
+  var serDel = document.getElementById('ktSerieLoeschen');
+  if(serDel) serDel.onclick = function(){
+    var ab = String(t.datum).substring(0, 10);
+    var weg = (state.termine || []).filter(function(x){ return x.serieId === t.serieId && String(x.datum).substring(0, 10) >= ab && !x.erledigt; });
+    customConfirm(weg.length + ' Termine dieser Serie (ab ' + fmtDate(ab) + ', erledigte bleiben) löschen?', function(){
+      var i = 0;
+      var weiter = function(){
+        if(i >= weg.length){
+          var ids = {}; weg.forEach(function(x){ ids[x.id] = true; });
+          state.termine = (state.termine || []).filter(function(x){ return !ids[x.id]; });
+          closeModal(); toast(weg.length + ' Termine gelöscht'); render();
+          return;
+        }
+        dbDelete('termine', weg[i++].id, weiter);
+      };
+      weiter();
+    });
   };
   var del = document.getElementById('ktLoeschen');
   if(del) del.onclick = function(){
@@ -9201,14 +9446,17 @@ function modalMehrMenu(){
     { tab:'zeit', label:'Zeiterfassung', svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' },
     { tab:'lager', label:'Lager', svg:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' }
   ];
+  if(!darfStatistik()) eintraege = eintraege.filter(function(e){ return e.tab !== 'statistik'; });
   eintraege.forEach(function(e){
     html += '<button type="button" class="btn block secondary" style="justify-content:flex-start; gap:10px; margin-top:8px;" data-mehrtab="' + e.tab + '">';
     html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px; height:19px; flex-shrink:0;">' + e.svg + '</svg>';
     html += e.label + '</button>';
   });
   html += '<label style="display:flex; align-items:center; gap:10px; margin-top:16px; font-size:15px;"><input type="checkbox" id="mehrQuer" style="width:22px; height:22px;"' + (bsvQuerformat() ? ' checked' : '') + '> Berichte im Querformat drucken</label>';
+  html += '<button type="button" class="btn block secondary" id="mehrGeraetAbmelden" style="margin-top:16px; color:#c23f12;">Gerät abmelden (Firmen-Konto)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mehrGeraetAbmelden').onclick = function(){ closeModal(); geraetAbmelden(); };
   document.getElementById('mehrQuer').onchange = function(){ bsvQuerformatSetzen(this.checked); toast(this.checked ? 'Querformat ein' : 'Hochformat'); };
   document.querySelectorAll('[data-mehrtab]').forEach(function(b){
     b.onclick = function(){
@@ -10670,6 +10918,17 @@ function modalTagesberichtListe(kundeId){
   });
 }
 
+function terminAbhaken(t, tagesberichtId, cb){
+  t.erledigt = true;
+  t.erledigtAm = new Date().toISOString();
+  t.erledigtVon = (state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || 'Mitarbeiter'));
+  if(tagesberichtId) t.tagesberichtId = tagesberichtId;
+  dbPut('termine', t, function(){ if(cb) cb(); });
+}
+function terminKundeUnvollstaendig(k){
+  return !k || !String(k.adresse || '').trim();
+}
+
 function tagesberichtVorgabe(kundeId){
   var heuteKey = kalHeuteKey();
   var ich = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
@@ -10700,6 +10959,7 @@ function modalTagesberichtNeu(kundeId, vorgabe){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
   var tbVg = vorgabe || tagesberichtVorgabe(kundeId);
+  var tbTermin = (vorgabe && vorgabe.terminId) ? (state.termine || []).filter(function(x){ return x.id === vorgabe.terminId; })[0] : null;
   var heute = tbVg.datum;
 
   var html = '';
@@ -10768,6 +11028,14 @@ function modalTagesberichtNeu(kundeId, vorgabe){
     };
     dbPut('tagesberichte', tb, function(){
       state.tagesberichte.push(tb);
+      if(tbTermin){
+        terminAbhaken(tbTermin, tb.id, function(){
+          toast('Tagesbericht gespeichert, Termin erledigt');
+          render();
+          modalTagesberichtAnsicht(tb.id);
+        });
+        return;
+      }
       toast('Tagesbericht gespeichert');
       modalTagesberichtAnsicht(tb.id);
     });
@@ -10899,11 +11167,31 @@ function modalTagesberichtAnsicht(tbId){
   html += '<div class="modal-head no-print"><h3>Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
   html += buildTagesberichtDruckHtml(tb, k, qrIdAnsicht);
   html += '<div class="no-print" style="margin-top:16px;">';
-  html += '<button class="btn block" id="druckBtnTb">Drucken / Als PDF teilen</button>';
+  html += '<button class="btn block" id="sendenBtnTb" style="background:#2f7a4f;">&#9993; An Kunden senden (PDF)</button>';
+  if(k && k.email) html += '<div class="meta" style="text-align:center; margin-top:4px;">E-Mail des Kunden: ' + escapeHtml(k.email) + '</div>';
+  html += '<button class="btn block secondary" id="druckBtnTb" style="margin-top:10px;">Drucken / Als PDF teilen</button>';
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   tbQrEinfuegen(qrIdAnsicht, k);
+  document.getElementById('sendenBtnTb').onclick = function(){
+    var btn = document.getElementById('sendenBtnTb');
+    btn.disabled = true;
+    btn.textContent = 'PDF wird erstellt ...';
+    var qrIdDruck = 'tbqr_druck_' + tb.id;
+    var pa = document.getElementById('printArea');
+    pa.innerHTML = buildTagesberichtDruckHtml(tb, k, qrIdDruck);
+    tbQrEinfuegen(qrIdDruck, k);
+    var dn = 'Tagesbericht_' + String(k ? k.name : 'Kunde').replace(/[^A-Za-z0-9ÄÖÜäöüß]+/g, '_').substring(0, 40) + '_' + String(tb.datum || '').substring(0, 10) + '.pdf';
+    if(k && k.email){ try{ navigator.clipboard.writeText(k.email); toast('E-Mail-Adresse kopiert'); }catch(eC){} }
+    setTimeout(function(){
+      window.__bsvPdfErzwingen = true;
+      bsvDruckenOderTeilen(null, dn, function(){
+        btn.disabled = false;
+        btn.innerHTML = '&#9993; An Kunden senden (PDF)';
+      });
+    }, 300);
+  };
   document.getElementById('druckBtnTb').onclick = function(){
     var btn = document.getElementById('druckBtnTb');
     btn.disabled = true;
@@ -11261,8 +11549,11 @@ function statistikKundenHtml(){
   if(offeneListe.length){
     h += '<div class="section-title" style="margin-top:6px; color:#c23f12;">Offene Rechnungen (' + offeneListe.length + ')</div>';
     offeneListe.forEach(function(e){
-      var tage = Math.floor((new Date() - new Date(String(e.r.datum).substring(0, 10) + 'T12:00:00')) / 86400000);
-      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">seit ' + tage + ' Tagen offen</b></div></div>';
+      var rdT = String(e.r.datum).substring(0, 10).split('-');
+      var heuteT = new Date(); heuteT.setHours(12, 0, 0, 0);
+      var tage = Math.round((heuteT - new Date(parseInt(rdT[0], 10), parseInt(rdT[1], 10) - 1, parseInt(rdT[2], 10), 12, 0, 0)) / 86400000);
+      var tageText = tage <= 0 ? 'seit heute offen' : ('seit ' + tage + (tage === 1 ? ' Tag' : ' Tagen') + ' offen');
+      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div>' + (tage >= 30 ? '<button type="button" class="btn small secondary" data-rgmahnung="' + escapeHtml(e.k.id) + '|' + escapeHtml(e.r.id) + '" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">&#9993; Zahlungserinnerung</button>' : '') + '</div>';
     });
     h += '<div class="section-title" style="margin-top:14px;">Rangliste nach Umsatz</div>';
   }
@@ -11351,9 +11642,73 @@ function bindVermerke(){
   });
 }
 
+function lagerBestelllisteHtml(){
+  var liste = state.lagerartikel.filter(function(a){ return (a.mindestbestand != null) && (a.bestand < a.mindestbestand); });
+  liste.sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); });
+  var html = '<div class="bericht-brief">';
+  html += '<div class="pb-kopfzeile"><div class="pb-titel"><h1>Bestellliste</h1><div class="sub">Lagerartikel unter Mindestbestand</div></div><img src="' + LOGO_DATA + '" class="pb-logo"></div>';
+  html += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+  html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Artikel</th><th>Art.-Nr.</th><th>Bestand</th><th>Mindestbestand</th><th>Bestellen</th><th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+  liste.forEach(function(a, i){
+    var eh = escapeHtml(a.einheit || 'Stk');
+    html += '<tr><td class="pb-pos">' + (i + 1) + '</td><td>' + escapeHtml(a.name || '') + '</td><td>' + escapeHtml(a.externeId || '-') + '</td><td>' + a.bestand + ' ' + eh + '</td><td>' + a.mindestbestand + ' ' + eh + '</td><td><b>' + Math.max(1, a.mindestbestand - a.bestand) + ' ' + eh + '</b></td><td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
+  });
+  html += '</tbody></table>';
+  html += '<div class="meta" style="margin-top:6px;">&bdquo;Bestellen&ldquo; = Menge bis zum Mindestbestand. Bei Bedarf mehr bestellen.</div>';
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
+  html += '</div>';
+  return html;
+}
+function modalZahlungserinnerung(kundeId, rechnungId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k) return;
+  var r = (k.rechnungen || []).filter(function(x){ return x.id === rechnungId; })[0];
+  if(!r) return;
+  var anrede = 'Sehr geehrte Damen und Herren,';
+  var text = anrede + '\n\n'
+    + 'bei der Durchsicht unserer Unterlagen haben wir festgestellt, dass folgende Rechnung noch offen ist:\n\n'
+    + 'Rechnung vom ' + fmtDate(r.datum) + (r.notiz ? ' (' + r.notiz + ')' : '') + ' über ' + eurText(r.betrag).replace(/&nbsp;/g, ' ') + '\n\n'
+    + 'Sicher handelt es sich um ein Versehen. Wir bitten Sie, den offenen Betrag innerhalb von 14 Tagen zu überweisen. Sollten Sie die Zahlung bereits veranlasst haben, betrachten Sie dieses Schreiben bitte als gegenstandslos.\n\n'
+    + 'Mit freundlichen Grüßen\n\n'
+    + 'Wolfgang Janiba Brandschutztechnik GmbH\nKetzergasse 299, 2380 Perchtoldsdorf\nTel 0676/305 83 98 · info@loeschtechnik.at';
+  var betreff = 'Zahlungserinnerung – Rechnung vom ' + fmtDate(r.datum);
+  var html = '<div class="modal-head"><h3>Zahlungserinnerung</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + escapeHtml(k.name) + (k.email ? ' &middot; ' + escapeHtml(k.email) : ' &middot; <span style="color:#c23f12;">keine E-Mail beim Kunden hinterlegt</span>') + '</div>';
+  html += '<label>Betreff</label><input id="zeBetreff" type="text" value="' + escapeHtml(betreff) + '">';
+  html += '<label>Text (kannst du anpassen)</label><textarea id="zeText" rows="14" style="width:100%; font-size:14px;">' + escapeHtml(text) + '</textarea>';
+  html += '<button class="btn block" id="zeMail" style="margin-top:10px;">In Mail-App öffnen</button>';
+  html += '<button class="btn block secondary" id="zeKopie" style="margin-top:8px;">Text kopieren (für WhatsApp o.ä.)</button>';
+  html += '<button class="btn block secondary" id="zeVermerk" style="margin-top:8px;">Als &bdquo;Erinnerung verschickt&ldquo; beim Kunden vermerken</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('zeMail').onclick = function(){
+    var b = document.getElementById('zeBetreff').value, t = document.getElementById('zeText').value;
+    location.href = 'mailto:' + encodeURIComponent(k.email || '') + '?subject=' + encodeURIComponent(b) + '&body=' + encodeURIComponent(t);
+  };
+  document.getElementById('zeKopie').onclick = function(){
+    var t = document.getElementById('zeText').value;
+    try{ navigator.clipboard.writeText(t).then(function(){ toast('Text kopiert'); }, function(){ toast('Kopieren nicht möglich'); }); }catch(e){ toast('Kopieren nicht möglich'); }
+  };
+  document.getElementById('zeVermerk').onclick = function(){
+    if(!k.vermerke) k.vermerke = [];
+    k.vermerke.push({ id: uid(), text: 'Zahlungserinnerung verschickt (Rechnung vom ' + fmtDate(r.datum) + ', ' + eurText(r.betrag).replace(/&nbsp;/g, ' ') + ')', erstelltAm: new Date().toISOString(), erstelltVon: lagerAktuellerBenutzer(), erledigt: true, erledigtAm: new Date().toISOString() });
+    r.erinnertAm = new Date().toISOString();
+    dbPut('kunden', k, function(){ closeModal(); toast('Beim Kunden vermerkt'); render(); });
+  };
+}
+
 function bindDynamic(){
   if(state.tab === 'kundeDetail'){ bindVermerke(); bindUmsatz(); }
   bindKundenCards(document);
+  var lbb = document.getElementById('lagerBestellBtn');
+  if(lbb) lbb.onclick = function(){ bsvDruckenOderTeilen(lagerBestelllisteHtml(), 'Bestellliste_' + kalHeuteKey() + '.pdf'); };
+  document.querySelectorAll('[data-rgmahnung]').forEach(function(b){
+    b.onclick = function(ev){
+      ev.stopPropagation();
+      var teile = b.getAttribute('data-rgmahnung').split('|');
+      modalZahlungserinnerung(teile[0], teile[1]);
+    };
+  });
 
   document.querySelectorAll('[data-zuweisen-geraet]').forEach(function(b){
     b.onclick = function(){
@@ -12092,7 +12447,7 @@ try {
   zeigeStartFehler('Fehler beim Öffnen der Datenbank: ' + (err && err.message ? err.message : err) + '. Bitte Seite neu laden.');
 }
 setTimeout(function(){
-  if(!appGestartet){
+  if(!appGestartet && !wartetAufGeraeteLogin){
     zeigeStartFehler('Die App braucht ungewöhnlich lange zum Laden. Bitte alle anderen offenen Tabs/Instanzen dieser App schließen und danach diese Seite neu laden.');
   }
 }, 6000);
