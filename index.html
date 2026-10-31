@@ -3553,6 +3553,11 @@ function renderKundeDetail(kundeId){
       var katKey = (g.kategorie || 'Feuerlöscher').trim();
       katZaehler1[katKey] = (katZaehler1[katKey] || 0) + 1;
       var katNr = g.nr || katZaehler1[katKey];
+      if(istFuellKategorie(katKey) && !g.ausgeschieden){
+        if(katZaehler1[katKey] === 1) html += pzKopfHtml(katKey, geraeteSortiert.filter(function(x){ return (x.kategorie || 'Feuerlöscher').trim() === katKey && !x.ausgeschieden; }));
+        html += pzKarteHtml(g, katNr);
+        return;
+      }
       var st = istFuellKategorie(katKey) ? statusFuerAbfuellAlter(g.abfuelldatum, g.leer) : statusForDate(g.naechstePruefung);
       var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
@@ -3652,6 +3657,91 @@ function renderKundeDetail(kundeId){
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
   return html;
+}
+
+// ---------- Perchtl Zisch / CO2: kompakte Flaschen-Karte beim Kunden ----------
+function pzZustand(g){
+  var neuBefuellt = !!(g.abfuelldatum && g.letzterAnschluss && String(g.abfuelldatum).substring(0, 10) > String(g.letzterAnschluss).substring(0, 10));
+  if(g.leer) return { key: 'leer', label: 'Leer', farbe: '#c23f12', hell: '#fbe9e3' };
+  if(istLagerStandort(g.standort)) return { key: 'voll', label: g.abfuelldatum ? 'Voll &middot; im Lager' : 'Im Lager', farbe: '#1d5fa8', hell: '#e6eef8' };
+  if(neuBefuellt || (!g.letzterAnschluss && g.abfuelldatum)) return { key: 'voll', label: 'Voll &middot; nicht angeschlossen', farbe: '#1d5fa8', hell: '#e6eef8' };
+  if(g.letzterAnschluss || g.letztePruefung) return { key: 'angeschlossen', label: 'Angeschlossen', farbe: '#1e8449', hell: '#e5f4ea' };
+  return { key: 'voll', label: 'Noch nicht erfasst', farbe: '#8a8070', hell: '#f2efe9' };
+}
+function pzTageText(von){
+  if(!von) return '';
+  var a = new Date(von); if(isNaN(a.getTime())) return '';
+  var h = new Date(); h.setHours(0,0,0,0); a.setHours(0,0,0,0);
+  var t = Math.round((h - a) / 86400000);
+  if(t <= 0) return 'heute';
+  if(t === 1) return 'gestern';
+  return 'vor ' + t + ' Tagen';
+}
+function pzKopfHtml(kat, liste){
+  var anz = { angeschlossen: 0, voll: 0, leer: 0 };
+  liste.forEach(function(g){ anz[pzZustand(g).key]++; });
+  var chip = function(n, txt, farbe, hell){ return '<span style="display:inline-block; padding:4px 10px; border-radius:999px; background:' + hell + '; color:' + farbe + '; font-weight:700; font-size:13px; margin:0 6px 6px 0;">' + n + ' ' + txt + '</span>'; };
+  var h = '<div style="padding:10px 0 4px 0; border-bottom:1px solid var(--line, #e6dfd3);">';
+  h += '<div style="font-weight:800; font-size:15px; margin-bottom:6px;">' + escapeHtml(kat) + ' &middot; ' + liste.length + ' Flasche' + (liste.length === 1 ? '' : 'n') + '</div>';
+  h += chip(anz.angeschlossen, 'angeschlossen', '#1e8449', '#e5f4ea') + chip(anz.voll, 'voll', '#1d5fa8', '#e6eef8') + chip(anz.leer, 'leer', '#c23f12', '#fbe9e3');
+  h += '</div>';
+  return h;
+}
+function pzKarteHtml(g, nr){
+  var z = pzZustand(g);
+  var heute = new Date();
+  var heuteIso = heute.getFullYear() + '-' + ('0' + (heute.getMonth() + 1)).slice(-2) + '-' + ('0' + heute.getDate()).slice(-2);
+  var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte[g.id]) || heuteIso;
+  var anschluss = g.letzterAnschluss || g.letztePruefung || '';
+  var abfStatus = statusFuerAbfuellAlter(g.abfuelldatum, false);
+  var abfFarbe = abfStatus.cls === 'warn' ? '#c23f12' : (abfStatus.cls === 'soon' ? '#b7791f' : '#1e8449');
+  var h = '';
+  h += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch; border-left:5px solid ' + z.farbe + '; padding-left:10px; margin:10px 0;">';
+  // Kopf: Nummer + Typ | Zustand
+  h += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
+  h += '<div style="min-width:0;"><div style="font-weight:800; font-size:16px;">Nr. ' + nr + ' &middot; ' + escapeHtml(g.typ || 'Flasche') + '</div>';
+  h += '<div class="meta">' + escapeHtml(g.standort || '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div>';
+  if(g.notiz) h += '<div class="meta">Notiz: ' + escapeHtml(g.notiz) + '</div>';
+  h += '</div>';
+  h += '<span style="flex-shrink:0; padding:5px 10px; border-radius:999px; background:' + z.farbe + '; color:#fff; font-weight:700; font-size:12px; white-space:nowrap;">' + z.label + '</span>';
+  h += '</div>';
+  // Zwei Info-Kacheln
+  var kachel = function(titel, wert, unter, farbeUnter){
+    return '<div style="flex:1 1 0; min-width:0; background:#f6f2ea; border-radius:10px; padding:7px 9px;"><div style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);">' + titel + '</div><div style="font-weight:700; font-size:15px;">' + (wert || '&ndash;') + '</div>' + (unter ? '<div style="font-size:12px; font-weight:600; color:' + (farbeUnter || 'var(--muted)') + ';">' + unter + '</div>' : '') + '</div>';
+  };
+  h += '<div style="display:flex; gap:8px; margin-top:8px;">';
+  h += kachel('Abgefüllt', g.abfuelldatum ? fmtDate(g.abfuelldatum) : '', g.abfuelldatum ? pzTageText(g.abfuelldatum) : '', abfFarbe);
+  if(g.leer && g.leerSeit) h += kachel('Leer seit', fmtDate(g.leerSeit), anschluss ? (Math.max(0, Math.round((new Date(g.leerSeit) - new Date(anschluss)) / 86400000)) + ' Tage am Anschluss') : '', '#c23f12');
+  else h += kachel('Angeschlossen', anschluss ? fmtDate(anschluss) : '', anschluss ? (pzTageText(anschluss) + (g.letzterAnschluss && String(g.letzterAnschluss).indexOf('T') > -1 ? ', ' + fmtZeit(g.letzterAnschluss) + ' Uhr' : '')) : '');
+  h += '</div>';
+  // Heute schon erledigt? Korrektur-Link
+  var bereitsHeute = letzteErledigungInnerhalb24h(g.id);
+  if(bereitsHeute && bereitsHeute.ergebnis === 'Angeschlossen'){
+    h += '<div class="meta" style="margin-top:6px; font-size:12px;">Falsch eingetragen? <span class="korrAbfuellBtn" data-gid="' + g.id + '" data-pid="' + bereitsHeute.id + '" style="color:#1d5fa8; text-decoration:underline; cursor:pointer;">War eine Abfüllung &ndash; korrigieren</span></div>';
+  }
+  // Aktionen: aktueller Zustand ist gefüllt hervorgehoben
+  var btn = function(attr, aktiv, farbe, text){
+    return '<button type="button" class="btn small' + (aktiv ? '' : ' secondary') + '" ' + attr + ' style="flex:1 1 0; min-width:0; padding:10px 4px; font-size:13px; margin:0;' + (aktiv ? ' background:' + farbe + '; border-color:' + farbe + '; color:#fff;' : ' color:' + farbe + '; border-color:' + farbe + '55;') + '">' + text + '</button>';
+  };
+  h += '<div style="display:flex; gap:6px; margin-top:10px;">';
+  h += btn('data-schnellcheck="' + g.id + '" data-erg="in_ordnung"', z.key === 'angeschlossen', '#1e8449', '&#10003; Angeschl.');
+  h += btn('data-nurAbfuellBtn="' + g.id + '"', z.key === 'voll', '#1d5fa8', '&#128167; Abgefüllt');
+  h += btn('data-leerToggleBtn="' + g.id + '"', z.key === 'leer', '#c23f12', g.leer ? 'Wieder voll' : 'Leer');
+  h += '</div>';
+  // Fusszeile: Datum (eingeklappt), QR, Loeschen
+  var datumGeaendert = datumWert !== heuteIso;
+  h += '<div class="pzStop" style="display:flex; align-items:center; gap:12px; margin-top:8px; font-size:12px; color:var(--muted); flex-wrap:wrap;">';
+  h += '<span class="pzDatumToggle" data-gid="' + g.id + '" style="cursor:pointer;">Eintragen für: <b style="color:' + (datumGeaendert ? '#c23f12' : 'inherit') + ';">' + (datumGeaendert ? fmtDate(datumWert + 'T12:00:00') : 'heute') + '</b> <u>ändern</u></span>';
+  h += '<span style="flex:1;"></span>';
+  h += '<span class="qrGeraetInlineBtn" data-gid="' + g.id + '" style="cursor:pointer; text-decoration:underline;">QR</span>';
+  if(!istEingeschraenkt()) h += '<span class="geraetLoeschInlineBtn" data-gid="' + g.id + '" style="cursor:pointer; text-decoration:underline; color:#c23f12;">Löschen</span>';
+  h += '</div>';
+  h += '<div class="pzStop pzDatumBox" data-gid="' + g.id + '" style="display:' + (datumGeaendert ? 'flex' : 'none') + '; align-items:center; gap:6px; margin-top:6px;">';
+  h += '<input type="date" class="schnellDatumInput" data-gid="' + g.id + '" value="' + datumWert + '" style="flex:1; min-width:0; padding:6px; font-size:14px; box-sizing:border-box; margin:0;">';
+  h += '<button type="button" class="info-i hinweisInfoBtn" data-gid="' + g.id + '" data-typ="anschluss" title="Hinweis">i</button>';
+  h += '</div>';
+  h += '</div>';
+  return h;
 }
 
 // ---------- Prüfungen ----------
@@ -6523,6 +6613,30 @@ function modalErledigt(pruefungId){
   };
 }
 
+// Perchtl Zisch / CO2: Bericht zeigt Anschluss bzw. Abfuellung statt Pruefung
+function berichtFuellArt(p, g){
+  if(!g || !istFuellKategorie((g.kategorie || '').trim())) return '';
+  if(p.ergebnis === 'Abgefüllt') return 'abfuellung';
+  if(p.ergebnis === 'Reparatur nötig' || p.ergebnis === 'Ausgeschieden') return '';
+  return 'anschluss';
+}
+function berichtLokalZeit(iso){
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return fmtDatumZeitLokal(iso);
+  return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear() + ', ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' Uhr';
+}
+function berichtAbfuelldatumZu(p, g){
+  var grenze = String(p.erledigtAm || p.datum || '').substring(0, 10);
+  var best = '';
+  var liste = g.fuellungen || [];
+  for(var i = 0; i < liste.length; i++){
+    var f = liste[i];
+    var d = String(f.abfuelldatum || f.datum || '').substring(0, 10);
+    if(d && (!grenze || d <= grenze) && d > best.substring(0, 10)) best = f.abfuelldatum || f.datum;
+  }
+  if(!best && g.abfuelldatum && (!grenze || String(g.abfuelldatum).substring(0, 10) <= grenze)) best = g.abfuelldatum;
+  return best;
+}
 function buildBerichtHtml(p, k){
   var html = '';
   var berichtNr = 'PB-' + fmtDate(p.erledigtAm || p.datum).split('.').reverse().join('') + '-' + p.id.slice(-4);
@@ -6533,10 +6647,16 @@ function buildBerichtHtml(p, k){
   html += '<div class="pb-kopfzeile">';
   var katSingle = gRef ? (gRef.kategorie || 'Feuerlöscher') : 'Feuerlöscher';
   var normSingle = normFuerKategorie(katSingle);
-  html += '<div class="pb-titel"><h1>Prüfergebnisbericht</h1><div class="sub">Prüfbericht ' + escapeHtml(katSingle) + '</div>' + (normSingle ? ('<div class="norm">' + escapeHtml(normSingle) + '</div>') : '') + '</div>';
+  var fuellArt = berichtFuellArt(p, gRef);
+  if(fuellArt){
+    var fTitel = fuellArt === 'anschluss' ? 'Anschlussbericht' : 'Abfüllbericht';
+    html += '<div class="pb-titel"><h1>' + fTitel + '</h1><div class="sub">' + escapeHtml(katSingle) + '</div></div>';
+  } else {
+    html += '<div class="pb-titel"><h1>Prüfergebnisbericht</h1><div class="sub">Prüfbericht ' + escapeHtml(katSingle) + '</div>' + (normSingle ? ('<div class="norm">' + escapeHtml(normSingle) + '</div>') : '') + '</div>';
+  }
   html += '<img src="' + ((gRef && gRef.kategorie === 'Perchtl Zisch') ? LOGO_DATA_PZ : LOGO_DATA) + '" class="pb-logo">';
   html += '</div>';
-  html += '<div class="pb-berichtnr">Prüfbericht Nr.: ' + berichtNr + '</div>';
+  html += '<div class="pb-berichtnr">' + (fuellArt ? 'Bericht Nr.: ' : 'Prüfbericht Nr.: ') + berichtNr + '</div>';
 
   if(k && k.objekt){
     html += '<div class="pb-kundenreihe">';
@@ -6560,6 +6680,22 @@ function buildBerichtHtml(p, k){
   }
 
   var istFeuerloescherSingle = (katSingle === 'Feuerlöscher');
+  if(fuellArt){
+    var fAbf = berichtAbfuelldatumZu(p, gRef);
+    var fDatum = p.erledigtAm || p.datum;
+    var fLabel = fuellArt === 'anschluss' ? 'Angeschlossen' : 'Abgefüllt';
+    html += '<table class="pb-tabelle"><thead><tr><th>Gerät</th><th>Standort</th><th>Serien-Nr.</th><th>' + fLabel + ' am</th></tr></thead><tbody><tr>';
+    html += '<td>' + escapeHtml(p.typ || (gRef && gRef.typ) || '-') + '</td>';
+    html += '<td>' + (gRef && gRef.standort ? escapeHtml(gRef.standort) : '-') + '</td>';
+    html += '<td>' + (gRef && gRef.seriennummer ? escapeHtml(gRef.seriennummer) : '-') + '</td>';
+    html += '<td>' + fmtDate(fDatum) + '</td>';
+    html += '</tr></tbody></table>';
+    var fPrefix = (katSingle === 'CO2-Flaschen') ? 'Neufüllung Gasflasche' : 'Neufüllung Sodawasser';
+    html += '<div style="margin-top:8px;">';
+    if(fAbf) html += '<div class="pos-dienst"><span class="dname">' + fPrefix + ' am ' + escapeHtml(fmtDatumZeitLokal(fAbf)) + '</span><span class="pb-ok">Abgefüllt</span></div>';
+    if(fuellArt === 'anschluss') html += '<div class="pos-dienst"><span class="dname">Flasche angeschlossen am ' + escapeHtml(berichtLokalZeit(fDatum)) + '</span><span class="pb-ok">Angeschlossen</span></div>';
+    html += '</div>';
+  } else {
   html += '<table class="pb-tabelle"><thead><tr>';
   html += '<th>Gerät</th><th>Standort</th><th>Serien-Nr.</th>' + (istFeuerloescherSingle ? '<th>Baujahr</th><th>Innenrevision</th>' : '') + '<th>Datum</th><th>Ergebnis</th>';
   html += '</tr></thead><tbody><tr>';
@@ -6584,6 +6720,7 @@ function buildBerichtHtml(p, k){
       html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(dName) + '</span><span class="' + eiSingle.cls + '">' + eiSingle.label + '</span></div>';
     });
     html += '</div>';
+  }
   }
 
   if(p.bemerkung){
@@ -6612,8 +6749,11 @@ function buildBerichtHtml(p, k){
 function modalBerichtAnsicht(pruefungId){
   var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
   var k = kundeFuerPruefung(p);
+  var gAns = p && p.geraetId ? state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] : null;
+  var fArtAns = berichtFuellArt(p, gAns);
+  var berichtName = fArtAns === 'anschluss' ? 'Anschlussbericht' : (fArtAns === 'abfuellung' ? 'Abfüllbericht' : 'Prüfbericht');
   var html = '';
-  html += '<div class="modal-head no-print"><h3>Prüfbericht</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="modal-head no-print"><h3>' + berichtName + '</h3><button class="close" id="mClose">&times;</button></div>';
 
   html += buildBerichtHtml(p, k);
 
@@ -6627,16 +6767,17 @@ function modalBerichtAnsicht(pruefungId){
   document.getElementById('mClose').onclick = closeModal;
 
   document.getElementById('druckBtn').onclick = function(){
-    bsvDruckenOderTeilen(buildBerichtHtml(p, k), 'Pruefbericht.pdf');
+    bsvDruckenOderTeilen(buildBerichtHtml(p, k), fArtAns === 'anschluss' ? 'Anschlussbericht.pdf' : (fArtAns === 'abfuellung' ? 'Abfuellbericht.pdf' : 'Pruefbericht.pdf'));
   };
 
   document.getElementById('mailBtn').onclick = function(){
-    var betreff = 'Prüfbericht ' + (k ? k.name : '') + ' - ' + fmtDate(p.erledigtAm || p.datum);
+    var betreff = berichtName + ' ' + (k ? k.name : '') + ' - ' + fmtDate(p.erledigtAm || p.datum);
     var zeilen = [];
-    zeilen.push('Prüfbericht');
+    zeilen.push(berichtName);
     zeilen.push('Kunde: ' + (k ? k.name : '-'));
     zeilen.push('Adresse: ' + (k ? (k.adresse||'-') : '-'));
-    zeilen.push('Prüfungsart: ' + (p.typ||'-'));
+    zeilen.push((fArtAns ? 'Gerät: ' : 'Prüfungsart: ') + (p.typ||'-'));
+    if(fArtAns) zeilen.push('Ergebnis: ' + (fArtAns === 'anschluss' ? 'Flasche angeschlossen' : 'Flasche abgefüllt'));
     zeilen.push('Datum: ' + fmtDate(p.erledigtAm || p.datum));
     if(p.bemerkung) zeilen.push('Bemerkung: ' + p.bemerkung);
     zeilen.push('');
@@ -12210,6 +12351,16 @@ function bindDynamic(){
     });
   };
 
+  document.querySelectorAll('.pzStop').forEach(function(el){
+    el.addEventListener('click', function(e){ e.stopPropagation(); });
+  });
+  document.querySelectorAll('.pzDatumToggle').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      var box = document.querySelector('.pzDatumBox[data-gid="' + el.getAttribute('data-gid') + '"]');
+      if(box) box.style.display = box.style.display === 'none' ? 'flex' : 'none';
+    };
+  });
   document.querySelectorAll('.qrGeraetInlineBtn').forEach(function(b){
     b.onclick = function(e){
       e.stopPropagation();
