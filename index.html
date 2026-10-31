@@ -3909,9 +3909,12 @@ function renderPruefungen(){
         html += '<h3 style="margin:0;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
         html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
         if(p.bemerkung) html += '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>';
+        html += '<div style="display:flex; gap:8px; margin-top:8px;">';
         if(filter === 'reparatur' && p.geraetId){
-          html += '<button class="btn small" style="margin-top:8px;" data-erneutpruefen="' + p.geraetId + '">Erneut prüfen</button>';
+          html += '<button class="btn small" style="margin:0;" data-erneutpruefen="' + p.geraetId + '">Erneut prüfen</button>';
         }
+        html += '<button type="button" class="btn small secondary erlBerichtBtn" data-pids="' + p.id + '" style="margin:0;">&#128196; Prüfbericht</button>';
+        html += '</div>';
         html += '</div>';
       });
     } else {
@@ -3950,9 +3953,10 @@ function renderPruefungen(){
           html += '<span class="badge ' + cls + '">' + ergZ[e] + ' ' + escapeHtml(e === 'Reparatur nötig' ? 'Reparatur' : e) + '</span>';
         });
         html += '</div></div>';
+        html += '<button type="button" class="btn small secondary erlBerichtBtn" data-pids="' + liste.map(function(p){ return p.id; }).join(',') + '" style="margin:10px 0 0 0; width:100%;">&#128196; Prüfbericht &ndash; drucken / mailen</button>';
         if(auf){
           liste.forEach(function(p){
-            html += '<div style="border-top:1px solid #eee2d3; padding-top:6px; margin-top:6px; font-size:13px;">' + pruefungAnzeigeText(p) + ' <span class="meta">&middot; ' + escapeHtml(p.ergebnis || '') + (p.erledigtVon ? ' &middot; ' + escapeHtml(p.erledigtVon) : '') + '</span>' + (p.bemerkung ? '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>' : '') + '</div>';
+            html += '<div style="border-top:1px solid #eee2d3; padding-top:6px; margin-top:6px; font-size:13px; display:flex; gap:8px; align-items:flex-start;"><div style="flex:1; min-width:0;">' + pruefungAnzeigeText(p) + ' <span class="meta">&middot; ' + escapeHtml(p.ergebnis || '') + (p.erledigtVon ? ' &middot; ' + escapeHtml(p.erledigtVon) : '') + '</span>' + (p.bemerkung ? '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>' : '') + '</div><span class="erlBerichtBtn" data-pids="' + p.id + '" style="flex-shrink:0; color:#1d5fa8; text-decoration:underline; cursor:pointer;">Bericht</span></div>';
           });
         }
         html += '</div>';
@@ -6812,6 +6816,67 @@ function buildBerichtHtml(p, k){
   return html;
 }
 
+// Pruefbericht aus der Liste "Zuletzt erledigt" oeffnen
+function erlBerichtOeffnen(pids){
+  var liste = state.pruefungen.filter(function(p){ return pids.indexOf(p.id) > -1; });
+  if(!liste.length) return;
+  var p0 = liste[0];
+  var tag = fmtDate(p0.erledigtAm || p0.datum);
+  // Gibt es an diesem Tag einen gespeicherten Sammelbericht fuer den Kunden? Dann den nehmen.
+  var sbs = (state.sammelberichte || []).filter(function(sb){ return sb.kundeId === p0.kundeId && fmtDate(sb.datum) === tag; });
+  if(liste.length > 1 && sbs.length === 1){ modalSammelberichtAnsicht(sbs[0].id); return; }
+  if(liste.length > 1 && sbs.length > 1){
+    var h = '<div class="modal-head"><h3>Welcher Bericht?</h3><button class="close" id="mClose">&times;</button></div>';
+    sbs.forEach(function(sb){
+      var kats = {};
+      (sb.geraeteSnapshot || []).forEach(function(g){ kats[(g.kategorie || 'Feuerlöscher').trim()] = 1; });
+      h += '<button class="btn block secondary sbWahlBtn" data-sbid="' + sb.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(sb.berichtNr || 'Sammelbericht') + '<br><span class="meta">' + escapeHtml(Object.keys(kats).join(', ')) + ' &middot; ' + (sb.geraeteSnapshot || []).length + ' Geräte</span></button>';
+    });
+    h += '<button class="btn block" id="sbWahlAlle" style="margin-top:6px;">Alle Prüfungen dieses Tages als ein Bericht</button>';
+    openModal(h);
+    document.getElementById('mClose').onclick = closeModal;
+    document.querySelectorAll('.sbWahlBtn').forEach(function(b){ b.onclick = function(){ modalSammelberichtAnsicht(b.getAttribute('data-sbid')); }; });
+    document.getElementById('sbWahlAlle').onclick = function(){ modalBerichteMehrere(liste); };
+    return;
+  }
+  if(liste.length === 1){ modalBerichtAnsicht(p0.id); return; }
+  modalBerichteMehrere(liste);
+}
+function modalBerichteMehrere(liste){
+  var k = kundeFuerPruefung(liste[0]);
+  var tag = fmtDate(liste[0].erledigtAm || liste[0].datum);
+  var bauen = function(){
+    return liste.map(function(p, i){ return (i > 0 ? '<div style="page-break-before:always;"></div>' : '') + buildBerichtHtml(p, k); }).join('');
+  };
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>Prüfberichte ' + tag + ' (' + liste.length + ')</h3><button class="close" id="mClose">&times;</button></div>';
+  html += bauen();
+  html += '<div class="no-print" style="margin-top:16px;">';
+  html += '<button class="btn block" id="druckBtnMehr">Drucken / Als PDF teilen</button>';
+  html += '<button class="btn block secondary" id="mailBtnMehr" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('druckBtnMehr').onclick = function(){
+    var b = document.getElementById('druckBtnMehr');
+    b.disabled = true; b.textContent = 'Bereite vor...';
+    bsvDruckenOderTeilen(bauen(), 'Pruefberichte-' + tag.split('.').reverse().join('') + '.pdf', function(){
+      b.disabled = false; b.textContent = 'Drucken / Als PDF teilen';
+    });
+  };
+  document.getElementById('mailBtnMehr').onclick = function(){
+    var betreff = 'Prüfberichte ' + (k ? k.name : '') + ' - ' + tag;
+    var zeilen = ['Prüfberichte vom ' + tag, 'Kunde: ' + (k ? k.name : '-'), 'Adresse: ' + (k ? (k.adresse || '-') : '-'), ''];
+    liste.forEach(function(p){
+      var g = geraetFuerPruefung(p);
+      zeilen.push('- ' + (g ? ((g.kategorie || '') + ' ' + (g.typ || '') + (g.standort ? ', ' + g.standort : '')) : (p.typ || 'Prüfung')) + ': ' + (p.ergebnis || 'In Ordnung') + (p.bemerkung ? ' (' + p.bemerkung + ')' : ''));
+    });
+    zeilen.push('');
+    zeilen.push('Wolfgang Janiba Brandschutztechnik GmbH, Ketzergasse 299, 2380 Perchtoldsdorf, Tel 0676/305 83 98');
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(betreff) + '&body=' + encodeURIComponent(zeilen.join('\n'));
+  };
+}
 function modalBerichtAnsicht(pruefungId){
   var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
   var k = kundeFuerPruefung(p);
@@ -12001,6 +12066,12 @@ function bindDynamic(){
     });
   }
 
+  document.querySelectorAll('.erlBerichtBtn').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      erlBerichtOeffnen((el.getAttribute('data-pids') || '').split(','));
+    };
+  });
   document.querySelectorAll('.erlGruppeToggle').forEach(function(el){
     el.onclick = function(){
       var key = el.getAttribute('data-key');
