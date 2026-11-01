@@ -404,14 +404,28 @@ var LOGO_DATA_PZ = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDB
 
 
 // ---------- DB ----------
+// Harmlose Fehler (fremde Skripte, Browser-Meldungen) nicht als Absturz behandeln
+function fehlerIstHarmlos(msg){
+  msg = String(msg || '');
+  return !msg || msg === 'Script error.' || msg.indexOf('ResizeObserver') > -1 || msg.indexOf('esseract') > -1 || msg.indexOf('Load failed') > -1 || msg.indexOf('NetworkError') > -1 || msg.indexOf('AbortError') > -1;
+}
+function fehlerNachStart(msg){
+  // Nach dem Start: App weiterlaufen lassen, nur kurz Hinweis zeigen statt alles zu ersetzen
+  try{ if(typeof toast === 'function') toast('Hinweis: ' + String(msg).substring(0, 80)); }catch(e){}
+}
 window.addEventListener('error', function(e){
   console.error('Globaler Fehler', e.error || e.message);
+  if(fehlerIstHarmlos(e && e.message)) return;
+  if(typeof appGestartet !== 'undefined' && appGestartet){ fehlerNachStart(e && e.message); return; }
   try {
     zeigeStartFehler('Es ist ein unerwarteter Fehler aufgetreten: ' + (e && e.message ? e.message : 'Unbekannt') + '. Bitte Seite neu laden. Falls das öfter passiert, bitte Screenshot davon senden.');
   } catch(err2){}
 });
 window.addEventListener('unhandledrejection', function(e){
   console.error('Unbehandelter Promise-Fehler', e.reason);
+  var grund = e && e.reason && e.reason.message ? e.reason.message : String(e && e.reason || '');
+  if(fehlerIstHarmlos(grund) || /firestore|offline|unavailable|permission|network/i.test(grund)) return;
+  if(typeof appGestartet !== 'undefined' && appGestartet){ fehlerNachStart(grund); return; }
   try {
     zeigeStartFehler('Es ist ein unerwarteter Fehler aufgetreten: ' + (e && e.reason && e.reason.message ? e.reason.message : 'Unbekannt') + '. Bitte Seite neu laden. Falls das öfter passiert, bitte Screenshot davon senden.');
   } catch(err2){}
@@ -1146,11 +1160,30 @@ function render(){
   }
 }
 
+// Angemeldet bleiben: 12 Stunden auf diesem Geraet (iPhone beendet die App im Hintergrund oft)
+var ANMELDUNG_KEY = 'bsv_anmeldung';
+var ANMELDUNG_STUNDEN = 12;
+function anmeldungMerken(){
+  try{ localStorage.setItem(ANMELDUNG_KEY, JSON.stringify({ rolle: state.rolle, name: state.mitarbeiterName || null, bis: Date.now() + ANMELDUNG_STUNDEN * 3600000 })); }catch(e){}
+}
+function anmeldungVergessen(){
+  try{ localStorage.removeItem(ANMELDUNG_KEY); }catch(e){}
+}
+function anmeldungWiederherstellen(){
+  try{
+    var a = JSON.parse(localStorage.getItem(ANMELDUNG_KEY) || 'null');
+    if(!a || !a.rolle || !a.bis || a.bis < Date.now()){ anmeldungVergessen(); return; }
+    if(a.rolle === 'chef'){ state.rolle = 'chef'; state.mitarbeiterName = null; return; }
+    var m = MITARBEITER_LISTE.filter(function(x){ return x.name === a.name; })[0];
+    if(m){ state.rolle = 'mitarbeiter'; state.mitarbeiterName = m.name; }
+    else anmeldungVergessen();
+  }catch(e){}
+}
 function renderLogin(){
   var html = '';
   html += '<div class="card" style="max-width:340px; margin:60px auto; text-align:center;">';
   html += '<div class="section-title" style="text-align:center;">PIN eingeben</div>';
-  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 30.10. 13:30</div>';
+  html += '<div class="meta" style="text-align:center; margin-bottom:8px;">Version 01.11. 20:30</div>';
   html += '<input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="****" style="text-align:center; font-size:24px; letter-spacing:8px;" autofocus>';
   html += '<div class="meta" id="loginFehler" style="color:#c23f12; margin-top:8px; min-height:18px;"></div>';
   html += '<button class="btn block" id="loginBtn" style="margin-top:14px;">Anmelden</button>';
@@ -1165,13 +1198,15 @@ function renderInner(){
   if(!state.rolle){
     if(tabsEl) tabsEl.style.display = 'none';
     if(fabEl) fabEl.style.display = 'none';
+    // PIN-Bildschirm steht schon -> nicht neu zeichnen (sonst ist die halbe Eingabe weg)
+    if(document.getElementById('loginPin')) return;
     m.innerHTML = renderLogin();
     var pinInput = document.getElementById('loginPin');
     var pruefen = function(){
       var wert = pinInput.value.trim();
       var mitarbeiterTreffer = MITARBEITER_LISTE.filter(function(m){ return m.pin === wert; })[0];
-      if(wert === CHEF_PIN){ state.rolle = 'chef'; state.mitarbeiterName = null; render(); }
-      else if(mitarbeiterTreffer){ state.rolle = 'mitarbeiter'; state.mitarbeiterName = mitarbeiterTreffer.name; render(); }
+      if(wert === CHEF_PIN){ state.rolle = 'chef'; state.mitarbeiterName = null; anmeldungMerken(); render(); }
+      else if(mitarbeiterTreffer){ state.rolle = 'mitarbeiter'; state.mitarbeiterName = mitarbeiterTreffer.name; anmeldungMerken(); render(); }
       else {
         document.getElementById('loginFehler').textContent = 'Falscher PIN';
         pinInput.value = '';
@@ -12408,7 +12443,7 @@ function bindDynamic(){
   if(dtv) dtv.onclick = function(){ if((state.dashTagOffset || 0) < 0){ state.dashTagOffset = state.dashTagOffset + 1; render(); } };
   var aufBanner = document.getElementById('aufgabenBannerBtn');
   if(aufBanner) aufBanner.onclick = function(){ state.tab = 'aufgaben'; render(); };
-  if(logoutBtn) logoutBtn.onclick = function(){ state.rolle = null; state.mitarbeiterName = null; state.tab = 'dashboard'; render(); };
+  if(logoutBtn) logoutBtn.onclick = function(){ anmeldungVergessen(); state.rolle = null; state.mitarbeiterName = null; state.tab = 'dashboard'; render(); };
 
   var ueberfaelligBannerBtn = document.getElementById('ueberfaelligBannerBtn');
   if(ueberfaelligBannerBtn) ueberfaelligBannerBtn.onclick = function(){
@@ -12878,6 +12913,7 @@ document.getElementById('fabBtn').addEventListener('click', function(){
 
 // ---------- Start ----------
 var appGestartet = false;
+anmeldungWiederherstellen();
 try {
   openDb(function(){
     try {
@@ -12902,9 +12938,15 @@ try {
 }
 setTimeout(function(){
   if(!appGestartet && !wartetAufGeraeteLogin){
+    var mEl = document.getElementById('main');
+    if(mEl && !mEl.innerHTML.trim()) mEl.innerHTML = '<div class="empty" style="margin-top:60px;">Daten werden geladen &hellip;</div>';
+  }
+}, 2500);
+setTimeout(function(){
+  if(!appGestartet && !wartetAufGeraeteLogin){
     zeigeStartFehler('Die App braucht ungewöhnlich lange zum Laden. Bitte alle anderen offenen Tabs/Instanzen dieser App schließen und danach diese Seite neu laden.');
   }
-}, 6000);
+}, 25000);
 
 </script>
 </body>
