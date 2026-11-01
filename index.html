@@ -11867,10 +11867,55 @@ function statMonateHtml(jahr, fuerDruck){
   if(fuerDruck){
     h += '<tr style="font-weight:700;"><td>Summe</td><td></td><td>' + eurText(sJahr) + '</td><td>' + (sOffen ? eurText(sOffen) : '-') + '</td><td>' + eurText(sEing) + '</td></tr></tbody></table>';
     h += '<div class="meta" style="margin-top:8px;">Betrag = Rechnungen nach Rechnungsdatum. Zahlungseingang = als bezahlt markiert in diesem Monat.</div>';
+    h += statZahlungslisteHtml(jahr);
     h += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at</div></div>';
   } else {
     h += '<div style="display:flex; gap:12px; align-items:center; margin-top:8px; font-size:11px; color:var(--muted);"><span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#1e8449;"></span> bezahlt</span><span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#e8541f;"></span> offen</span><span style="flex:1;"></span><button type="button" class="btn small secondary" id="statMonatDruck" data-jahr="' + jahr + '" style="margin:0;">Drucken / PDF</button></div>';
     h += '</div>';
+  }
+  return h;
+}
+
+// Liste: welcher Kunde hat bezahlt, wer nicht (fuer den Druck)
+function statZahlungslisteHtml(jahr){
+  var offen = [], bezahlt = [];
+  state.kunden.forEach(function(k){
+    if(k.geloescht) return;
+    (k.rechnungen || []).forEach(function(r){
+      if(parseInt(String(r.datum || '').substring(0, 4), 10) !== jahr) return;
+      (r.bezahlt ? bezahlt : offen).push({ k: k, r: r });
+    });
+  });
+  var sortKunde = function(a, b){ return (a.k.name || '').localeCompare(b.k.name || '') || String(a.r.datum).localeCompare(String(b.r.datum)); };
+  offen.sort(function(a, b){ return String(a.r.datum).localeCompare(String(b.r.datum)) || (a.k.name || '').localeCompare(b.k.name || ''); });
+  bezahlt.sort(sortKunde);
+  var summe = function(l){ return l.reduce(function(x, e){ return x + (Number(e.r.betrag) || 0); }, 0); };
+  var heute = new Date(); heute.setHours(12, 0, 0, 0);
+  var h = '<div style="page-break-before:always;"></div>';
+  h += '<div class="pb-kopfzeile"><div class="pb-titel"><h1>Zahlungsliste ' + jahr + '</h1><div class="sub">Wer hat bezahlt &ndash; wer nicht</div></div><img src="' + LOGO_DATA + '" class="pb-logo"></div>';
+  h += '<h3 style="margin:14px 0 6px; color:#c23f12;">Noch nicht bezahlt (' + offen.length + ') &middot; ' + eurText(summe(offen)) + '</h3>';
+  if(!offen.length){
+    h += '<div class="meta">Alle Rechnungen sind bezahlt.</div>';
+  } else {
+    h += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Rechnungsdatum</th><th>Notiz</th><th>Betrag</th><th>Offen seit</th></tr></thead><tbody>';
+    offen.forEach(function(e){
+      var d = String(e.r.datum).substring(0, 10).split('-');
+      var tage = Math.max(0, Math.round((heute - new Date(parseInt(d[0], 10), parseInt(d[1], 10) - 1, parseInt(d[2], 10), 12)) / 86400000));
+      h += '<tr><td><b>' + escapeHtml(e.k.name) + '</b></td><td>' + fmtDate(e.r.datum) + '</td><td>' + escapeHtml(e.r.notiz || '') + '</td><td><b>' + eurText(e.r.betrag) + '</b></td><td style="color:' + (tage > 30 ? '#c23f12' : 'inherit') + ';">' + tage + (tage === 1 ? ' Tag' : ' Tagen') + '</td></tr>';
+    });
+    h += '<tr style="font-weight:700;"><td>Summe offen</td><td></td><td></td><td>' + eurText(summe(offen)) + '</td><td></td></tr>';
+    h += '</tbody></table>';
+  }
+  h += '<h3 style="margin:18px 0 6px; color:#1e8449;">Bezahlt (' + bezahlt.length + ') &middot; ' + eurText(summe(bezahlt)) + '</h3>';
+  if(!bezahlt.length){
+    h += '<div class="meta">Noch keine Rechnung als bezahlt markiert.</div>';
+  } else {
+    h += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Rechnungsdatum</th><th>Notiz</th><th>Betrag</th><th>Bezahlt am</th></tr></thead><tbody>';
+    bezahlt.forEach(function(e){
+      h += '<tr><td><b>' + escapeHtml(e.k.name) + '</b></td><td>' + fmtDate(e.r.datum) + '</td><td>' + escapeHtml(e.r.notiz || '') + '</td><td>' + eurText(e.r.betrag) + '</td><td>' + (e.r.bezahltAm ? fmtDate(e.r.bezahltAm) : '&#10003;') + '</td></tr>';
+    });
+    h += '<tr style="font-weight:700;"><td>Summe bezahlt</td><td></td><td></td><td>' + eurText(summe(bezahlt)) + '</td><td></td></tr>';
+    h += '</tbody></table>';
   }
   return h;
 }
