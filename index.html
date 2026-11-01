@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-01 21:00';
-var APP_VERSION_TEXT = '01.11. 21:00';
+var APP_VERSION = '2026-11-01 21:30';
+var APP_VERSION_TEXT = '01.11. 21:30';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -1346,6 +1346,110 @@ function aufgabeKarteHtml(p, k, st){
   h += '</div>';
   return h;
 }
+// Uebersicht: EINE Karte pro Kunde (nur Kunde, was faellig ist, Adresse, ein Zuteilen-Knopf)
+function kundeAufgabeKarteHtml(k, eintraege, statusFn){
+  var liste = eintraege.slice().sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
+  var erste = liste[0];
+  var st = statusFn(erste.datum);
+  var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+  var dObj = new Date(String(erste.datum).substring(0, 10) + 'T12:00:00');
+  var kurz = fmtDate(erste.datum).substring(0, 6);
+  // Zusammenfassung nach Kategorie, z.B. "2x Feuerloescher - 1x CO2-Flaschen"
+  var kats = {}, katReihe = [];
+  liste.forEach(function(p){
+    var g = geraetFuerPruefung(p);
+    var kat = g ? (g.kategorie || 'Feuerlöscher').trim() : (p.typ || 'Prüfung');
+    if(!kats[kat]){ kats[kat] = 0; katReihe.push(kat); }
+    kats[kat]++;
+  });
+  var zusammen = katReihe.map(function(kt){ return (kats[kt] > 1 ? kats[kt] + '&times; ' : '') + escapeHtml(kt); }).join(' &middot; ');
+  if(liste.length === 1 && k && k.objekt) zusammen += ' &middot; ' + escapeHtml(k.objekt);
+  var h = '<div class="aufgabe ' + st.cls + ' kunde-card" data-id="' + (k ? k.id : '') + '">';
+  h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
+  h += '<div class="aufgabe-art">' + zusammen + '</div></div>';
+  h += '<div class="aufgabe-datum"><b>' + (isNaN(dObj.getTime()) ? '' : wt[dObj.getDay()] + ' ') + kurz + '</b><span class="badge ' + st.cls + '">' + st.label + '</span></div></div>';
+  if(k && k.adresse) h += '<div class="aufgabe-adr">&#128205; ' + escapeHtml(k.adresse) + '</div>';
+  if(istVollsicht()){
+    var wer = {}, werReihe = [], ohne = 0;
+    liste.forEach(function(p){
+      var g = geraetFuerPruefung(p);
+      if(!g || !g.zustaendig){ ohne++; return; }
+      if(!wer[g.zustaendig]){ wer[g.zustaendig] = 1; werReihe.push(g.zustaendig); }
+    });
+    var nieman = werReihe.length === 0;
+    var text, ini = '!';
+    if(nieman) text = 'Noch niemand zugeteilt';
+    else {
+      text = werReihe.map(function(n){ return escapeHtml(zustaendigKurz(n)); }).join(', ');
+      if(ohne) text += ' &middot; ' + ohne + ' noch offen';
+      if(erste.zeit) text += ' &middot; ' + escapeHtml(erste.zeit) + ' Uhr';
+      ini = String(zustaendigKurz(werReihe[0])).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join('');
+    }
+    h += '<button type="button" class="zuordBtn kundeZuordBtn' + (nieman || ohne ? ' leer' : '') + '" data-pids="' + liste.map(function(p){ return p.id; }).join(',') + '">';
+    h += '<span class="zuordAv">' + escapeHtml(ini) + '</span><span class="zuordWer">' + text + '</span>';
+    h += '<span class="zuordAkt">' + (nieman ? 'Zuteilen' : 'Ändern') + ' &rsaquo;</span></button>';
+  }
+  h += '</div>';
+  return h;
+}
+function modalKundeZuteilen(pids){
+  var liste = state.pruefungen.filter(function(p){ return pids.indexOf(p.id) > -1; });
+  if(!liste.length) return;
+  if(liste.length === 1){ modalPruefungZuteilen(liste[0].id); return; }
+  liste.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
+  var k = kundeFuerPruefung(liste[0]);
+  var g0 = geraetFuerPruefung(liste[0]);
+  var datumAlt = String(liste[0].datum || '').substring(0, 10);
+  var html = '<div class="modal-head"><h3>Zuteilen &amp; Termin</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;"><b>' + (k ? escapeHtml(k.name) : '') + '</b><br>' + liste.length + ' Prüfungen &ndash; gilt für alle</div>';
+  html += '<label>Wer macht das?</label><select id="zkWer"><option value="">– niemand –</option>';
+  zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g0 && g0.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
+  html += '</select>';
+  html += '<label>Datum</label><input id="zkDatum" type="date" value="' + escapeHtml(datumAlt) + '">';
+  html += '<div id="zkHinweis" class="meta" style="color:#c23f12; margin:-4px 0 8px 0;"></div>';
+  html += '<label>Uhrzeit (optional)</label><input id="zkZeit" type="time" value="' + escapeHtml(liste[0].zeit || '') + '">';
+  html += '<button class="btn block" id="zkSpeichern" style="margin-top:6px;">Speichern</button>';
+  html += '<details style="margin-top:12px;"><summary class="meta" style="cursor:pointer;">Einzelne Geräte anzeigen (' + liste.length + ')</summary>';
+  liste.forEach(function(p){
+    html += '<div style="display:flex; gap:8px; align-items:center; padding:7px 0; border-top:1px solid var(--line); font-size:13px;"><div style="flex:1; min-width:0;">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div><button type="button" class="btn small secondary zkEinzeln" data-pid="' + p.id + '" style="margin:0;">Einzeln</button></div>';
+  });
+  html += '</details>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var hinweis = function(){
+    var v = document.getElementById('zkDatum').value, h = '';
+    if(v){
+      var ft = feiertagName(v), wt = new Date(v + 'T12:00:00').getDay();
+      if(ft) h = 'Achtung: Feiertag (' + ft + ')';
+      else if(wt === 0 || wt === 6) h = 'Achtung: Wochenende';
+    }
+    document.getElementById('zkHinweis').textContent = h;
+  };
+  document.getElementById('zkDatum').onchange = hinweis; hinweis();
+  document.querySelectorAll('.zkEinzeln').forEach(function(b){ b.onclick = function(){ modalPruefungZuteilen(b.getAttribute('data-pid')); }; });
+  document.getElementById('zkSpeichern').onclick = function(){
+    var datum = document.getElementById('zkDatum').value;
+    if(!datum){ toast('Bitte Datum wählen'); return; }
+    var wer = document.getElementById('zkWer').value || null;
+    var zeit = document.getElementById('zkZeit').value || '';
+    var datumGeaendert = datum !== datumAlt;
+    var offen = liste.length;
+    var fertig = function(){ offen--; if(offen <= 0){ closeModal(); toast('Gespeichert'); render(); } };
+    liste.forEach(function(p){
+      var g = geraetFuerPruefung(p);
+      var alt = String(p.datum || '').substring(0, 10);
+      if(datumGeaendert) p.datum = datum;
+      p.zeit = zeit;
+      if(g){
+        g.zustaendig = wer;
+        if(datumGeaendert && String(g.naechstePruefung || '').substring(0, 10) === alt) g.naechstePruefung = datum;
+        try{ dbPut('geraete', g, function(){}); }catch(e){}
+      }
+      dbPut('pruefungen', p, fertig);
+    });
+    state.kalTag = datum; state.kalMonat = datum.substring(0, 7);
+  };
+}
 function modalPruefungZuteilen(pid){
   var p = state.pruefungen.filter(function(x){ return x.id === pid; })[0];
   if(!p) return;
@@ -1612,26 +1716,7 @@ function renderDashboard(){
         if(c === 'warn') schlimmsteCls = 'warn';
         else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
       });
-      if(eintraege.length === 1){
-        var p = eintraege[0];
-        html += aufgabeKarteHtml(p, k, statusForDate(p.datum));
-      } else {
-        var aufgeklappt = true;
-        html += '<div class="aufgabe ' + schlimmsteCls + '">';
-        html += '<div class="row" style="gap:8px;"><h3 style="flex:1;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + eintraege.length + ' fällig</span></div>';
-        if(!aufgeklappt && k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
-        if(aufgeklappt){
-          eintraege.forEach(function(p, idx){
-            var st = statusForDate(p.datum);
-            html += '<div class="baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="cursor:pointer; ' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:8px; margin-top:8px;' : 'margin-top:8px;') + '">';
-            html += '<div class="row"><span class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</span><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-            html += zuordSelectHtml(p);
-            html += '</div>';
-          });
-          if(k && k.adresse) html += '<div class="meta" style="margin-top:8px;">' + escapeHtml(k.adresse) + '</div>';
-        }
-        html += '</div>';
-      }
+      html += kundeAufgabeKarteHtml(k, eintraege, statusForDate);
     });
   }
   html += '</div>';
@@ -1664,22 +1749,7 @@ function renderDashboard(){
         if(c === 'warn') schlimmsteCls = 'warn';
         else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
       });
-      if(gr.eintraege.length === 1){
-        var p = gr.eintraege[0];
-        innerHtml += aufgabeKarteHtml(p, gr.kunde, statusFuerBaldFaellig(p.datum));
-      } else {
-        var aufgeklappt = true;
-        innerHtml += '<div class="aufgabe ' + schlimmsteCls + '">';
-        innerHtml += '<div class="row" style="gap:8px;"><h3 style="flex:1;">' + (gr.kunde ? escapeHtml(gr.kunde.name) : 'Unbekannt') + '</h3><span class="badge ' + schlimmsteCls + '">' + gr.eintraege.length + ' fällig</span></div>';
-        if(aufgeklappt){
-          gr.eintraege.sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
-          gr.eintraege.forEach(function(p){
-            var st = statusFuerBaldFaellig(p.datum);
-            innerHtml += '<div class="row baldFaelligZeile" data-gid="' + (p.geraetId || '') + '" style="margin-top:4px; cursor:pointer;"><div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.datum) + '</div><span class="badge ' + st.cls + '">' + st.label + '</span></div>';
-          });
-        }
-        innerHtml += '</div>';
-      }
+      innerHtml += kundeAufgabeKarteHtml(gr.kunde, gr.eintraege, statusFuerBaldFaellig);
     });
     return innerHtml;
   }
@@ -11738,7 +11808,11 @@ function bindKundenCards(container){
     };
   });
   container.querySelectorAll('.zuordBtn').forEach(function(btn){
-    btn.onclick = function(ev){ ev.stopPropagation(); modalPruefungZuteilen(btn.getAttribute('data-pid')); };
+    btn.onclick = function(ev){
+      ev.stopPropagation();
+      if(btn.getAttribute('data-pids')) modalKundeZuteilen(btn.getAttribute('data-pids').split(','));
+      else modalPruefungZuteilen(btn.getAttribute('data-pid'));
+    };
   });
   container.querySelectorAll('.baldFaelligZeile').forEach(function(z){
     z.onclick = function(event){
