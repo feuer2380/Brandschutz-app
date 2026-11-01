@@ -1908,9 +1908,10 @@ function darfStundenSehen(){
 
 // Statistik ausblenden fuer Mitarbeiter mit keineStatistik: true
 function darfStatistik(){
+  // Statistik nur fuer Chef, Wolfgang Janiba sen. und Manuela Holakovsky
   if(state.rolle === 'chef') return true;
   var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
-  return !(m && m.keineStatistik);
+  return !!(m && m.statistik && !m.keineStatistik);
 }
 
 function lagerAktuellerBenutzer(){
@@ -3252,10 +3253,10 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
 var CHEF_PIN = '0239';
 var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
-  { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true, vollzugriff: true },
+  { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true, vollzugriff: true, statistik: true },
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
-  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true },
+  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true, statistik: true },
   { name: 'Harris Sandra', pin: '8280', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
