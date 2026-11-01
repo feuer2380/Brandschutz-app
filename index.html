@@ -5529,10 +5529,196 @@ function feldKopierHilfe(ids){
 }
 var KUNDE_KOPIERFELDER = ['fName','fVorname','fNachname','fObjekt','fObjektAdresse','fKundennr','fZusatz','fStrasse','fOrt','fEmail'];
 
+// ---------- Kunde scannen: erkannten Text auf die Felder verteilen ----------
+var KF_STRASSE_RE = /(stra(ss|ß)e|str\.|gasse|g\.|weg|platz|pl\.|ring|allee|zeile|promenade|kai|lände|laende|hof|steig|berg|feld|markt|gürtel|guertel|siedlung|park|damm|ufer|graben)\s*\d/i;
+var KF_FIRMA_RE = /(gmbh|g\.m\.b\.h|\bag\b|\bkg\b|\bog\b|e\.u\.|\beu\b|gesmbh|verein|gemeinde|marktgemeinde|stadtgemeinde|kindergarten|schule|hausverwaltung|immobilien|\bweg\b.*\d|bau\b|weinbau|heuriger|gasthaus|restaurant|hotel|praxis|apotheke|ordination|kanzlei|systemhaus|technik|service|handel)/i;
+var KF_MUELL_RE = /(wartungsvertrag|brandschutzger|hersteller|beschreibung|innenrevision|notiz:|\buid\b|atu\d|iban|\bbic\b|swift|firmenbuch|\bfn\b\s*\d|fbn|gerichtsstand|www\.|https?:|bankverbindung|raiffeisen|sparkasse|erste bank|bawag|volksbank|steuer)/i;
+function kfTelefonNorm(s){
+  var t = s.replace(/[oO](?=\d)/g, '0').replace(/[^\d+\/ \-()]/g, ' ').replace(/\s+/g, ' ').trim();
+  t = t.replace(/^[\-\/ ]+|[\-\/ ]+$/g, '');
+  return t;
+}
+function kundeTextZerlegen(text){
+  var e = { name: '', vorname: '', nachname: '', strasse: '', plz: '', ort: '', telefon: '', email: '', zusatz: '', objekt: '', kundennummer: '' };
+  var zeilen = String(text || '').replace(/\r/g, '').split('\n').map(function(z){ return z.replace(/[|_~«»•·]+/g, ' ').replace(/\s+/g, ' ').trim(); });
+  // Beschriftete Zeilen (z.B. Ausdruck aus dem alten Programm: "Strasse | ...", "PLZ, Ort | 1220, Wien")
+  var vorab = [];
+  var offeneLabels = [];
+  zeilen.forEach(function(z){
+    if(!z) return;
+    var m;
+    // Nur eine Beschriftung in der Zeile (Tabelle spaltenweise erkannt) -> Wert kommt spaeter
+    if(/^(stra(ss|ß|b|8)e|plz\s*[,\/]?\s*ort|wartungsvertrag|telefon|tel\.?|e-?mail|kunde|name|firma)\s*:?$/i.test(z)){ offeneLabels.push(z.toLowerCase()); return; }
+    if(offeneLabels.length){
+      var lab = offeneLabels.shift();
+      if(/^stra/.test(lab)) z = 'Straße ' + z;
+      else if(/^plz/.test(lab)) z = 'PLZ, Ort ' + z;
+      else if(/^wartungs/.test(lab)) return;
+      else if(/^(kunde|name|firma)/.test(lab)) z = 'Name ' + z;
+      else if(/^tel/.test(lab)) z = 'Tel ' + z;
+    }
+    if((m = z.match(/^(kunden-?\s?n(umme)?r\.?|kd\.?-?\s?nr\.?|kundennr\.?)\s*:?\s*([A-Za-z0-9\-\/]+)/i)) && !e.kundennummer){ e.kundennummer = m[3]; return; }
+    if((m = z.match(/^stra(ss|ß|b|8)e\s*:?\s+(.+)$/i)) && !e.strasse){
+      var knr = m[2].match(/\s+(0\d{3,})\s*$/);
+      if(knr && !e.kundennummer) e.kundennummer = knr[1];
+      e.strasse = m[2].replace(/\s+0\d{3,}\s*$/, '').trim();
+      return;
+    }
+    // Alte Kundennummer aus dem Ausdruck steht oft allein in einer Zelle (z.B. 00014)
+    if(/^0\d{3,6}$/.test(z) && !e.kundennummer){ e.kundennummer = z; return; }
+    if((m = z.match(/^(adresse|anschrift)\s*:?\s+(.+)$/i)) && !e.strasse && !/\d{4}\s+\S/.test(m[2])){ e.strasse = m[2].trim(); return; }
+    if((m = z.match(/^plz\s*[,\/]?\s*(ort)?\s*:?\s*(\d{4})\s*,?\s*([A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß .\-\/]*)/i)) && !e.plz){ e.plz = m[2]; e.ort = m[3].trim(); return; }
+    if((m = z.match(/^(kunde|name|firma)\s*:?\s+(.+)$/i)) && !e.name){ e.name = m[2].trim(); return; }
+    if((m = z.match(/^(.+?)\s+objekt\s*:\s*(.+)$/i)) && !e.objekt){
+      if(!e.name) e.name = m[1].trim();
+      var ob = m[2], zh = ob.match(/\s+((z\.?\s?h\.?|p\.?\s?a\.?)\s.+)$/i);
+      if(zh){ if(!e.zusatz) e.zusatz = zh[1].trim(); ob = ob.substring(0, ob.length - zh[0].length); }
+      e.objekt = ob.trim();
+      return;
+    }
+    vorab.push(z);
+  });
+  zeilen = vorab;
+  var vorName = e.name;
+  // Zeilen mit Kommas/Strichpunkten (z.B. "Hauptstrasse 5, 2380 Perchtoldsdorf") aufteilen
+  var teile = [];
+  zeilen.forEach(function(z){
+    if(!z) return;
+    z.split(/\s*[;,]\s*|\s+[\-–]\s+(?=\d{4}\s)/).forEach(function(t){ t = t.trim(); if(t) teile.push(t); });
+  });
+  var benutzt = [];
+  for(var i = 0; i < teile.length; i++) benutzt.push(false);
+  // E-Mail
+  for(i = 0; i < teile.length && !e.email; i++){
+    var em = teile[i].replace(/\s*@\s*/g, '@').replace(/\s*\.\s*(at|com|de|net|org|eu|info|co)\b/gi, '.$1').match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/);
+    if(em){ e.email = em[0].toLowerCase(); if(teile[i].replace(em[0], '').replace(/e-?mail|mail|:/gi, '').trim().length < 3) benutzt[i] = true; else teile[i] = teile[i].replace(/\S*@\S*/, '').replace(/e-?mail\s*:?/i, '').trim(); }
+  }
+  // Telefon (Fax auslassen; Mobil bevorzugt, wenn sonst nichts)
+  var telKandidaten = [];
+  for(i = 0; i < teile.length; i++){
+    var z = teile[i];
+    if(/fax/i.test(z)) { if(/^\s*(fax|f)\b/i.test(z)) benutzt[i] = true; continue; }
+    var m = z.match(/(\+?\s?\d[\d \/\-()]{6,}\d)/);
+    if(!m) continue;
+    var ziffern = m[1].replace(/\D/g, '');
+    if(ziffern.length < 7 || ziffern.length > 15) continue;
+    if(/^\d{4}$/.test(z.split(' ')[0]) && !/^(0|\+)/.test(m[1].trim())) continue;
+    var hatHinweis = /(tel|mobil|handy|phone|fon|^t\b|^m\b|^t:|^m:)/i.test(z);
+    if(!hatHinweis && !/^\s*(\+|0|\(0)/.test(m[1])) continue;
+    telKandidaten.push({ i: i, wert: kfTelefonNorm(m[1]), mobil: /mobil|handy|^m\b|^m:|\b06\d\d/i.test(z) });
+  }
+  if(telKandidaten.length){
+    e.telefon = telKandidaten[0].wert;
+    telKandidaten.forEach(function(t){ benutzt[t.i] = true; });
+  }
+  // PLZ + Ort
+  for(i = 0; i < teile.length && !e.plz; i++){
+    if(e.plz) break;
+    if(benutzt[i]) continue;
+    var pm = teile[i].match(/(?:^|\s)(?:A\s?[\-–]\s?|AT\s?[\-–]?\s?)?(\d{4})\s+([A-ZÄÖÜa-zäöüß][A-Za-zÄÖÜäöüß .\-\/]{1,40})$/);
+    if(pm){
+      e.plz = pm[1];
+      e.ort = pm[2].replace(/\s+(österreich|austria)$/i, '').trim();
+      var rest = teile[i].substring(0, teile[i].length - pm[0].length).trim();
+      benutzt[i] = true;
+      if(rest && KF_STRASSE_RE.test(rest + ' ')) e.strasse = rest;
+      else if(rest && /\d/.test(rest) && !e.strasse) e.strasse = rest;
+      // Strasse steht meist in der Zeile davor
+      if(!e.strasse){
+        for(var j = i - 1; j >= 0 && j >= i - 3; j--){
+          if(!benutzt[j] && /[A-Za-zÄÖÜäöüß]{3,}.*\d/.test(teile[j]) && !KF_MUELL_RE.test(teile[j])){ e.strasse = teile[j]; benutzt[j] = true; break; }
+        }
+      }
+    }
+  }
+  // Strasse, falls noch nicht gefunden
+  for(i = 0; i < teile.length && !e.strasse; i++){
+    if(!benutzt[i] && KF_STRASSE_RE.test(teile[i] + ' ') && !KF_MUELL_RE.test(teile[i])){ e.strasse = teile[i]; benutzt[i] = true; }
+  }
+  if(e.strasse) e.strasse = e.strasse.replace(/^(adresse|anschrift)\s*:?\s*/i, '').replace(/\bstr\.\s*/i, 'straße ').replace(/\s+/g, ' ').trim();
+  // p.A. / z.H. Zusatz
+  for(i = 0; i < teile.length; i++){
+    if(!benutzt[i] && /^(p\.?\s?a\.?|z\.?\s?h\.?|c\/o)\s/i.test(teile[i])){ e.zusatz = teile[i]; benutzt[i] = true; break; }
+  }
+  // Uebrige sinnvolle Zeilen fuer Name / Firma / Person
+  var rest2 = [];
+  for(i = 0; i < teile.length; i++){
+    var t = teile[i];
+    if(benutzt[i] || KF_MUELL_RE.test(t)) continue;
+    if(/^(tel|fax|mobil|e-?mail|web|internet)\b/i.test(t)) continue;
+    var buchst = (t.match(/[A-Za-zÄÖÜäöüß]/g) || []).length;
+    if(buchst < 3 || buchst < t.length * 0.5) continue;
+    rest2.push(t);
+  }
+  var firma = '';
+  for(i = 0; i < rest2.length; i++){ if(KF_FIRMA_RE.test(rest2[i])){ firma = rest2[i]; break; } }
+  var person = '', personZeile = '';
+  for(i = 0; i < rest2.length; i++){
+    if(vorName) break;
+    if(/^(familie|fam\.)\s/i.test(rest2[i])) continue;
+    if(/(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|monday|tuesday|wednesday|thursday|friday)/i.test(rest2[i])) continue;
+    var r = rest2[i].replace(/^(herr|frau|hr\.|fr\.|dr\.|mag\.|ing\.|di\s|dipl\.-?ing\.)\s*/ig, '');
+    if(rest2[i] !== firma && /^[A-ZÄÖÜ][a-zäöüß\-]+(\s[A-ZÄÖÜ][a-zäöüß\-]+){1,2}$/.test(r) && !KF_FIRMA_RE.test(r)){ person = r; personZeile = rest2[i]; break; }
+  }
+  if(person){
+    var pt = person.split(' ');
+    e.nachname = pt.pop();
+    e.vorname = pt.join(' ');
+  }
+  if(firma && person && firma.indexOf(' ') < 0) firma = '';
+  e.name = vorName || firma || personZeile || rest2[0] || '';
+  return e;
+}
+
+function kundeScanBoxHtml(){
+  var h = '<div style="background:#fff4ec; border:1.5px dashed #e8541f; border-radius:12px; padding:10px 12px; margin:4px 0 12px;">';
+  h += '<div style="font-weight:800; font-size:15px;">&#128247; Kunde scannen</div>';
+  h += '<div class="meta" style="margin:3px 0 6px;">Ins Feld tippen &rarr; nochmal tippen &rarr; <b>&bdquo;Text scannen&ldquo;</b> &rarr; Kamera auf Visitenkarte, Briefkopf oder Ausdruck halten &rarr; <b>Einsetzen</b>. Die Felder unten (auch die Kundennummer) füllen sich von selbst &ndash; kurz kontrollieren.</div>';
+  h += '<textarea id="kfScan" rows="3" autocomplete="off" autocorrect="off" placeholder="Hier tippen und &bdquo;Text scannen&ldquo; wählen &ndash; oder Text einfügen" style="margin:0;"></textarea>';
+  h += '<div id="kfStatus" class="meta" style="margin-top:5px; font-weight:600;"></div>';
+  h += '</div>';
+  return h;
+}
+function kundeScanBinden(nurLeere){
+  var feld = document.getElementById('kfScan');
+  if(!feld) return;
+  var zuordnung = { kundennummer: 'fKundennr', name: 'fName', vorname: 'fVorname', nachname: 'fNachname', objekt: 'fObjekt', zusatz: 'fZusatz', strasse: 'fStrasse', plz: 'fPlz', ort: 'fOrt', telefon: 'fTelefon', email: 'fEmail' };
+  var zuletzt = {};
+  var timer = null;
+  var verteilen = function(){
+    var txt = feld.value;
+    var st = document.getElementById('kfStatus');
+    if(!txt.trim()){ st.innerHTML = ''; return; }
+    var e = kundeTextZerlegen(txt);
+    var n = 0;
+    for(var key in zuordnung){
+      var inp = document.getElementById(zuordnung[key]);
+      if(!inp || !e[key]) continue;
+      var aktuell = inp.value.trim();
+      // nur leere Felder oder solche, die vorher schon der Scan befuellt hat
+      if(aktuell && aktuell !== (zuletzt[key] || '') && (nurLeere || aktuell !== e[key])) continue;
+      inp.value = e[key];
+      inp.style.background = '#fff7d6';
+      zuletzt[key] = e[key];
+      n++;
+    }
+    st.innerHTML = n ? '<span style="color:#1e8449;">&#10003; ' + n + ' Feld' + (n === 1 ? '' : 'er') + ' ausgefüllt (gelb) &ndash; bitte prüfen</span>' : '<span style="color:#c23f12;">Nichts erkannt &ndash; Text bitte deutlicher scannen</span>';
+  };
+  feld.oninput = function(){ clearTimeout(timer); timer = setTimeout(verteilen, 350); };
+  feld.onpaste = function(){ clearTimeout(timer); timer = setTimeout(verteilen, 350); };
+  for(var k in zuordnung){
+    (function(id){
+      var inp = document.getElementById(id);
+      if(inp) inp.addEventListener('input', function(){ inp.style.background = ''; });
+    })(zuordnung[k]);
+  }
+}
+
 function modalNeuerKunde(opts){
   opts = opts || {};
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Kunde</h3><button class="close" id="mClose">&times;</button></div>';
+  html += kundeScanBoxHtml();
   html += '<label>Name / Firma</label><input id="fName" type="text" placeholder="z.B. Kindergarten Sonnenschein" value="' + escapeHtml(opts.name || '') + '">';
   html += '<div style="display:flex; gap:10px;">';
   html += '<div style="flex:1;"><label>Vorname (optional)</label><input id="fVorname" type="text" placeholder="z.B. Georg"></div>';
@@ -5555,6 +5741,7 @@ function modalNeuerKunde(opts){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   feldKopierHilfe(KUNDE_KOPIERFELDER);
+  kundeScanBinden(!!document.getElementById('fZugangscode'));
   document.getElementById('fTelefonLeerBtn').onclick = function(){
     var f = document.getElementById('fTelefon');
     var pos = f.selectionStart != null ? f.selectionStart : f.value.length;
@@ -5660,6 +5847,7 @@ function modalKundeBearbeiten(kundeId){
   if(!k) return;
   var html = '';
   html += '<div class="modal-head"><h3>Kunde bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
+  html += kundeScanBoxHtml();
   html += '<label>Name / Firma</label><input id="fName" type="text" value="' + escapeHtml(k.name || '') + '">';
   html += '<div style="display:flex; gap:10px;">';
   html += '<div style="flex:1;"><label>Vorname (optional)</label><input id="fVorname" type="text" value="' + escapeHtml(k.vorname || '') + '"></div>';
@@ -5688,6 +5876,7 @@ function modalKundeBearbeiten(kundeId){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   feldKopierHilfe(KUNDE_KOPIERFELDER);
+  kundeScanBinden(!!document.getElementById('fZugangscode'));
   document.getElementById('fTelefonLeerBtn').onclick = function(){
     var f = document.getElementById('fTelefon');
     var pos = f.selectionStart != null ? f.selectionStart : f.value.length;
