@@ -5672,12 +5672,56 @@ function kundeTextZerlegen(text){
 
 function kundeScanBoxHtml(){
   var h = '<div style="background:#fff4ec; border:1.5px dashed #e8541f; border-radius:12px; padding:10px 12px; margin:4px 0 12px;">';
-  h += '<div style="font-weight:800; font-size:15px;">&#128247; Kunde scannen</div>';
-  h += '<div class="meta" style="margin:3px 0 6px;">Ins Feld tippen &rarr; nochmal tippen &rarr; <b>&bdquo;Automatisch ausfüllen&ldquo;</b> &rarr; <b>&bdquo;Text scannen&ldquo;</b> &rarr; Kamera auf Visitenkarte, Briefkopf oder Ausdruck halten &rarr; <b>Einsetzen</b>. Die Felder unten (auch die Kundennummer) füllen sich von selbst &ndash; kurz kontrollieren.</div>';
-  h += '<textarea id="kfScan" rows="3" autocomplete="off" autocorrect="off" placeholder="Hier tippen und &bdquo;Text scannen&ldquo; wählen &ndash; oder Text einfügen" style="margin:0;"></textarea>';
-  h += '<div id="kfStatus" class="meta" style="margin-top:5px; font-weight:600;"></div>';
+  h += '<div style="font-weight:800; font-size:15px; margin-bottom:8px;">&#128247; Kunde scannen</div>';
+  h += '<div style="display:flex; gap:8px;">';
+  h += '<label for="kfFoto" class="btn" style="flex:1 1 0; margin:0; text-align:center; cursor:pointer;">&#128247; Foto machen</label>';
+  h += '<button type="button" class="btn secondary" id="kfClip" style="flex:1 1 0; margin:0;">&#128203; Einsetzen</button>';
+  h += '</div>';
+  h += '<input type="file" id="kfFoto" accept="image/*" style="display:none;">';
+  h += '<div id="kfStatus" class="meta" style="margin-top:6px; font-weight:600;"></div>';
+  h += '<div id="kfBildBox" style="display:none; margin-top:8px;">';
+  h += '<img id="kfBild" alt="" style="width:100%; max-height:340px; object-fit:contain; border-radius:8px; background:#fff; -webkit-user-select:text; user-select:text;">';
+  h += '<div class="meta" style="margin-top:4px;">Falsch erkannt? <b>Lange auf den Text im Foto drücken</b> &rarr; &bdquo;Alles auswählen&ldquo; &rarr; &bdquo;Kopieren&ldquo; &rarr; oben auf <b>Einsetzen</b>.</div>';
+  h += '</div>';
+  h += '<details style="margin-top:6px;"><summary class="meta" style="cursor:pointer;">Erkannter Text (zum Korrigieren)</summary>';
+  h += '<textarea id="kfScan" rows="4" autocomplete="off" autocorrect="off" placeholder="Text hier einfügen oder korrigieren" style="margin:6px 0 0;"></textarea></details>';
   h += '</div>';
   return h;
+}
+var kundeFotoOcrWorker = null;
+function kundeFotoWorkerHolen(cb){
+  if(kundeFotoOcrWorker){ cb(kundeFotoOcrWorker, null); return; }
+  if(!window.Tesseract){ cb(null, 'Texterkennung nicht geladen'); return; }
+  Tesseract.createWorker('deu', 1, {
+    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/worker.min.js',
+    corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0'
+  }).then(function(w){ kundeFotoOcrWorker = w; cb(w, null); })
+    .catch(function(err){ cb(null, 'Texterkennung konnte nicht starten: ' + (err && err.message ? err.message : String(err))); });
+}
+function kundeFotoBildVorbereiten(dataUrl, cb){
+  var img = new Image();
+  img.onload = function(){
+    var gr = Math.max(img.width, img.height);
+    var f = gr > 2200 ? 2200 / gr : (gr < 1200 ? 1200 / gr : 1);
+    var c = document.createElement('canvas');
+    c.width = Math.round(img.width * f); c.height = Math.round(img.height * f);
+    var ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    try{
+      var d = ctx.getImageData(0, 0, c.width, c.height), px = d.data;
+      for(var i = 0; i < px.length; i += 4){
+        var g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+        g = (g - 128) * 1.4 + 140;
+        if(g < 0) g = 0; if(g > 255) g = 255;
+        px[i] = px[i + 1] = px[i + 2] = g;
+      }
+      ctx.putImageData(d, 0, 0);
+    }catch(e){}
+    cb(c);
+  };
+  img.onerror = function(){ cb(null); };
+  img.src = dataUrl;
 }
 function kundeScanBinden(nurLeere){
   var feld = document.getElementById('kfScan');
@@ -5702,9 +5746,43 @@ function kundeScanBinden(nurLeere){
       zuletzt[key] = e[key];
       n++;
     }
-    st.innerHTML = n ? '<span style="color:#1e8449;">&#10003; ' + n + ' Feld' + (n === 1 ? '' : 'er') + ' ausgefüllt (gelb) &ndash; bitte prüfen</span>' : '<span style="color:#c23f12;">Nichts erkannt &ndash; Text bitte deutlicher scannen</span>';
+    st.innerHTML = n ? '<span style="color:#1e8449;">&#10003; ' + n + ' Feld' + (n === 1 ? '' : 'er') + ' ausgefüllt (gelb) &ndash; bitte prüfen</span>' + (n < 3 ? '<br><span style="color:#8a5a00;">Wenig erkannt &ndash; lange auf den Text im Foto drücken, kopieren und &bdquo;Einsetzen&ldquo;.</span>' : '') : '<span style="color:#c23f12;">Nichts erkannt &ndash; Foto gerade von oben und hell machen, oder lange auf den Text im Foto drücken &rarr; Kopieren &rarr; Einsetzen.</span>';
   };
   feld.oninput = function(){ clearTimeout(timer); timer = setTimeout(verteilen, 350); };
+  var st0 = function(t){ document.getElementById('kfStatus').innerHTML = t; };
+  var clipBtn = document.getElementById('kfClip');
+  if(clipBtn) clipBtn.onclick = function(){
+    if(!navigator.clipboard || !navigator.clipboard.readText){ st0('Bitte unten bei &bdquo;Erkannter Text&ldquo; lange tippen &rarr; Einsetzen'); return; }
+    navigator.clipboard.readText().then(function(t){
+      if(!t || !t.trim()){ st0('<span style="color:#c23f12;">Zwischenablage ist leer &ndash; zuerst Text kopieren</span>'); return; }
+      feld.value = t; verteilen();
+    }).catch(function(){ st0('<span style="color:#c23f12;">Einsetzen nicht erlaubt &ndash; bitte unten bei &bdquo;Erkannter Text&ldquo; lange tippen &rarr; Einsetzen</span>'); });
+  };
+  var fotoInp = document.getElementById('kfFoto');
+  if(fotoInp) fotoInp.onchange = function(){
+    var datei = fotoInp.files && fotoInp.files[0];
+    if(!datei) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+      var bild = document.getElementById('kfBild');
+      bild.src = rd.result;
+      document.getElementById('kfBildBox').style.display = 'block';
+      st0('&#9203; Lese Text aus dem Foto&hellip; (beim ersten Mal bis zu 30 Sekunden)');
+      kundeFotoBildVorbereiten(rd.result, function(canvas){
+        if(!canvas){ st0('<span style="color:#c23f12;">Foto konnte nicht gelesen werden</span>'); return; }
+        kundeFotoWorkerHolen(function(worker, fehler){
+          if(!worker){ st0('<span style="color:#c23f12;">' + fehler + ' &ndash; lange auf den Text im Foto drücken und kopieren.</span>'); return; }
+          worker.recognize(canvas).then(function(res){
+            var text = (res && res.data && res.data.text) || '';
+            feld.value = text;
+            verteilen();
+          }).catch(function(){ st0('<span style="color:#c23f12;">Texterkennung fehlgeschlagen &ndash; lange auf den Text im Foto drücken und kopieren.</span>'); });
+        });
+      });
+    };
+    rd.readAsDataURL(datei);
+    fotoInp.value = '';
+  };
   feld.onpaste = function(){ clearTimeout(timer); timer = setTimeout(verteilen, 350); };
   for(var k in zuordnung){
     (function(id){
