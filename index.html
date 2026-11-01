@@ -5540,7 +5540,12 @@ function kfTelefonNorm(s){
 }
 function kundeTextZerlegen(text){
   var e = { name: '', vorname: '', nachname: '', strasse: '', plz: '', ort: '', telefon: '', email: '', zusatz: '', objekt: '', kundennummer: '' };
-  var zeilen = String(text || '').replace(/\r/g, '').split('\n').map(function(z){ return z.replace(/[|_~«»•·]+/g, ' ').replace(/\s+/g, ' ').trim(); });
+  var zeilen = String(text || '').replace(/\r/g, '').split('\n').map(function(z){
+    z = z.replace(/[|_~«»•·\[\]{}=—“”‘’"]+/g, ' ').replace(/\s+/g, ' ').trim();
+    z = z.replace(/^[^A-Za-zÄÖÜäöüß0-9+]{1,3}\s*/, '');
+    if(/^\d+\s*jahre\b/i.test(z)) return '';
+    return z;
+  });
   // Beschriftete Zeilen (z.B. Ausdruck aus dem alten Programm: "Strasse | ...", "PLZ, Ort | 1220, Wien")
   var vorab = [];
   var offeneLabels = [];
@@ -5548,7 +5553,7 @@ function kundeTextZerlegen(text){
     if(!z) return;
     var m;
     // Nur eine Beschriftung in der Zeile (Tabelle spaltenweise erkannt) -> Wert kommt spaeter
-    if(/^(stra(ss|ß|b|8)e|plz\s*[,\/]?\s*ort|wartungsvertrag|telefon|tel\.?|e-?mail|kunde|name|firma)\s*:?$/i.test(z)){ offeneLabels.push(z.toLowerCase()); return; }
+    if(/^[A-Za-z]{0,2}\s?(stra(ss|ß|b|k|8|f)e|pl[z2]\s*[,.\/]?\s*ort|wartungsvertrag|telefon|tel\.?|e-?mail|kunde|name|firma)\s*:?$/i.test(z)){ offeneLabels.push(z.toLowerCase()); return; }
     if(offeneLabels.length){
       var lab = offeneLabels.shift();
       if(/^stra/.test(lab)) z = 'Straße ' + z;
@@ -5558,17 +5563,20 @@ function kundeTextZerlegen(text){
       else if(/^tel/.test(lab)) z = 'Tel ' + z;
     }
     if((m = z.match(/^(kunden-?\s?n(umme)?r\.?|kd\.?-?\s?nr\.?|kundennr\.?)\s*:?\s*([A-Za-z0-9\-\/]+)/i)) && !e.kundennummer){ e.kundennummer = m[3]; return; }
-    if((m = z.match(/^stra(ss|ß|b|8)e\s*:?\s+(.+)$/i)) && !e.strasse){
-      var knr = m[2].match(/\s+(0\d{3,})\s*$/);
+    if((m = z.match(/^[A-Za-z]{0,2}\s?stra(ss|ß|b|k|8|f)e\s*:?\s+(.+)$/i)) && !e.strasse){
+      var knr = m[2].match(/\s+(0\d{3,}|\d{5,7})\W*$/);
       if(knr && !e.kundennummer) e.kundennummer = knr[1];
-      e.strasse = m[2].replace(/\s+0\d{3,}\s*$/, '').trim();
+      e.strasse = m[2].replace(/\s+(0\d{3,}|\d{5,7})\W*$/, '').trim();
       return;
     }
+    if((m = z.match(/^[A-Za-z]{0,2}\s?(telefon|tel\.?)\s*:?\s*(\+?[\d][\d \/\-()]{5,}\d)/i)) && !e.telefon){ e.telefon = kfTelefonNorm(m[2]); return; }
     // Alte Kundennummer aus dem Ausdruck steht oft allein in einer Zelle (z.B. 00014)
     if(/^0\d{3,6}$/.test(z) && !e.kundennummer){ e.kundennummer = z; return; }
     if((m = z.match(/^(adresse|anschrift)\s*:?\s+(.+)$/i)) && !e.strasse && !/\d{4}\s+\S/.test(m[2])){ e.strasse = m[2].trim(); return; }
-    if((m = z.match(/^plz\s*[,\/]?\s*(ort)?\s*:?\s*(\d{4})\s*,?\s*([A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß .\-\/]*)/i)) && !e.plz){ e.plz = m[2]; e.ort = m[3].trim(); return; }
+    if((m = z.match(/^[A-Za-z]{0,2}\s?pl[z2]\s*[,.\/]?\s*(ort)?\s*:?\s*(\d{4})\s*,?\s*([A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ][a-zäöüß]+)*)/i)) && !e.plz){ e.plz = m[2]; e.ort = m[3].trim(); return; }
     if((m = z.match(/^(kunde|name|firma)\s*:?\s+(.+)$/i)) && !e.name){ e.name = m[2].trim(); return; }
+    // Titelzeile aus dem alten Programm: "Kundenname - Strasse 12"
+    if(!e.name && !/objekt\s*:/i.test(z) && (m = z.match(/^(.{4,}?)\s+[\-–]\s+([A-Za-zÄÖÜäöüß .]{3,}\d.*)$/)) && !/^\d/.test(m[1])){ e.name = m[1].trim(); return; }
     if((m = z.match(/^(.+?)\s+objekt\s*:\s*(.+)$/i)) && !e.objekt){
       if(!e.name) e.name = m[1].trim();
       var ob = m[2], zh = ob.match(/\s+((z\.?\s?h\.?|p\.?\s?a\.?)\s.+)$/i);
@@ -5680,8 +5688,12 @@ function kundeScanBoxHtml(){
   h += '<input type="file" id="kfFoto" accept="image/*" style="display:none;">';
   h += '<div id="kfStatus" class="meta" style="margin-top:6px; font-weight:600;"></div>';
   h += '<div id="kfBildBox" style="display:none; margin-top:8px;">';
-  h += '<img id="kfBild" alt="" style="width:100%; max-height:340px; object-fit:contain; border-radius:8px; background:#fff; -webkit-user-select:text; user-select:text;">';
-  h += '<div class="meta" style="margin-top:4px;">Falsch erkannt? <b>Lange auf den Text im Foto drücken</b> &rarr; &bdquo;Alles auswählen&ldquo; &rarr; &bdquo;Kopieren&ldquo; &rarr; oben auf <b>Einsetzen</b>.</div>';
+  h += '<div style="font-weight:700; font-size:14px; margin-bottom:6px;">&#9757; Mit dem Finger einen <span style="color:#e8541f;">Rahmen um Name und Adresse</span> ziehen</div>';
+  h += '<div style="text-align:center;"><div id="kfCropWrap" style="position:relative; display:inline-block; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;">';
+  h += '<img id="kfBild" alt="" style="display:block; max-width:100%; max-height:58vh; border-radius:8px; pointer-events:none; -webkit-user-select:none;">';
+  h += '<div id="kfRahmen" style="position:absolute; border:3px solid #e8541f; background:rgba(232,84,31,.15); display:none; pointer-events:none; border-radius:4px;"></div>';
+  h += '</div></div>';
+  h += '<div style="display:flex; gap:8px; margin-top:8px;"><button type="button" class="btn" id="kfLesenAus" style="flex:1 1 0; margin:0;" disabled>Ausschnitt lesen</button><button type="button" class="btn secondary" id="kfLesenGanz" style="flex:1 1 0; margin:0;">Ganzes Foto lesen</button></div>';
   h += '</div>';
   h += '<details style="margin-top:6px;"><summary class="meta" style="cursor:pointer;">Erkannter Text (zum Korrigieren)</summary>';
   h += '<textarea id="kfScan" rows="4" autocomplete="off" autocorrect="off" placeholder="Text hier einfügen oder korrigieren" style="margin:6px 0 0;"></textarea></details>';
@@ -5699,20 +5711,29 @@ function kundeFotoWorkerHolen(cb){
   }).then(function(w){ kundeFotoOcrWorker = w; cb(w, null); })
     .catch(function(err){ cb(null, 'Texterkennung konnte nicht starten: ' + (err && err.message ? err.message : String(err))); });
 }
-function kundeFotoBildVorbereiten(dataUrl, cb){
+function kundeFotoBildVorbereiten(dataUrl, rahmen, cb){
   var img = new Image();
   img.onload = function(){
-    var gr = Math.max(img.width, img.height);
-    var f = gr > 2200 ? 2200 / gr : (gr < 1200 ? 1200 / gr : 1);
+    var sx = 0, sy = 0, sw = img.naturalWidth || img.width, sh = img.naturalHeight || img.height;
+    if(rahmen){
+      sx = Math.round(rahmen.x * sw); sy = Math.round(rahmen.y * sh);
+      sw = Math.max(10, Math.round(rahmen.w * sw)); sh = Math.max(10, Math.round(rahmen.h * sh));
+    }
+    // Ausschnitt gross genug machen (Texterkennung mag ca. 30 px hohe Buchstaben)
+    var f = rahmen ? Math.min(4, Math.max(1, 1800 / sw)) : 1;
+    var gr = Math.max(sw, sh) * f;
+    if(gr > 2600) f = f * 2600 / gr;
+    if(!rahmen && gr < 1200) f = 1200 / Math.max(sw, sh);
     var c = document.createElement('canvas');
-    c.width = Math.round(img.width * f); c.height = Math.round(img.height * f);
+    c.width = Math.round(sw * f); c.height = Math.round(sh * f);
     var ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0, c.width, c.height);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
     try{
       var d = ctx.getImageData(0, 0, c.width, c.height), px = d.data;
       for(var i = 0; i < px.length; i += 4){
         var g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-        g = (g - 128) * 1.4 + 140;
+        g = (g - 128) * 1.25 + 132;
         if(g < 0) g = 0; if(g > 255) g = 255;
         px[i] = px[i + 1] = px[i + 2] = g;
       }
@@ -5759,26 +5780,69 @@ function kundeScanBinden(nurLeere){
     }).catch(function(){ st0('<span style="color:#c23f12;">Einsetzen nicht erlaubt &ndash; bitte unten bei &bdquo;Erkannter Text&ldquo; lange tippen &rarr; Einsetzen</span>'); });
   };
   var fotoInp = document.getElementById('kfFoto');
+  var fotoDaten = null, rahmen = null;
+  var lesen = function(mitRahmen){
+    if(!fotoDaten) return;
+    st0('&#9203; Lese Text&hellip; (beim ersten Mal bis zu 30 Sekunden)');
+    kundeFotoBildVorbereiten(fotoDaten, mitRahmen ? rahmen : null, function(canvas){
+      if(!canvas){ st0('<span style="color:#c23f12;">Foto konnte nicht gelesen werden</span>'); return; }
+      kundeFotoWorkerHolen(function(worker, fehler){
+        if(!worker){ st0('<span style="color:#c23f12;">' + fehler + '</span>'); return; }
+        worker.setParameters({ tessedit_pageseg_mode: mitRahmen ? '6' : '3' }).then(function(){
+          return worker.recognize(canvas);
+        }).then(function(res){
+          feld.value = (res && res.data && res.data.text) || '';
+          // bei neuem Lesevorgang die vorher vom Scan befuellten Felder neu setzen lassen
+          verteilen();
+        }).catch(function(){ st0('<span style="color:#c23f12;">Texterkennung fehlgeschlagen</span>'); });
+      });
+    });
+  };
+  var wrap = document.getElementById('kfCropWrap');
+  var rahmenEl = document.getElementById('kfRahmen');
+  var btnAus = document.getElementById('kfLesenAus');
+  var btnGanz = document.getElementById('kfLesenGanz');
+  if(btnAus) btnAus.onclick = function(){ if(rahmen) lesen(true); };
+  if(btnGanz) btnGanz.onclick = function(){ lesen(false); };
+  if(wrap){
+    var start = null;
+    var pos = function(ev){
+      var r = document.getElementById('kfBild').getBoundingClientRect();
+      var x = Math.min(Math.max(ev.clientX - r.left, 0), r.width), y = Math.min(Math.max(ev.clientY - r.top, 0), r.height);
+      return { x: x, y: y, w: r.width, h: r.height };
+    };
+    var zeichne = function(a, b){
+      var x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = Math.abs(a.x - b.x), h = Math.abs(a.y - b.y);
+      rahmenEl.style.display = 'block';
+      rahmenEl.style.left = x + 'px'; rahmenEl.style.top = y + 'px'; rahmenEl.style.width = w + 'px'; rahmenEl.style.height = h + 'px';
+      return { x: x / a.w, y: y / a.h, w: w / a.w, h: h / a.h };
+    };
+    wrap.addEventListener('pointerdown', function(ev){ ev.preventDefault(); start = pos(ev); try{ wrap.setPointerCapture(ev.pointerId); }catch(e){} });
+    wrap.addEventListener('pointermove', function(ev){ if(!start) return; ev.preventDefault(); zeichne(start, pos(ev)); });
+    wrap.addEventListener('pointerup', function(ev){
+      if(!start) return;
+      var r = zeichne(start, pos(ev));
+      start = null;
+      if(r.w > 0.05 && r.h > 0.02){
+        rahmen = r;
+        btnAus.disabled = false;
+        lesen(true);
+      } else { rahmenEl.style.display = 'none'; }
+    });
+    wrap.addEventListener('pointercancel', function(){ start = null; });
+  }
   if(fotoInp) fotoInp.onchange = function(){
     var datei = fotoInp.files && fotoInp.files[0];
     if(!datei) return;
     var rd = new FileReader();
     rd.onload = function(){
-      var bild = document.getElementById('kfBild');
-      bild.src = rd.result;
+      fotoDaten = rd.result; rahmen = null;
+      document.getElementById('kfBild').src = fotoDaten;
       document.getElementById('kfBildBox').style.display = 'block';
-      st0('&#9203; Lese Text aus dem Foto&hellip; (beim ersten Mal bis zu 30 Sekunden)');
-      kundeFotoBildVorbereiten(rd.result, function(canvas){
-        if(!canvas){ st0('<span style="color:#c23f12;">Foto konnte nicht gelesen werden</span>'); return; }
-        kundeFotoWorkerHolen(function(worker, fehler){
-          if(!worker){ st0('<span style="color:#c23f12;">' + fehler + ' &ndash; lange auf den Text im Foto drücken und kopieren.</span>'); return; }
-          worker.recognize(canvas).then(function(res){
-            var text = (res && res.data && res.data.text) || '';
-            feld.value = text;
-            verteilen();
-          }).catch(function(){ st0('<span style="color:#c23f12;">Texterkennung fehlgeschlagen &ndash; lange auf den Text im Foto drücken und kopieren.</span>'); });
-        });
-      });
+      if(rahmenEl) rahmenEl.style.display = 'none';
+      if(btnAus) btnAus.disabled = true;
+      st0('Jetzt mit dem Finger einen Rahmen um Name und Adresse ziehen.');
+      kundeFotoWorkerHolen(function(){});
     };
     rd.readAsDataURL(datei);
     fotoInp.value = '';
