@@ -11781,6 +11781,100 @@ function bindUmsatz(){
   });
 }
 
+// Statistik: Monatsuebersicht Rechnungen / Zahlungseingang
+var MONATE_LANG = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+function statMonateDaten(jahr){
+  var m = [];
+  for(var i = 0; i < 12; i++) m.push({ summe: 0, offen: 0, eingang: 0, anz: 0, rg: [] });
+  state.kunden.forEach(function(k){
+    if(k.geloescht) return;
+    (k.rechnungen || []).forEach(function(r){
+      var b = Number(r.betrag) || 0;
+      var d = String(r.datum || '');
+      if(parseInt(d.substring(0, 4), 10) === jahr){
+        var mi = parseInt(d.substring(5, 7), 10) - 1;
+        if(mi >= 0 && mi < 12){
+          m[mi].summe += b; m[mi].anz++;
+          if(!r.bezahlt) m[mi].offen += b;
+          m[mi].rg.push({ k: k, r: r });
+        }
+      }
+      var bd = String(r.bezahltAm || '');
+      if(r.bezahlt && parseInt(bd.substring(0, 4), 10) === jahr){
+        var bi = parseInt(bd.substring(5, 7), 10) - 1;
+        if(bi >= 0 && bi < 12) m[bi].eingang += b;
+      }
+    });
+  });
+  m.forEach(function(x){ x.rg.sort(function(a, b){ return String(a.r.datum).localeCompare(String(b.r.datum)); }); });
+  return m;
+}
+function statMonateHtml(jahr, fuerDruck){
+  var m = statMonateDaten(jahr);
+  var heute = new Date();
+  var bisMonat = jahr === heute.getFullYear() ? heute.getMonth() : 11;
+  if(jahr > heute.getFullYear()) bisMonat = -1;
+  var max = 0, sJahr = 0, sOffen = 0, sEing = 0, aktiveMonate = 0;
+  m.forEach(function(x, i){
+    if(x.summe > max) max = x.summe;
+    sJahr += x.summe; sOffen += x.offen; sEing += x.eingang;
+    if(i <= bisMonat && x.summe > 0) aktiveMonate++;
+  });
+  var schnitt = aktiveMonate ? sJahr / aktiveMonate : 0;
+  var auf = fuerDruck ? -1 : (state.statMonatAuf === undefined ? -1 : state.statMonatAuf);
+  var h = '';
+  if(fuerDruck){
+    h += '<div class="bericht-brief"><div class="pb-kopfzeile"><div class="pb-titel"><h1>Monatsübersicht ' + jahr + '</h1><div class="sub">Rechnungen und Zahlungseingang</div></div><img src="' + LOGO_DATA + '" class="pb-logo"></div>';
+    h += '<div class="pb-berichtnr">Stand: ' + fmtDate(new Date().toISOString()) + '</div>';
+  } else {
+    h += '<div class="card" style="margin-top:12px; padding:12px 13px;">';
+    h += '<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">';
+    h += '<button type="button" class="btn small secondary" data-statmonatjahr="' + (jahr - 1) + '" style="margin:0; padding:5px 11px;">&lsaquo;</button>';
+    h += '<div style="flex:1; text-align:center; font-weight:800; font-size:16px;">Monatsübersicht ' + jahr + '</div>';
+    h += '<button type="button" class="btn small secondary" data-statmonatjahr="' + (jahr + 1) + '" style="margin:0; padding:5px 11px;">&rsaquo;</button>';
+    h += '</div>';
+  }
+  h += '<div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; font-size:12px;">';
+  h += '<span style="padding:4px 9px; border-radius:999px; background:#f6f2ea;">Jahr: <b>' + eurText(sJahr) + '</b></span>';
+  h += '<span style="padding:4px 9px; border-radius:999px; background:#f6f2ea;">Ø Monat: <b>' + eurText(schnitt) + '</b></span>';
+  h += '<span style="padding:4px 9px; border-radius:999px; background:#e5f4ea; color:#1e8449;">Eingegangen: <b>' + eurText(sEing) + '</b></span>';
+  if(sOffen > 0) h += '<span style="padding:4px 9px; border-radius:999px; background:#fbe9e3; color:#c23f12;">Offen: <b>' + eurText(sOffen) + '</b></span>';
+  h += '</div>';
+  if(fuerDruck){
+    h += '<table class="pb-tabelle"><thead><tr><th>Monat</th><th>Rechnungen</th><th>Betrag</th><th>davon offen</th><th>Zahlungseingang</th></tr></thead><tbody>';
+  }
+  m.forEach(function(x, i){
+    if(i > bisMonat && x.summe === 0 && x.eingang === 0) return;
+    var breiteBez = max ? Math.round((x.summe - x.offen) / max * 100) : 0;
+    var breiteOff = max ? Math.round(x.offen / max * 100) : 0;
+    if(fuerDruck){
+      h += '<tr><td>' + MONATE_LANG[i] + '</td><td>' + x.anz + '</td><td>' + eurText(x.summe) + '</td><td>' + (x.offen ? eurText(x.offen) : '-') + '</td><td>' + (x.eingang ? eurText(x.eingang) : '-') + '</td></tr>';
+      return;
+    }
+    var istAuf = auf === i;
+    h += '<div data-statmonat="' + i + '" style="padding:7px 0; border-top:1px solid var(--line); cursor:pointer;">';
+    h += '<div style="display:flex; align-items:baseline; gap:8px;"><span style="width:78px; flex-shrink:0; font-weight:700; font-size:14px;">' + MONATE_LANG[i] + '</span>';
+    h += '<span style="flex:1; text-align:right; font-weight:800; font-size:15px;">' + (x.summe ? eurText(x.summe) : '<span class="meta">&ndash;</span>') + '</span><span class="chev" style="color:var(--muted); width:12px;">' + (x.anz ? (istAuf ? '&#9660;' : '&#9654;') : '') + '</span></div>';
+    h += '<div style="display:flex; height:8px; border-radius:4px; background:#efe8dc; margin-top:5px; overflow:hidden;"><div style="width:' + breiteBez + '%; background:#1e8449;"></div><div style="width:' + breiteOff + '%; background:#e8541f;"></div></div>';
+    h += '<div class="meta" style="margin-top:3px; font-size:12px;">' + x.anz + ' Rechnung' + (x.anz === 1 ? '' : 'en') + (x.offen ? ' &middot; <b style="color:#c23f12;">offen ' + eurText(x.offen) + '</b>' : '') + (x.eingang ? ' &middot; <span style="color:#1e8449;">eingegangen ' + eurText(x.eingang) + '</span>' : '') + '</div>';
+    if(istAuf){
+      x.rg.forEach(function(e){
+        h += '<div class="kunde-card" data-id="' + e.k.id + '" style="display:flex; gap:8px; padding:6px 0 6px 10px; border-left:3px solid ' + (e.r.bezahlt ? '#1e8449' : '#e8541f') + '; margin-top:6px; font-size:13px;"><div style="flex:1; min-width:0;"><b>' + escapeHtml(e.k.name) + '</b><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + (e.r.bezahlt ? ' &middot; bezahlt' + (e.r.bezahltAm ? ' ' + fmtDate(e.r.bezahltAm) : '') : ' &middot; <b style="color:#c23f12;">offen</b>') + '</div></div><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div>';
+      });
+    }
+    h += '</div>';
+  });
+  if(fuerDruck){
+    h += '<tr style="font-weight:700;"><td>Summe</td><td></td><td>' + eurText(sJahr) + '</td><td>' + (sOffen ? eurText(sOffen) : '-') + '</td><td>' + eurText(sEing) + '</td></tr></tbody></table>';
+    h += '<div class="meta" style="margin-top:8px;">Betrag = Rechnungen nach Rechnungsdatum. Zahlungseingang = als bezahlt markiert in diesem Monat.</div>';
+    h += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at</div></div>';
+  } else {
+    h += '<div style="display:flex; gap:12px; align-items:center; margin-top:8px; font-size:11px; color:var(--muted);"><span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#1e8449;"></span> bezahlt</span><span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#e8541f;"></span> offen</span><span style="flex:1;"></span><button type="button" class="btn small secondary" id="statMonatDruck" data-jahr="' + jahr + '" style="margin:0;">Drucken / PDF</button></div>';
+    h += '</div>';
+  }
+  return h;
+}
+
 // Statistik: beste Kunden nach Umsatz
 function statistikKundenHtml(){
   var zeit = state.statKundenZeit || 'jahr';
@@ -11811,6 +11905,7 @@ function statistikKundenHtml(){
   var gesamtOffen = mit.reduce(function(x, z){ return x + z.offen; }, 0);
   h += '<div class="statrow"><div class="stat"><div class="n">' + eurText(gesamt) + '</div><div class="l">Umsatz</div></div>';
   h += '<div class="stat"><div class="n" style="color:' + (gesamtOffen > 0 ? '#c23f12' : '#2f7a4f') + ';">' + eurText(gesamtOffen) + '</div><div class="l">Noch offen</div></div></div>';
+  h += statMonateHtml(state.statMonatJahr || (zeit === 'vorjahr' ? jahr - 1 : jahr), false);
   // Alle offenen Rechnungen (unabhängig vom Zeitraum), älteste zuerst
   var offeneListe = [];
   state.kunden.forEach(function(k){
@@ -11974,6 +12069,22 @@ function bindDynamic(){
   bindKundenCards(document);
   var lbb = document.getElementById('lagerBestellBtn');
   if(lbb) lbb.onclick = function(){ bsvDruckenOderTeilen(lagerBestelllisteHtml(), 'Bestellliste_' + kalHeuteKey() + '.pdf'); };
+  document.querySelectorAll('[data-statmonat]').forEach(function(el){
+    el.onclick = function(ev){
+      if(ev.target.closest && ev.target.closest('.kunde-card')) return;
+      var i = parseInt(el.getAttribute('data-statmonat'), 10);
+      state.statMonatAuf = state.statMonatAuf === i ? -1 : i;
+      render();
+    };
+  });
+  document.querySelectorAll('[data-statmonatjahr]').forEach(function(b){
+    b.onclick = function(){ state.statMonatJahr = parseInt(b.getAttribute('data-statmonatjahr'), 10); state.statMonatAuf = -1; render(); };
+  });
+  var smd = document.getElementById('statMonatDruck');
+  if(smd) smd.onclick = function(){
+    var j = parseInt(smd.getAttribute('data-jahr'), 10);
+    bsvDruckenOderTeilen(statMonateHtml(j, true), 'Monatsuebersicht_' + j + '.pdf');
+  };
   document.querySelectorAll('[data-rgmahnung]').forEach(function(b){
     b.onclick = function(ev){
       ev.stopPropagation();
@@ -12325,6 +12436,7 @@ function bindDynamic(){
         state.neukaufJahr = b.getAttribute('data-neukaufjahr');
       } else if(b.hasAttribute('data-statkundenzeit')){
         state.statKundenZeit = b.getAttribute('data-statkundenzeit');
+        state.statMonatJahr = null; state.statMonatAuf = -1;
       } else if(b.hasAttribute('data-statsubtab')){
         state.statSubTab = b.getAttribute('data-statsubtab');
       } else {
