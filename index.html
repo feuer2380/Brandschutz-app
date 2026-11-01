@@ -5538,11 +5538,14 @@ function kfTelefonNorm(s){
   t = t.replace(/^[\-\/ ]+|[\-\/ ]+$/g, '');
   return t;
 }
-function kundeTextZerlegen(text){
+function kundeTextZerlegen(text, ausFoto){
   var e = { name: '', vorname: '', nachname: '', strasse: '', plz: '', ort: '', telefon: '', email: '', zusatz: '', objekt: '', kundennummer: '' };
   var zeilen = String(text || '').replace(/\r/g, '').split('\n').map(function(z){
-    z = z.replace(/[|_~«»•·\[\]{}=—“”‘’"]+/g, ' ').replace(/\s+/g, ' ').trim();
-    z = z.replace(/^[^A-Za-zÄÖÜäöüß0-9+]{1,3}\s*/, '');
+    z = z.replace(/[|_~«»•·\[\]{}=—“”‘’"\\®©£€$<>]+/g, ' ').replace(/\s+/g, ' ').trim();
+    z = z.replace(/^[^A-Za-zÄÖÜäöüß0-9+]{1,4}\s*/, '').replace(/[\s\-:;,.()]+$/, '');
+    // OCR liest bei Nummern oft o statt 0
+    z = z.replace(/(^|\s)([oO]{1,2})(\d{2,})/g, function(t, a, o, zf){ return a + o.replace(/[oO]/g, '0') + zf; });
+    z = z.replace(/^[a-z](?=[A-ZÄÖÜ][a-zäöüß])/, '');
     if(/^\d+\s*jahre\b/i.test(z)) return '';
     return z;
   });
@@ -5553,17 +5556,22 @@ function kundeTextZerlegen(text){
     if(!z) return;
     var m;
     // Nur eine Beschriftung in der Zeile (Tabelle spaltenweise erkannt) -> Wert kommt spaeter
-    if(/^[A-Za-z]{0,2}\s?(stra(ss|ß|b|k|8|f)e|pl[z2]\s*[,.\/]?\s*ort|wartungsvertrag|telefon|tel\.?|e-?mail|kunde|name|firma)\s*:?$/i.test(z)){ offeneLabels.push(z.toLowerCase()); return; }
+    if(z.length <= 22 && /^[A-Za-z]{0,3}\s?(stra(ss|ß|b|k|8|f)e\S{0,2}|pl[z2e]\s*[,.\/]?\s*o[rn]\S{0,2}|wartungs\S*|telefon|tel\.?|e-?mail|kunde|name|firma)\s*:?$/i.test(z)){ offeneLabels.push(/stra/i.test(z) ? 'straße' : (/^\W*[a-z]{0,3}\s?pl/i.test(z) ? 'plz' : z.toLowerCase().replace(/^[^a-z]+/, ''))); return; }
     if(offeneLabels.length){
-      var lab = offeneLabels.shift();
-      if(/^stra/.test(lab)) z = 'Straße ' + z;
-      else if(/^plz/.test(lab)) z = 'PLZ, Ort ' + z;
-      else if(/^wartungs/.test(lab)) return;
-      else if(/^(kunde|name|firma)/.test(lab)) z = 'Name ' + z;
-      else if(/^tel/.test(lab)) z = 'Tel ' + z;
+      // Wert passend zur offenen Beschriftung zuordnen (nach Inhalt, nicht nur nach Reihenfolge)
+      for(var li = 0; li < offeneLabels.length; li++){
+        var lab = offeneLabels[li], neu = '';
+        if(/^stra/.test(lab) && /[A-Za-zÄÖÜäöüß]{3,}.*\d/.test(z) && !/^\d{4}\b/.test(z)) neu = 'Straße ' + z;
+        else if(/^pl/.test(lab) && /^\d{4}\b/.test(z)) neu = 'PLZ, Ort ' + z;
+        else if(/^tel/.test(lab) && /^[\d+(][\d \/\-()]{5,}$/.test(z)) neu = 'Tel ' + z;
+        else if(/^(kunde|name|firma)/.test(lab) && /[A-Za-zÄÖÜäöüß]{3,}/.test(z)) neu = 'Name ' + z;
+        else if(/^wartungs/.test(lab) && /wartung/i.test(z)){ offeneLabels.splice(li, 1); return; }
+        if(neu){ offeneLabels.splice(li, 1); z = neu; break; }
+      }
     }
     if((m = z.match(/^(kunden-?\s?n(umme)?r\.?|kd\.?-?\s?nr\.?|kundennr\.?)\s*:?\s*([A-Za-z0-9\-\/]+)/i)) && !e.kundennummer){ e.kundennummer = m[3]; return; }
     if((m = z.match(/^[A-Za-z]{0,2}\s?stra(ss|ß|b|k|8|f)e\s*:?\s+(.+)$/i)) && !e.strasse){
+      if(!/[A-Za-zÄÖÜäöüß]{3,}/.test(m[2])){ offeneLabels.push('straße'); return; }
       var knr = m[2].match(/\s+(0\d{3,}|\d{5,7})\W*$/);
       if(knr && !e.kundennummer) e.kundennummer = knr[1];
       e.strasse = m[2].replace(/\s+(0\d{3,}|\d{5,7})\W*$/, '').trim();
@@ -5573,8 +5581,9 @@ function kundeTextZerlegen(text){
     // Alte Kundennummer aus dem Ausdruck steht oft allein in einer Zelle (z.B. 00014)
     if(/^0\d{3,6}$/.test(z) && !e.kundennummer){ e.kundennummer = z; return; }
     if((m = z.match(/^(adresse|anschrift)\s*:?\s+(.+)$/i)) && !e.strasse && !/\d{4}\s+\S/.test(m[2])){ e.strasse = m[2].trim(); return; }
-    if((m = z.match(/^[A-Za-z]{0,2}\s?pl[z2]\s*[,.\/]?\s*(ort)?\s*:?\s*(\d{4})\s*,?\s*([A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ][a-zäöüß]+)*)/i)) && !e.plz){ e.plz = m[2]; e.ort = m[3].trim(); return; }
+    if((m = z.match(/^[A-Za-z]{0,3}\s?pl[z2e]\s*[,.\/]?\s*(o[rn]\S?)?\s*:?\s*(\d{4})\s*,?\s*([A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ][a-zäöüß]+)*)/i)) && !e.plz){ e.plz = m[2]; e.ort = m[3].trim(); return; }
     if((m = z.match(/^(kunde|name|firma)\s*:?\s+(.+)$/i)) && !e.name){ e.name = m[2].trim(); return; }
+    if(!e.plz && (m = z.match(/^(\d{4})\s*,?\s+([A-ZÄÖÜ][a-zäöüß]+(?:[ \-][A-ZÄÖÜ][a-zäöüß]+)*)/))){ e.plz = m[1]; e.ort = m[2]; return; }
     // Titelzeile aus dem alten Programm: "Kundenname - Strasse 12"
     if(!e.name && !/objekt\s*:/i.test(z) && (m = z.match(/^(.{4,}?)\s+[\-–]\s+([A-Za-zÄÖÜäöüß .]{3,}\d.*)$/)) && !/^\d/.test(m[1])){ e.name = m[1].trim(); return; }
     if((m = z.match(/^(.+?)\s+objekt\s*:\s*(.+)$/i)) && !e.objekt){
@@ -5656,6 +5665,11 @@ function kundeTextZerlegen(text){
     if(/^(tel|fax|mobil|e-?mail|web|internet)\b/i.test(t)) continue;
     var buchst = (t.match(/[A-Za-zÄÖÜäöüß]/g) || []).length;
     if(buchst < 3 || buchst < t.length * 0.5) continue;
+    // Texterkennungs-Muell aussortieren: mind. ein echtes Wort mit 5+ Buchstaben, keine Objekt-Reste
+    if(!/[A-Za-zÄÖÜäöüß]{4,}/.test(t) || /b[ji]ekt/i.test(t)) continue;
+    var woerter = t.split(' '), gut = 0;
+    for(var wi = 0; wi < woerter.length; wi++){ if(/^[A-ZÄÖÜa-zäöüß][a-zäöüß.\-&]{2,}$|^[A-ZÄÖÜ]{2,6}$|^(GmbH|e\.U\.|Co|\d{1,4})$/.test(woerter[wi])) gut++; }
+    if(gut < woerter.length * 0.75 || !/^[A-ZÄÖÜ(]/.test(t)) continue;
     rest2.push(t);
   }
   var firma = '';
@@ -5674,7 +5688,9 @@ function kundeTextZerlegen(text){
     e.vorname = pt.join(' ');
   }
   if(firma && person && firma.indexOf(' ') < 0) firma = '';
-  e.name = vorName || firma || personZeile || rest2[0] || '';
+  // Bei Texterkennung aus dem Foto lieber leer lassen als Unsinn eintragen
+  e.name = vorName || firma || (ausFoto ? '' : (personZeile || rest2[0] || ''));
+  if(ausFoto && !vorName && !firma){ e.vorname = ''; e.nachname = ''; }
   return e;
 }
 
@@ -5711,6 +5727,54 @@ function kundeFotoWorkerHolen(cb){
   }).then(function(w){ kundeFotoOcrWorker = w; cb(w, null); })
     .catch(function(err){ cb(null, 'Texterkennung konnte nicht starten: ' + (err && err.message ? err.message : String(err))); });
 }
+// Schwarz-Weiss mit ortsabhaengiger Schwelle (gegen Schatten) und Entfernen von Tabellenlinien
+function kundeFotoSchwarzWeiss(ctx, w, h, istAusschnitt){
+  var d = ctx.getImageData(0, 0, w, h), px = d.data, n = w * h, i, x, y;
+  var g = new Uint8Array(n);
+  for(i = 0; i < n; i++) g[i] = (px[i * 4] * 299 + px[i * 4 + 1] * 587 + px[i * 4 + 2] * 114) / 1000;
+  // Integralbild fuer den lokalen Mittelwert
+  var W1 = w + 1, integ = new Float64Array(W1 * (h + 1));
+  for(y = 0; y < h; y++){
+    var zeile = 0;
+    for(x = 0; x < w; x++){ zeile += g[y * w + x]; integ[(y + 1) * W1 + x + 1] = integ[y * W1 + x + 1] + zeile; }
+  }
+  var r = istAusschnitt ? Math.max(8, Math.min(50, Math.round(h / 24))) : 20;
+  var dunkel = new Uint8Array(n);
+  for(y = 0; y < h; y++){
+    var y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+    for(x = 0; x < w; x++){
+      var x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+      var summe = integ[y1 * W1 + x1] - integ[y0 * W1 + x1] - integ[y1 * W1 + x0] + integ[y0 * W1 + x0];
+      var mittel = summe / ((y1 - y0) * (x1 - x0));
+      if(g[y * w + x] < mittel - 12) dunkel[y * w + x] = 1;
+    }
+  }
+  // lange waagrechte und senkrechte Striche = Tabellenlinien -> weg
+  var linie = new Uint8Array(n);
+  var minH = Math.round(w * 0.12), minV = Math.round(h * (istAusschnitt ? 0.25 : 0.08));
+  var lauf, k, dd;
+  for(y = 0; y < h; y++){
+    lauf = 0;
+    for(x = 0; x <= w; x++){
+      if(x < w && dunkel[y * w + x]){ lauf++; continue; }
+      if(lauf >= minH){ for(k = x - lauf; k < x; k++){ for(dd = -2; dd <= 2; dd++){ if(y + dd >= 0 && y + dd < h) linie[(y + dd) * w + k] = 1; } } }
+      lauf = 0;
+    }
+  }
+  for(x = 0; x < w; x++){
+    lauf = 0;
+    for(y = 0; y <= h; y++){
+      if(y < h && dunkel[y * w + x]){ lauf++; continue; }
+      if(lauf >= minV){ for(k = y - lauf; k < y; k++){ for(dd = -2; dd <= 2; dd++){ if(x + dd >= 0 && x + dd < w) linie[k * w + x + dd] = 1; } } }
+      lauf = 0;
+    }
+  }
+  for(i = 0; i < n; i++){
+    var v = (dunkel[i] && !linie[i]) ? 0 : 255;
+    px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = v; px[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(d, 0, 0);
+}
 function kundeFotoBildVorbereiten(dataUrl, rahmen, cb){
   var img = new Image();
   img.onload = function(){
@@ -5729,16 +5793,7 @@ function kundeFotoBildVorbereiten(dataUrl, rahmen, cb){
     var ctx = c.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
-    try{
-      var d = ctx.getImageData(0, 0, c.width, c.height), px = d.data;
-      for(var i = 0; i < px.length; i += 4){
-        var g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-        g = (g - 128) * 1.25 + 132;
-        if(g < 0) g = 0; if(g > 255) g = 255;
-        px[i] = px[i + 1] = px[i + 2] = g;
-      }
-      ctx.putImageData(d, 0, 0);
-    }catch(e){}
+    try{ kundeFotoSchwarzWeiss(ctx, c.width, c.height, !!rahmen); }catch(e){}
     cb(c);
   };
   img.onerror = function(){ cb(null); };
@@ -5750,11 +5805,12 @@ function kundeScanBinden(nurLeere){
   var zuordnung = { kundennummer: 'fKundennr', name: 'fName', vorname: 'fVorname', nachname: 'fNachname', objekt: 'fObjekt', zusatz: 'fZusatz', strasse: 'fStrasse', plz: 'fPlz', ort: 'fOrt', telefon: 'fTelefon', email: 'fEmail' };
   var zuletzt = {};
   var timer = null;
+  var ausFotoText = false;
   var verteilen = function(){
     var txt = feld.value;
     var st = document.getElementById('kfStatus');
     if(!txt.trim()){ st.innerHTML = ''; return; }
-    var e = kundeTextZerlegen(txt);
+    var e = kundeTextZerlegen(txt, ausFotoText);
     var n = 0;
     for(var key in zuordnung){
       var inp = document.getElementById(zuordnung[key]);
@@ -5769,14 +5825,14 @@ function kundeScanBinden(nurLeere){
     }
     st.innerHTML = n ? '<span style="color:#1e8449;">&#10003; ' + n + ' Feld' + (n === 1 ? '' : 'er') + ' ausgefüllt (gelb) &ndash; bitte prüfen</span>' + (n < 3 ? '<br><span style="color:#8a5a00;">Wenig erkannt &ndash; lange auf den Text im Foto drücken, kopieren und &bdquo;Einsetzen&ldquo;.</span>' : '') : '<span style="color:#c23f12;">Nichts erkannt &ndash; Foto gerade von oben und hell machen, oder lange auf den Text im Foto drücken &rarr; Kopieren &rarr; Einsetzen.</span>';
   };
-  feld.oninput = function(){ clearTimeout(timer); timer = setTimeout(verteilen, 350); };
+  feld.oninput = function(){ ausFotoText = false; clearTimeout(timer); timer = setTimeout(verteilen, 350); };
   var st0 = function(t){ document.getElementById('kfStatus').innerHTML = t; };
   var clipBtn = document.getElementById('kfClip');
   if(clipBtn) clipBtn.onclick = function(){
     if(!navigator.clipboard || !navigator.clipboard.readText){ st0('Bitte unten bei &bdquo;Erkannter Text&ldquo; lange tippen &rarr; Einsetzen'); return; }
     navigator.clipboard.readText().then(function(t){
       if(!t || !t.trim()){ st0('<span style="color:#c23f12;">Zwischenablage ist leer &ndash; zuerst Text kopieren</span>'); return; }
-      feld.value = t; verteilen();
+      feld.value = t; ausFotoText = false; verteilen();
     }).catch(function(){ st0('<span style="color:#c23f12;">Einsetzen nicht erlaubt &ndash; bitte unten bei &bdquo;Erkannter Text&ldquo; lange tippen &rarr; Einsetzen</span>'); });
   };
   var fotoInp = document.getElementById('kfFoto');
@@ -5788,11 +5844,18 @@ function kundeScanBinden(nurLeere){
       if(!canvas){ st0('<span style="color:#c23f12;">Foto konnte nicht gelesen werden</span>'); return; }
       kundeFotoWorkerHolen(function(worker, fehler){
         if(!worker){ st0('<span style="color:#c23f12;">' + fehler + '</span>'); return; }
-        worker.setParameters({ tessedit_pageseg_mode: mitRahmen ? '6' : '3' }).then(function(){
+        // zwei Durchgaenge: "verstreuter Text" (gut fuer Tabellen) und "Textblock"; beide zusammen auswerten
+        var text1 = '';
+        worker.setParameters({ tessedit_pageseg_mode: '11' }).then(function(){
           return worker.recognize(canvas);
         }).then(function(res){
-          feld.value = (res && res.data && res.data.text) || '';
-          // bei neuem Lesevorgang die vorher vom Scan befuellten Felder neu setzen lassen
+          text1 = (res && res.data && res.data.text) || '';
+          return worker.setParameters({ tessedit_pageseg_mode: mitRahmen ? '6' : '3' });
+        }).then(function(){
+          return worker.recognize(canvas);
+        }).then(function(res){
+          feld.value = text1 + '\n' + ((res && res.data && res.data.text) || '');
+          ausFotoText = true;
           verteilen();
         }).catch(function(){ st0('<span style="color:#c23f12;">Texterkennung fehlgeschlagen</span>'); });
       });
