@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-02 12:45';
-var APP_VERSION_TEXT = '02.11. 12:45';
+var APP_VERSION = '2026-11-02 12:55';
+var APP_VERSION_TEXT = '02.11. 12:55';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -3367,6 +3367,7 @@ var MITARBEITER_LISTE = [
   { name: 'Prominzer Tobias', pin: '8277' },
   { name: 'Mayerhofer Tobias', pin: '8278' },
   { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true, statistik: true },
+  { name: 'Henke Alexander', pin: '8281' },
   { name: 'Harris Sandra', pin: '8280', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
@@ -9507,7 +9508,7 @@ function kalHeuteKey(){
   var d = new Date();
   return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
 }
-var KAL_FARBEN = { 'Janiba Wolfgang': '#1d5fa8', 'Janiba Wolfgang sen.': '#2f7a4f', 'Prominzer Tobias': '#d9731a', 'Mayerhofer Tobias': '#7b3fa0', 'Holakovsky Manuela': '#c2185b', 'Harris Sandra': '#00897b' };
+var KAL_FARBEN = { 'Janiba Wolfgang': '#1d5fa8', 'Janiba Wolfgang sen.': '#2f7a4f', 'Prominzer Tobias': '#d9731a', 'Mayerhofer Tobias': '#7b3fa0', 'Holakovsky Manuela': '#c2185b', 'Henke Alexander': '#6d4c41', 'Harris Sandra': '#00897b' };
 function kalFarbe(name){
   if(name === 'alle') return '#555555';
   if(!name) return '#9a9a9a';
