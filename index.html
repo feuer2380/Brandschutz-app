@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-02 09:15';
-var APP_VERSION_TEXT = '02.11. 09:15';
+var APP_VERSION = '2026-11-02 12:45';
+var APP_VERSION_TEXT = '02.11. 12:45';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -9069,8 +9069,18 @@ function fbFmt(n, stellen){
   teile[0] = teile[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return teile.join(',');
 }
-function fbAktuellesFahrzeug(){
+// Fahrzeuge, die der angemeldete Benutzer sehen darf:
+// Mitarbeiter (ohne Vollzugriff) mit fest zugeteiltem Fahrzeug sehen nur dieses.
+function fbSichtbareFahrzeuge(){
   var liste = (state.fahrzeuge || []).filter(function(f){ return !f.inaktiv; });
+  if(state.rolle === 'mitarbeiter' && !istVollsicht()){
+    var meine = liste.filter(function(f){ return f.zugeteilt && f.zugeteilt === state.mitarbeiterName; });
+    if(meine.length) return meine;
+  }
+  return liste;
+}
+function fbAktuellesFahrzeug(){
+  var liste = fbSichtbareFahrzeuge();
   var f = liste.filter(function(x){ return x.id === state.fbFahrzeug; })[0];
   if(!f && liste.length){ f = liste[0]; state.fbFahrzeug = f.id; }
   return f || null;
@@ -9082,6 +9092,31 @@ function fbFahrtenVon(fzId){
     if(a.kmStart !== null && a.kmStart !== undefined && b.kmStart !== null && b.kmStart !== undefined && a.kmStart !== b.kmStart) return a.kmStart - b.kmStart;
     return String(a.erstelltAm || '') < String(b.erstelltAm || '') ? -1 : 1;
   });
+}
+// Km-Stand Ende der Fahrt direkt VOR einem Zeitpunkt (fuer nachtraeglich eingetragene Fahrten)
+function fbKmVor(fzId, datum, zeit, ohneId){
+  var key = (datum || '') + ' ' + (zeit || '99:99');
+  var km = null;
+  fbFahrtenVon(fzId).forEach(function(x){
+    if(x.id === ohneId) return;
+    var k2 = (x.datum || '') + ' ' + (x.abfahrt || '00:00');
+    if(k2 <= key && x.kmEnde !== null && x.kmEnde !== undefined) km = x.kmEnde;
+  });
+  return km;
+}
+// Nach dem Speichern: Start der naechsten Fahrt = Ende dieser Fahrt (Kilometer-Kette ohne Luecke)
+function fbKetteNachziehen(f){
+  if(f.kmEnde === null || f.kmEnde === undefined) return;
+  var l = fbFahrtenVon(f.fahrzeugId);
+  var i = -1;
+  for(var j = 0; j < l.length; j++){ if(l[j].id === f.id){ i = j; break; } }
+  if(i < 0 || i + 1 >= l.length) return;
+  var n = l[i + 1];
+  if(n.kmStart === f.kmEnde) return;
+  // nur anpassen, wenn die naechste Fahrt dadurch stimmig bleibt (Ende nicht kleiner als Start) - sonst zeigt die Liste eine Warnung
+  if(n.kmEnde !== null && n.kmEnde !== undefined && n.kmEnde < f.kmEnde) return;
+  n.kmStart = f.kmEnde;
+  dbPut('fahrten', n, function(){});
 }
 function fbLetzterKm(fzId){
   var l = fbFahrtenVon(fzId), km = null;
@@ -9132,17 +9167,21 @@ function renderFahrtenbuch(){
   if(!state.fbMonat) state.fbMonat = aktuell;
   var mon = state.fbMonat;
   var fz = fbAktuellesFahrzeug();
-  var alleFz = (state.fahrzeuge || []).filter(function(f){ return !f.inaktiv; });
-  html += '<div class="row" style="align-items:center; margin-bottom:10px;"><div class="section-title" style="margin:0;">Fahrtenbuch</div><button class="btn small secondary" id="fbFzBtn">Fahrzeuge</button></div>';
+  var alleFz = fbSichtbareFahrzeuge();
+  html += '<div class="row" style="align-items:center; margin-bottom:10px;"><div class="section-title" style="margin:0;">Fahrtenbuch</div>' + (istVollsicht() ? '<button class="btn small secondary" id="fbFzBtn">Fahrzeuge</button>' : '') + '</div>';
   if(!alleFz.length){
     html += '<div class="empty">Noch kein Fahrzeug angelegt.<br>Tippe auf „Fahrzeuge" und lege dein erstes Auto an.</div>';
     return html;
   }
+  if(alleFz.length === 1){
+    html += '<div class="card" style="padding:10px 13px; margin-bottom:10px;"><b>' + escapeHtml(alleFz[0].name) + '</b>' + (alleFz[0].kennzeichen ? ' (' + escapeHtml(alleFz[0].kennzeichen) + ')' : '') + (alleFz[0].zugeteilt ? '<div class="meta">Fest zugeteilt: ' + escapeHtml(zustaendigKurz(alleFz[0].zugeteilt)) + '</div>' : '') + '</div>';
+  } else {
   html += '<select id="fbFzSel" style="margin-bottom:10px;">';
   alleFz.forEach(function(f){
-    html += '<option value="' + escapeHtml(f.id) + '"' + (fz && f.id === fz.id ? ' selected' : '') + '>' + escapeHtml(f.name) + (f.kennzeichen ? ' (' + escapeHtml(f.kennzeichen) + ')' : '') + '</option>';
+    html += '<option value="' + escapeHtml(f.id) + '"' + (fz && f.id === fz.id ? ' selected' : '') + '>' + escapeHtml(f.name) + (f.kennzeichen ? ' (' + escapeHtml(f.kennzeichen) + ')' : '') + (f.zugeteilt ? ' – ' + escapeHtml(zustaendigKurz(f.zugeteilt)) : '') + '</option>';
   });
   html += '</select>';
+  }
   html += '<div class="row" style="align-items:center; margin-bottom:10px;"><button class="btn small secondary" id="fbZurueck">&lsaquo;</button><b>' + aufgMonatText(mon) + '</b><button class="btn small secondary" id="fbVor">&rsaquo;</button></div>';
   var liste = fbMonatListe(fz.id, mon);
   var sm = fbSummen(liste);
@@ -9155,6 +9194,9 @@ function renderFahrtenbuch(){
     html += '<div class="empty">Keine Fahrten in diesem Monat</div>';
   } else {
     var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+    // Ende der jeweils vorherigen Fahrt (ueber alle Monate) fuer die Lueckenpruefung
+    var vorEnde = {}, letztesEnde = null;
+    fbFahrtenVon(fz.id).forEach(function(x){ vorEnde[x.id] = letztesEnde; if(x.kmEnde !== null && x.kmEnde !== undefined) letztesEnde = x.kmEnde; });
     liste.slice().reverse().forEach(function(f){
       var d = new Date(f.datum + 'T12:00:00');
       var strecke = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
@@ -9164,6 +9206,10 @@ function renderFahrtenbuch(){
       var zt = fbZeileText(f);
       if(zt) html += '<div class="meta" style="font-size:14px; color:var(--ink);">' + fbHtmlText(zt) + '</div>';
       html += '<div class="meta">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + ' km' + (f.fahrer ? ' &middot; ' + escapeHtml(f.fahrer) : '') + '</div>';
+      var ve = vorEnde[f.id];
+      if(ve !== null && ve !== undefined && f.kmStart !== null && f.kmStart !== undefined && f.kmStart !== ve){
+        html += '<div class="meta" style="color:#c23f12; font-weight:700;">&#9888; Start passt nicht zum Ende der Fahrt davor (' + fbFmt(ve) + ' km) <span class="fbKetteFix" data-fid="' + escapeHtml(f.id) + '" data-km="' + ve + '" style="text-decoration:underline; cursor:pointer;">korrigieren</span></div>';
+      }
       var kg = fz && fz.kmGeld ? fbKmGeld(f, fz) : 0;
       if(kg) html += '<div class="meta" style="color:#1e8449; font-weight:700;">Kilometergeld: ' + fbFmt(kg, 2) + ' &euro;</div>';
       if(f.liter || f.euro) html += '<div class="meta">&#9981; getankt: ' + (f.liter ? fbFmt(f.liter, 1) + ' l' : '') + (f.liter && f.euro ? ' &middot; ' : '') + (f.euro ? fbFmt(f.euro, 2) + ' &euro;' : '') + '</div>';
@@ -9189,6 +9235,20 @@ function bindFahrtenbuch(){
     if(!fz) return;
     bsvDruckenOderTeilen(buildFahrtenbuchHtml(fz, state.fbMonat), 'Fahrtenbuch_' + (fz.kennzeichen || fz.name).replace(/[^A-Za-z0-9]+/g, '_') + '_' + state.fbMonat + '.pdf');
   };
+  document.querySelectorAll('.fbKetteFix').forEach(function(el){
+    el.onclick = function(ev){
+      ev.stopPropagation();
+      var f = (state.fahrten || []).filter(function(x){ return x.id === el.getAttribute('data-fid'); })[0];
+      if(!f) return;
+      var km = parseFloat(el.getAttribute('data-km'));
+      customConfirm('Km-Stand Start dieser Fahrt auf ' + fbFmt(km) + ' setzen (Ende der Fahrt davor)?', function(){
+        var strecke = (f.kmEnde !== null && f.kmEnde !== undefined && f.kmStart !== null && f.kmStart !== undefined) ? f.kmEnde - f.kmStart : null;
+        f.kmStart = km;
+        if(f.kmEnde !== null && f.kmEnde !== undefined && f.kmEnde < km) f.kmEnde = (strecke !== null ? km + strecke : null);
+        dbPut('fahrten', f, function(){ fbKetteNachziehen(f); render(); toast('Km-Stand korrigiert'); });
+      });
+    };
+  });
   document.querySelectorAll('[data-fbedit]').forEach(function(c){
     c.onclick = function(){ modalFahrt(c.getAttribute('data-fbedit')); };
   });
@@ -9199,6 +9259,9 @@ function modalFahrzeuge(){
   if(!liste.length) html += '<div class="meta">Noch kein Fahrzeug.</div>';
   liste.forEach(function(f){
     html += '<div style="padding:8px 0; border-bottom:1px solid var(--line);"><div class="row"><div><b>' + escapeHtml(f.name) + '</b><div class="meta">' + escapeHtml(f.kennzeichen || '') + '</div></div><button class="btn small secondary" data-fzdel="' + escapeHtml(f.id) + '">Entfernen</button></div>';
+    html += '<div style="display:flex; align-items:center; gap:8px; margin-top:8px;"><span class="meta" style="flex-shrink:0;">Fest zugeteilt an</span><select data-fzzuteil="' + escapeHtml(f.id) + '" style="flex:1; min-width:0; margin:0;"><option value="">&ndash; alle dürfen fahren &ndash;</option>';
+    zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (f.zugeteilt === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
+    html += '</select></div>';
     html += '<label style="display:flex; align-items:center; gap:10px; margin-top:8px; font-size:14px; color:var(--ink);"><input type="checkbox" data-fzkmgeld="' + escapeHtml(f.id) + '"' + (f.kmGeld ? ' checked' : '') + ' style="width:22px; height:22px; margin:0;"> Kilometergeld berechnen (Privatauto)</label>';
     html += '<div style="display:' + (f.kmGeld ? 'flex' : 'none') + '; align-items:center; gap:8px; margin-top:6px;" id="fzSatzBox_' + escapeHtml(f.id) + '"><span class="meta">Satz &euro;/km</span><input type="text" inputmode="decimal" data-fzsatz="' + escapeHtml(f.id) + '" value="' + fbFmt(Number(f.kmGeldSatz) || KMGELD_STANDARD, 2) + '" style="width:90px; margin:0;"></div></div>';
   });
@@ -9218,6 +9281,15 @@ function modalFahrzeuge(){
       closeModal(); render();
     });
   };
+  document.querySelectorAll('[data-fzzuteil]').forEach(function(sel){
+    sel.onchange = function(){
+      var id = sel.getAttribute('data-fzzuteil');
+      var f = (state.fahrzeuge || []).filter(function(x){ return x.id === id; })[0];
+      if(!f) return;
+      f.zugeteilt = sel.value || null;
+      dbPut('fahrzeuge', f, function(){ toast(f.zugeteilt ? (f.name + ' ist jetzt ' + zustaendigKurz(f.zugeteilt) + ' zugeteilt') : 'Zuteilung entfernt'); render(); });
+    };
+  });
   document.querySelectorAll('[data-fzkmgeld]').forEach(function(c){
     c.onchange = function(){
       var id = c.getAttribute('data-fzkmgeld');
@@ -9270,7 +9342,8 @@ function modalFahrt(fahrtId){
   html += '<div style="display:flex; gap:8px;"><div style="flex:1 1 0; min-width:0;"><label>Abfahrt</label><input type="time" id="ftAb" value="' + escapeHtml(v.abfahrt || '') + '"></div><div style="flex:1 1 0; min-width:0;"><label>Ende</label><input type="time" id="ftEnde" value="' + escapeHtml(v.ende || '') + '"></div></div>';
   html += '<div class="row" style="gap:8px; margin-top:4px;"><button type="button" class="btn small secondary" id="ftAbJetzt">Abfahrt = jetzt</button><button type="button" class="btn small secondary" id="ftEndeJetzt">Ende = jetzt</button></div>';
   html += '<div style="display:flex; gap:8px;"><div style="flex:1 1 0; min-width:0;"><label>Km-Stand Start</label><input type="number" inputmode="numeric" id="ftKmS" value="' + (v.kmStart !== null && v.kmStart !== undefined ? v.kmStart : '') + '"></div><div style="flex:1 1 0; min-width:0;"><label>Km-Stand Ende</label><input type="number" inputmode="numeric" id="ftKmE" value="' + (v.kmEnde !== null && v.kmEnde !== undefined ? v.kmEnde : '') + '"></div></div>';
-  html += '<div class="meta" id="ftStrecke" style="margin-top:4px;"></div>';
+  html += '<div style="display:flex; align-items:center; gap:8px; margin-top:-2px;"><span class="meta" style="flex-shrink:0;">oder gefahrene km:</span><input type="number" inputmode="numeric" id="ftKmDiff" placeholder="z.B. 62" style="flex:1; min-width:0; margin:0;"></div>';
+  html += '<div class="meta" id="ftStrecke" style="margin-top:6px;"></div>';
   var ftKundeText = fbKundeName(v);
   html += '<label>Kunde (optional &ndash; aus der Liste wählen oder neuen Namen eintippen)</label><input type="text" id="ftKunde" list="ftKundenListe" autocomplete="off" placeholder="Kundenname" value="' + escapeHtml(ftKundeText) + '">';
   html += '<datalist id="ftKundenListe">';
@@ -9290,8 +9363,32 @@ function modalFahrt(fahrtId){
     if(a !== null && b !== null) el.innerHTML = b >= a ? 'Strecke: <b>' + fbFmt(b - a) + ' km</b>' + (satzM ? (ftPrivat ? ' &middot; <span style="color:#7b3fa0;">privat &ndash; kein Kilometergeld</span>' : ' &middot; <b style="color:#1e8449;">Kilometergeld ' + fbFmt(Math.round((b - a) * satzM * 100) / 100, 2) + ' &euro;</b>') : '') : '<span style="color:#c23f12;">Ende-Stand ist kleiner als Start-Stand</span>';
     else el.innerHTML = '';
   };
-  document.getElementById('ftKmS').oninput = strecke;
-  document.getElementById('ftKmE').oninput = strecke;
+  var kmSHand = !!f;
+  var diffSetzen = function(){
+    var a = fbZahl(document.getElementById('ftKmS').value), b = fbZahl(document.getElementById('ftKmE').value);
+    document.getElementById('ftKmDiff').value = (a !== null && b !== null && b >= a) ? (b - a) : '';
+  };
+  document.getElementById('ftKmS').oninput = function(){ kmSHand = true; var d = fbZahl(document.getElementById('ftKmDiff').value), a = fbZahl(document.getElementById('ftKmS').value); if(d !== null && a !== null) document.getElementById('ftKmE').value = a + d; strecke(); };
+  document.getElementById('ftKmE').oninput = function(){ diffSetzen(); strecke(); };
+  document.getElementById('ftKmDiff').oninput = function(){
+    var a = fbZahl(document.getElementById('ftKmS').value), d = fbZahl(document.getElementById('ftKmDiff').value);
+    document.getElementById('ftKmE').value = (a !== null && d !== null) ? (a + d) : '';
+    strecke();
+  };
+  // Start automatisch an Datum/Uhrzeit anpassen (Ende der Fahrt davor), solange nicht von Hand geaendert
+  var startNachDatum = function(){
+    if(kmSHand) return;
+    var km = fbKmVor(fz.id, document.getElementById('ftDatum').value, document.getElementById('ftAb').value, f ? f.id : null);
+    if(km !== null){
+      document.getElementById('ftKmS').value = km;
+      var d = fbZahl(document.getElementById('ftKmDiff').value);
+      if(d !== null) document.getElementById('ftKmE').value = km + d;
+    }
+    strecke();
+  };
+  document.getElementById('ftDatum').addEventListener('change', startNachDatum);
+  document.getElementById('ftAb').addEventListener('change', startNachDatum);
+  diffSetzen();
   strecke();
   document.querySelectorAll('.ftArtBtn').forEach(function(b){
     b.onclick = function(){
@@ -9326,6 +9423,7 @@ function modalFahrt(fahrtId){
       if(!state.fahrten) state.fahrten = [];
       state.fahrten = state.fahrten.filter(function(x){ return x.id !== neu.id; });
       state.fahrten.push(neu);
+      fbKetteNachziehen(neu);
       state.fbMonat = datum.substring(0, 7);
       closeModal(); render();
     });
