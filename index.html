@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-01 21:30';
-var APP_VERSION_TEXT = '01.11. 21:30';
+var APP_VERSION = '2026-11-02 09:15';
+var APP_VERSION_TEXT = '02.11. 09:15';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -128,6 +128,8 @@ try {
     width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:8px;
     font-size:15px; font-family:inherit; background:#fff; color:var(--ink); margin-bottom:10px;
   }
+  input[type=date],input[type=time]{-webkit-appearance:none; appearance:none; min-width:0; max-width:100%; box-sizing:border-box; min-height:44px;}
+  input::-webkit-date-and-time-value{text-align:left;}
   label{font-size:12px; color:var(--muted); display:block; margin-bottom:4px; margin-top:2px;}
   .section-title{
     font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
@@ -9101,14 +9103,28 @@ function fbHtmlText(t){ return escapeHtml(t || '').replace(/\n/g, '<br>'); }
 function fbMonatListe(fzId, monKey){
   return fbFahrtenVon(fzId).filter(function(x){ return (x.datum || '').substring(0, 7) === monKey; });
 }
+// Kilometergeld (amtlich 0,50 EUR/km fuer PKW) - nur fuer Fahrzeuge mit Kilometergeld und nur dienstliche Fahrten
+var KMGELD_STANDARD = 0.50;
+function fbFahrzeugVon(f){ return (state.fahrzeuge || []).filter(function(x){ return x.id === f.fahrzeugId; })[0] || null; }
+function fbKmGeldSatz(fz){ return (fz && fz.kmGeld) ? (Number(fz.kmGeldSatz) || KMGELD_STANDARD) : 0; }
+function fbKmGeld(f, fz){
+  fz = fz || fbFahrzeugVon(f);
+  var satz = fbKmGeldSatz(fz);
+  if(!satz || f.privat) return 0;
+  if(f.kmStart === null || f.kmStart === undefined || f.kmEnde === null || f.kmEnde === undefined || f.kmEnde < f.kmStart) return 0;
+  return Math.round((f.kmEnde - f.kmStart) * satz * 100) / 100;
+}
 function fbSummen(liste){
-  var km = 0, liter = 0, euro = 0;
+  var km = 0, liter = 0, euro = 0, kmPrivat = 0, anzPrivat = 0;
   liste.forEach(function(x){
-    if(x.kmStart !== null && x.kmStart !== undefined && x.kmEnde !== null && x.kmEnde !== undefined) km += (x.kmEnde - x.kmStart);
+    if(x.privat) anzPrivat++;
+    if(x.kmStart !== null && x.kmStart !== undefined && x.kmEnde !== null && x.kmEnde !== undefined){ km += (x.kmEnde - x.kmStart); if(x.privat) kmPrivat += (x.kmEnde - x.kmStart); }
     if(x.liter) liter += x.liter;
     if(x.euro) euro += x.euro;
   });
-  return { km: km, liter: liter, euro: euro };
+  var kmGeld = 0;
+  liste.forEach(function(x){ kmGeld += fbKmGeld(x); });
+  return { km: km, liter: liter, euro: euro, kmPrivat: kmPrivat, kmDienst: km - kmPrivat, anzPrivat: anzPrivat, kmGeld: Math.round(kmGeld * 100) / 100 };
 }
 function renderFahrtenbuch(){
   var html = '';
@@ -9132,7 +9148,8 @@ function renderFahrtenbuch(){
   var sm = fbSummen(liste);
   var letzter = fbLetzterKm(fz.id);
   html += '<div class="card"><div class="meta">Kilometerstand aktuell: <b>' + (letzter !== null ? fbFmt(letzter) + ' km' : 'noch keiner') + '</b></div>';
-  html += '<div class="meta">Dieser Monat: <b>' + fbFmt(sm.km) + ' km</b> &middot; getankt: <b>' + fbFmt(sm.liter, 1) + ' l</b>' + (sm.euro ? ' &middot; <b>' + fbFmt(sm.euro, 2) + ' &euro;</b>' : '') + '</div>';
+  html += '<div class="meta">Dieser Monat: <b>' + fbFmt(sm.km) + ' km</b>' + (sm.kmPrivat ? ' (dienstlich ' + fbFmt(sm.kmDienst) + ' &middot; <b style="color:#7b3fa0;">privat ' + fbFmt(sm.kmPrivat) + ' km</b>)' : '') + ' &middot; getankt: <b>' + fbFmt(sm.liter, 1) + ' l</b>' + (sm.euro ? ' &middot; <b>' + fbFmt(sm.euro, 2) + ' &euro;</b>' : '') + '</div>';
+  if(fz && fz.kmGeld) html += '<div style="margin-top:8px; padding:10px 12px; border-radius:10px; background:#e5f4ea; color:#1e8449; display:flex; justify-content:space-between; align-items:center;"><span>Kilometergeld ' + aufgMonatText(mon) + '<br><span style="font-size:12px;">' + fbFmt(sm.kmDienst) + ' km dienstlich &times; ' + fbFmt(fbKmGeldSatz(fz), 2) + ' &euro;</span></span><b style="font-size:20px;">' + fbFmt(sm.kmGeld, 2) + ' &euro;</b></div>';
   html += '<div style="display:flex; gap:8px; margin-top:10px;"><button class="btn" id="fbNeu" style="flex:1;">+ Fahrt eintragen</button><button class="btn secondary" id="fbDruck" style="flex:1;">Drucken / PDF</button></div></div>';
   if(!liste.length){
     html += '<div class="empty">Keine Fahrten in diesem Monat</div>';
@@ -9141,11 +9158,14 @@ function renderFahrtenbuch(){
     liste.slice().reverse().forEach(function(f){
       var d = new Date(f.datum + 'T12:00:00');
       var strecke = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
-      html += '<div class="card" data-fbedit="' + escapeHtml(f.id) + '" style="cursor:pointer;">';
+      html += '<div class="card" data-fbedit="' + escapeHtml(f.id) + '" style="cursor:pointer;' + (f.privat ? ' border-left:5px solid #7b3fa0;' : '') + '">';
+      if(f.privat) html += '<span class="badge" style="background:#efe4f5; color:#7b3fa0; float:right; margin-left:6px;">Privat</span>';
       html += '<div class="row"><h3>' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + (f.abfahrt || f.ende ? ' &middot; ' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') : '') + '</h3><span class="badge blau">' + (strecke !== null ? fbFmt(strecke) + ' km' : '-') + '</span></div>';
       var zt = fbZeileText(f);
       if(zt) html += '<div class="meta" style="font-size:14px; color:var(--ink);">' + fbHtmlText(zt) + '</div>';
       html += '<div class="meta">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + ' km' + (f.fahrer ? ' &middot; ' + escapeHtml(f.fahrer) : '') + '</div>';
+      var kg = fz && fz.kmGeld ? fbKmGeld(f, fz) : 0;
+      if(kg) html += '<div class="meta" style="color:#1e8449; font-weight:700;">Kilometergeld: ' + fbFmt(kg, 2) + ' &euro;</div>';
       if(f.liter || f.euro) html += '<div class="meta">&#9981; getankt: ' + (f.liter ? fbFmt(f.liter, 1) + ' l' : '') + (f.liter && f.euro ? ' &middot; ' : '') + (f.euro ? fbFmt(f.euro, 2) + ' &euro;' : '') + '</div>';
       html += '</div>';
     });
@@ -9178,7 +9198,9 @@ function modalFahrzeuge(){
   var html = '<div class="modal-head"><h3>Fahrzeuge</h3><button class="close" id="mClose">&times;</button></div>';
   if(!liste.length) html += '<div class="meta">Noch kein Fahrzeug.</div>';
   liste.forEach(function(f){
-    html += '<div class="row" style="padding:8px 0; border-bottom:1px solid var(--line);"><div><b>' + escapeHtml(f.name) + '</b><div class="meta">' + escapeHtml(f.kennzeichen || '') + '</div></div><button class="btn small secondary" data-fzdel="' + escapeHtml(f.id) + '">Entfernen</button></div>';
+    html += '<div style="padding:8px 0; border-bottom:1px solid var(--line);"><div class="row"><div><b>' + escapeHtml(f.name) + '</b><div class="meta">' + escapeHtml(f.kennzeichen || '') + '</div></div><button class="btn small secondary" data-fzdel="' + escapeHtml(f.id) + '">Entfernen</button></div>';
+    html += '<label style="display:flex; align-items:center; gap:10px; margin-top:8px; font-size:14px; color:var(--ink);"><input type="checkbox" data-fzkmgeld="' + escapeHtml(f.id) + '"' + (f.kmGeld ? ' checked' : '') + ' style="width:22px; height:22px; margin:0;"> Kilometergeld berechnen (Privatauto)</label>';
+    html += '<div style="display:' + (f.kmGeld ? 'flex' : 'none') + '; align-items:center; gap:8px; margin-top:6px;" id="fzSatzBox_' + escapeHtml(f.id) + '"><span class="meta">Satz &euro;/km</span><input type="text" inputmode="decimal" data-fzsatz="' + escapeHtml(f.id) + '" value="' + fbFmt(Number(f.kmGeldSatz) || KMGELD_STANDARD, 2) + '" style="width:90px; margin:0;"></div></div>';
   });
   html += '<label style="margin-top:14px;">Neues Fahrzeug (Name)</label><input type="text" id="fzName" placeholder="z.B. VW Caddy" autocomplete="off">';
   html += '<label>Kennzeichen</label><input type="text" id="fzKz" placeholder="z.B. M-12345X" autocomplete="off" style="text-transform:uppercase;">';
@@ -9196,6 +9218,28 @@ function modalFahrzeuge(){
       closeModal(); render();
     });
   };
+  document.querySelectorAll('[data-fzkmgeld]').forEach(function(c){
+    c.onchange = function(){
+      var id = c.getAttribute('data-fzkmgeld');
+      var f = (state.fahrzeuge || []).filter(function(x){ return x.id === id; })[0];
+      if(!f) return;
+      f.kmGeld = c.checked;
+      if(f.kmGeld && !f.kmGeldSatz) f.kmGeldSatz = KMGELD_STANDARD;
+      var box = document.getElementById('fzSatzBox_' + id);
+      if(box) box.style.display = f.kmGeld ? 'flex' : 'none';
+      dbPut('fahrzeuge', f, function(){ render(); });
+    };
+  });
+  document.querySelectorAll('[data-fzsatz]').forEach(function(inp){
+    inp.onchange = function(){
+      var id = inp.getAttribute('data-fzsatz');
+      var f = (state.fahrzeuge || []).filter(function(x){ return x.id === id; })[0];
+      var z = fbZahl(inp.value);
+      if(!f || z === null || z <= 0 || z > 5){ toast('Bitte einen gültigen Satz eingeben, z.B. 0,50'); return; }
+      f.kmGeldSatz = z;
+      dbPut('fahrzeuge', f, function(){ toast('Kilometergeld-Satz gespeichert'); render(); });
+    };
+  });
   document.querySelectorAll('[data-fzdel]').forEach(function(b){
     b.onclick = function(){
       var id = b.getAttribute('data-fzdel');
@@ -9217,13 +9261,15 @@ function modalFahrt(fahrtId){
   var jetztZeit = (heute.getHours() < 10 ? '0' : '') + heute.getHours() + ':' + (heute.getMinutes() < 10 ? '0' : '') + heute.getMinutes();
   var letzter = fbLetzterKm(fz.id);
   var fahrerStd = state.rolle === 'chef' ? CHEF_NAME : (state.mitarbeiterName || '');
-  var v = f || { datum: heuteIso, abfahrt: '', ende: '', kmStart: letzter, kmEnde: null, kundeId: '', taetigkeit: '', fahrer: fahrerStd, liter: null, euro: null };
+  var v = f || { datum: heuteIso, abfahrt: '', ende: '', kmStart: letzter, kmEnde: null, kundeId: '', taetigkeit: '', fahrer: fahrerStd, liter: null, euro: null, privat: false };
+  var ftPrivat = !!v.privat;
   var html = '<div class="modal-head"><h3>' + (f ? 'Fahrt bearbeiten' : 'Neue Fahrt') + '</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(fz.name) + (fz.kennzeichen ? ' (' + escapeHtml(fz.kennzeichen) + ')' : '') + '</div>';
+  html += '<label>Art der Fahrt</label><div class="filter-bar segmented" style="margin-bottom:10px;"><button type="button" class="filter-btn ftArtBtn' + (ftPrivat ? '' : ' active') + '" data-ftart="dienst" style="flex:1 1 0;">&#128188; Dienstlich</button><button type="button" class="filter-btn ftArtBtn' + (ftPrivat ? ' active' : '') + '" data-ftart="privat" style="flex:1 1 0;">&#127968; Privat</button></div>';
   html += '<label>Datum</label><input type="date" id="ftDatum" value="' + escapeHtml(v.datum || heuteIso) + '">';
-  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Abfahrt</label><input type="time" id="ftAb" value="' + escapeHtml(v.abfahrt || '') + '"></div><div style="flex:1;"><label>Ende</label><input type="time" id="ftEnde" value="' + escapeHtml(v.ende || '') + '"></div></div>';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1 1 0; min-width:0;"><label>Abfahrt</label><input type="time" id="ftAb" value="' + escapeHtml(v.abfahrt || '') + '"></div><div style="flex:1 1 0; min-width:0;"><label>Ende</label><input type="time" id="ftEnde" value="' + escapeHtml(v.ende || '') + '"></div></div>';
   html += '<div class="row" style="gap:8px; margin-top:4px;"><button type="button" class="btn small secondary" id="ftAbJetzt">Abfahrt = jetzt</button><button type="button" class="btn small secondary" id="ftEndeJetzt">Ende = jetzt</button></div>';
-  html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Km-Stand Start</label><input type="number" inputmode="numeric" id="ftKmS" value="' + (v.kmStart !== null && v.kmStart !== undefined ? v.kmStart : '') + '"></div><div style="flex:1;"><label>Km-Stand Ende</label><input type="number" inputmode="numeric" id="ftKmE" value="' + (v.kmEnde !== null && v.kmEnde !== undefined ? v.kmEnde : '') + '"></div></div>';
+  html += '<div style="display:flex; gap:8px;"><div style="flex:1 1 0; min-width:0;"><label>Km-Stand Start</label><input type="number" inputmode="numeric" id="ftKmS" value="' + (v.kmStart !== null && v.kmStart !== undefined ? v.kmStart : '') + '"></div><div style="flex:1 1 0; min-width:0;"><label>Km-Stand Ende</label><input type="number" inputmode="numeric" id="ftKmE" value="' + (v.kmEnde !== null && v.kmEnde !== undefined ? v.kmEnde : '') + '"></div></div>';
   html += '<div class="meta" id="ftStrecke" style="margin-top:4px;"></div>';
   var ftKundeText = fbKundeName(v);
   html += '<label>Kunde (optional &ndash; aus der Liste wählen oder neuen Namen eintippen)</label><input type="text" id="ftKunde" list="ftKundenListe" autocomplete="off" placeholder="Kundenname" value="' + escapeHtml(ftKundeText) + '">';
@@ -9240,12 +9286,20 @@ function modalFahrt(fahrtId){
   var strecke = function(){
     var a = fbZahl(document.getElementById('ftKmS').value), b = fbZahl(document.getElementById('ftKmE').value);
     var el = document.getElementById('ftStrecke');
-    if(a !== null && b !== null) el.innerHTML = b >= a ? 'Strecke: <b>' + fbFmt(b - a) + ' km</b>' : '<span style="color:#c23f12;">Ende-Stand ist kleiner als Start-Stand</span>';
+    var satzM = fbKmGeldSatz(fz);
+    if(a !== null && b !== null) el.innerHTML = b >= a ? 'Strecke: <b>' + fbFmt(b - a) + ' km</b>' + (satzM ? (ftPrivat ? ' &middot; <span style="color:#7b3fa0;">privat &ndash; kein Kilometergeld</span>' : ' &middot; <b style="color:#1e8449;">Kilometergeld ' + fbFmt(Math.round((b - a) * satzM * 100) / 100, 2) + ' &euro;</b>') : '') : '<span style="color:#c23f12;">Ende-Stand ist kleiner als Start-Stand</span>';
     else el.innerHTML = '';
   };
   document.getElementById('ftKmS').oninput = strecke;
   document.getElementById('ftKmE').oninput = strecke;
   strecke();
+  document.querySelectorAll('.ftArtBtn').forEach(function(b){
+    b.onclick = function(){
+      ftPrivat = b.getAttribute('data-ftart') === 'privat';
+      document.querySelectorAll('.ftArtBtn').forEach(function(x){ x.classList.toggle('active', x === b); });
+      try{ strecke(); }catch(e){}
+    };
+  });
   document.getElementById('ftAbJetzt').onclick = function(){ document.getElementById('ftAb').value = jetztZeit; };
   document.getElementById('ftEndeJetzt').onclick = function(){ document.getElementById('ftEnde').value = jetztZeit; };
   document.getElementById('ftSave').onclick = function(){
@@ -9267,6 +9321,7 @@ function modalFahrt(fahrtId){
     neu.fahrer = document.getElementById('ftFahrer').value.trim();
     neu.liter = fbZahl(document.getElementById('ftLiter').value);
     neu.euro = fbZahl(document.getElementById('ftEuro').value);
+    neu.privat = ftPrivat;
     dbPut('fahrten', neu, function(){
       if(!state.fahrten) state.fahrten = [];
       state.fahrten = state.fahrten.filter(function(x){ return x.id !== neu.id; });
@@ -9307,15 +9362,43 @@ function buildFahrtenbuchHtml(fz, monKey){
     liste.forEach(function(f){
       var d = new Date(f.datum + 'T12:00:00');
       var str = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
+      var zs = zelle + (f.privat ? ' background:#f1eaf6;' : '');
       h += '<tr style="page-break-inside:avoid; break-inside:avoid;">';
-      h += '<td style="' + zelle + '">' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + '<br>' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') + '</td>';
-      h += '<td style="' + zelle + '">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + '<br><b>' + (str !== null ? fbFmt(str) + ' km' : '-') + '</b></td>';
-      h += '<td style="' + zelle + ' word-wrap:break-word;">' + (fbHtmlText(fbZeileText(f)) || '&nbsp;') + '</td>';
-      h += '<td style="' + zelle + '">' + (escapeHtml(f.fahrer || '') || '&nbsp;') + '</td>';
-      h += '<td style="' + zelle + '">' + (f.liter ? fbFmt(f.liter, 1) + ' l' : '') + (f.euro ? '<br>' + fbFmt(f.euro, 2) + ' &euro;' : '') + (!f.liter && !f.euro ? '&nbsp;' : '') + '</td></tr>';
+      h += '<td style="' + zs + '">' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + '<br>' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') + '</td>';
+      var kgD = fbKmGeld(f, fz);
+      h += '<td style="' + zs + '">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + '<br><b>' + (str !== null ? fbFmt(str) + ' km' : '-') + '</b>' + (kgD ? '<br><span style="color:#1e8449;">km-Geld ' + fbFmt(kgD, 2) + ' &euro;</span>' : '') + '</td>';
+      h += '<td style="' + zs + ' word-wrap:break-word;">' + (f.privat ? '<b>PRIVATFAHRT</b>' + (fbZeileText(f) ? '<br>' : '') : '') + (fbHtmlText(fbZeileText(f)) || (f.privat ? '' : '&nbsp;')) + '</td>';
+      h += '<td style="' + zs + '">' + (escapeHtml(f.fahrer || '') || '&nbsp;') + '</td>';
+      h += '<td style="' + zs + '">' + (f.liter ? fbFmt(f.liter, 1) + ' l' : '') + (f.euro ? '<br>' + fbFmt(f.euro, 2) + ' &euro;' : '') + (!f.liter && !f.euro ? '&nbsp;' : '') + '</td></tr>';
     });
     h += '<tr><td colspan="2" style="' + kopf + '">Summe: ' + fbFmt(sm.km) + ' km</td><td colspan="3" style="' + kopf + '">Getankt: ' + fbFmt(sm.liter, 1) + ' l' + (sm.euro ? ' &middot; ' + fbFmt(sm.euro, 2) + ' &euro;' : '') + '</td></tr>';
     h += '</tbody></table>';
+    // Aufteilung dienstlich / privat
+    var anteil = sm.km ? Math.round(sm.kmPrivat / sm.km * 1000) / 10 : 0;
+    h += '<table style="width:100%; border-collapse:collapse; margin-top:12px; page-break-inside:avoid;"><tr>';
+    h += '<td style="' + kopf + ' width:25%;">Gesamt</td><td style="' + zelle + ' width:25%;"><b>' + fbFmt(sm.km) + ' km</b></td>';
+    h += '<td style="' + kopf + ' width:25%;">Dienstlich</td><td style="' + zelle + ' width:25%;"><b>' + fbFmt(sm.kmDienst) + ' km</b></td></tr><tr>';
+    h += '<td style="' + kopf + '">Privat</td><td style="' + zelle + ' background:#f1eaf6;"><b>' + fbFmt(sm.kmPrivat) + ' km</b> (' + sm.anzPrivat + ' Fahrt' + (sm.anzPrivat === 1 ? '' : 'en') + ')</td>';
+    h += '<td style="' + kopf + '">Privatanteil</td><td style="' + zelle + '"><b>' + String(anteil).replace('.', ',') + ' %</b></td></tr>';
+    if(fz.kmGeld){
+      h += '<tr><td style="' + kopf + '">Kilometergeld</td><td colspan="3" style="' + zelle + ' background:#e5f4ea;"><b>' + fbFmt(sm.kmGeld, 2) + ' &euro;</b> &nbsp;(' + fbFmt(sm.kmDienst) + ' km dienstlich &times; ' + fbFmt(fbKmGeldSatz(fz), 2) + ' &euro;/km amtliches Kilometergeld)</td></tr>';
+    }
+    h += '</table>';
+    var priv = liste.filter(function(f){ return f.privat; });
+    if(priv.length){
+      h += '<div style="page-break-inside:avoid; margin-top:14px;"><div style="font-size:13px; font-weight:700; margin-bottom:6px;">Privatfahrten im ' + aufgMonatText(monKey) + '</div>';
+      h += '<table style="width:100%; border-collapse:collapse;"><thead><tr><th style="' + kopf + ' width:22%;">Datum / Zeit</th><th style="' + kopf + ' width:28%;">Km-Stand</th><th style="' + kopf + ' width:15%;">Strecke</th><th style="' + kopf + '">Ziel / Fahrer</th></tr></thead><tbody>';
+      priv.forEach(function(f){
+        var d2 = new Date(f.datum + 'T12:00:00');
+        var st2 = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
+        h += '<tr><td style="' + zelle + '">' + wt[d2.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + '<br>' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') + '</td>';
+        h += '<td style="' + zelle + '">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + '</td>';
+        h += '<td style="' + zelle + '"><b>' + (st2 !== null ? fbFmt(st2) + ' km' : '-') + '</b></td>';
+        h += '<td style="' + zelle + '">' + (fbHtmlText(fbZeileText(f)) || '&nbsp;') + (f.fahrer ? '<br>' + escapeHtml(f.fahrer) : '') + '</td></tr>';
+      });
+      h += '<tr><td colspan="2" style="' + kopf + '">Summe privat</td><td colspan="2" style="' + kopf + '">' + fbFmt(sm.kmPrivat) + ' km</td></tr>';
+      h += '</tbody></table></div>';
+    }
   }
   h += '</div>';
   return h;
