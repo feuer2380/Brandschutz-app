@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-03 08:20';
-var APP_VERSION_TEXT = '03.11. 08:20';
+var APP_VERSION = '2026-11-03 08:35';
+var APP_VERSION_TEXT = '03.11. 08:35';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -8475,7 +8475,7 @@ function zeitMonatDaten(name, jahr, monat){
     });
     if(cur) segs.push(cur);
     var segKommen = segs.map(function(g){ return zeitUhr(g.von.toISOString()); });
-    var segGehen = segs.filter(function(g){ return g.bis; }).map(function(g){ return zeitUhr(g.bis.toISOString()) + (zeitTagKey(g.bis.toISOString()) !== key ? ' (+1 Tag)' : ''); });
+    var segGehen = segs.filter(function(g){ return g.bis; }).map(function(g){ return zeitUhr(g.bis.toISOString()) + (zeitTagKey(g.bis.toISOString()) !== key ? ' (am ' + zeitTagKey(g.bis.toISOString()).substring(8, 10) + '.' + zeitTagKey(g.bis.toISOString()).substring(5, 7) + '.)' : ''); });
     var uniq = function(typ){ var r = []; liste.forEach(function(z){ if(z.typ === typ){ var u = zeitUhr(z.zeit); if(r.indexOf(u) < 0) r.push(u); } }); return r; };
     var heuteKey = zeitTagKey(new Date().toISOString());
     return { key: key, liste: liste, kommen: kommen, gehen: gehen, abwText: abwArten.join(', '), kommenListe: segKommen, gehenListe: segGehen, laeuft: b.offen && (key === heuteKey || key === offenK), orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
