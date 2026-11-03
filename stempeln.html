@@ -58,7 +58,31 @@ function tagKey(iso){ var d = new Date(iso); var m = d.getMonth() + 1, t = d.get
 function uhr(iso){ var d = new Date(iso); var h = d.getHours(), m = d.getMinutes(); return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
 function dauer(ms){ if(!ms || ms < 0) ms = 0; var min = Math.round(ms / 60000); var m = min % 60; return Math.floor(min / 60) + ':' + (m < 10 ? '0' : '') + m + ' h'; }
 function namen(){ return ['Janiba Wolfgang'].concat(MITARBEITER.map(function(m){ return m.name; })); }
-function eintraege(name, key){ return zeiten.filter(function(z){ return z.mitarbeiter === name && (!key || tagKey(z.zeit) === key); }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); }); }
+// Arbeitstag = Tag des "Kommen" der Schicht (auch ueber Mitternacht, z.B. 14:10 bis 03:19)
+var SCHICHT_LUECKE = 20 * 3600000;
+function schichtKey(z){
+  var l = zeiten.filter(function(x){ return x.mitarbeiter === z.mitarbeiter && x.typ !== 'notiz'; }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
+  var offen = null, letzte = null, nachArzt = null, erg = tagKey(z.zeit);
+  for(var i = 0; i < l.length; i++){
+    var x = l[i], t = new Date(x.zeit), k;
+    if(offen && letzte && (t - letzte) > SCHICHT_LUECKE) offen = null;
+    if(!offen && nachArzt && x.typ === 'kommen' && (t - nachArzt.t) < 6 * 3600000) offen = nachArzt.k;
+    nachArzt = null;
+    if(!offen){ k = tagKey(x.zeit); if(x.typ !== 'gehen') offen = k; } else k = offen;
+    if(x.typ === 'gehen'){ if(x.ort === 'Arzt') nachArzt = {k: k, t: t}; offen = null; }
+    letzte = t;
+    if(x.id === z.id){ erg = k; break; }
+  }
+  return erg;
+}
+function eintraege(name, key){ return zeiten.filter(function(z){ return z.mitarbeiter === name && (!key || schichtKey(z) === key); }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); }); }
+function offeneSchicht(name){
+  var l = eintraege(name, null);
+  if(!l.length) return null;
+  var last = l[l.length - 1];
+  if(last.typ === 'gehen' || (new Date() - new Date(last.zeit)) > SCHICHT_LUECKE) return null;
+  return schichtKey(last);
+}
 
 function berechne(liste, bisJetzt){
   var arbeit = 0, pause = 0, arzt = 0, start = null, pS = null, pA = false, jetzt = new Date();
@@ -74,7 +98,7 @@ function berechne(liste, bisJetzt){
   return {arbeit: arbeit, pause: pause, arzt: arzt, offen: offen};
 }
 function status(name){
-  var l = eintraege(name, tagKey(new Date().toISOString()));
+  var l = eintraege(name, offeneSchicht(name) || tagKey(new Date().toISOString()));
   if(!l.length) return {key:'ab', label:'Nicht eingestempelt', farbe:'#888', liste:l};
   var t = l[l.length - 1].typ;
   if(t === 'gehen') return {key:'ge', label:'Feierabend', farbe:'#888', liste:l};
@@ -155,14 +179,14 @@ function zeitenHeute(){
 
 function monat(){
   var name = zielName;
-  var tage = {}; zeiten.forEach(function(z){ if(z.mitarbeiter !== name) return; var d = new Date(z.zeit); if(d.getFullYear() !== mJahr || d.getMonth() !== mMonat) return; var k = tagKey(z.zeit); (tage[k] = tage[k] || []).push(z); });
+  var tage = {}; zeiten.forEach(function(z){ if(z.mitarbeiter !== name) return; var k = schichtKey(z); if(parseInt(k.substring(0, 4), 10) !== mJahr || parseInt(k.substring(5, 7), 10) - 1 !== mMonat) return; (tage[k] = tage[k] || []).push(z); });
   var keys = Object.keys(tage).sort(), sum = 0, sp = 0, sa = 0, heute = tagKey(new Date().toISOString());
   var h = '<div class="card"><div class="row" style="margin-bottom:8px;"><button class="btn grey" id="mz" style="margin:0;">&lsaquo;</button><div style="text-align:center;font-weight:700;flex:3;">' + MONATE[mMonat] + ' ' + mJahr + '</div><button class="btn grey" id="mv" style="margin:0;">&rsaquo;</button></div>';
   if(!keys.length) h += '<div class="meta">Keine Stempelzeiten in diesem Monat</div>';
   else {
     h += '<table><tr><th>Tag</th><th>Kommen</th><th>Gehen</th><th>Pause</th><th>Netto</th></tr>';
     keys.forEach(function(k){
-      var l = tage[k].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); }), b = berechne(l, k === heute);
+      var l = tage[k].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); }), b = berechne(l, k === heute || k === offeneSchicht(name));
       sum += b.arbeit; sp += b.pause; sa += b.arzt;
       var ko = l.filter(function(z){ return z.typ === 'kommen'; })[0], ge = l.filter(function(z){ return z.typ === 'gehen'; }).pop();
       var orte = []; l.forEach(function(z){ var t = ortText(z); if(t && orte.indexOf(t) < 0) orte.push(t); });
@@ -218,10 +242,13 @@ function nachtragen(){
   if(!dat){ toast('Datum angeben'); return; }
   var f = {kommen:$('nK').value, pause_start:$('nPV').value, pause_ende:$('nPB').value, gehen:$('nG').value};
   var o = ortAus($('nOrt').value), pg = $('nPG').value, neu = [];
+  var kVgl = f.kommen;
+  if(!kVgl){ var da = eintraege(zielName, dat).filter(function(z){ return z.typ === 'kommen'; })[0]; if(da) kVgl = uhr(da.zeit); }
+  var folgeTag = function(d){ var x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + 1); return tagKey(x.toISOString()); };
   ['kommen','pause_start','pause_ende','gehen'].forEach(function(t){
     if(!f[t]) return;
     var oo = (t === 'pause_start' && pg === 'arzt') ? {ort:'Arzt', kundeId:null} : o;
-    neu.push({id: uid(), mitarbeiter: zielName, typ: t, zeit: new Date(dat + 'T' + f[t] + ':00').toISOString(), ort: oo.ort, kundeId: oo.kundeId, erstelltVon: 'Chef (nachgetragen)'});
+    neu.push({id: uid(), mitarbeiter: zielName, typ: t, zeit: new Date(((kVgl && t !== 'kommen' && f[t] < kVgl) ? folgeTag(dat) : dat) + 'T' + f[t] + ':00').toISOString(), ort: oo.ort, kundeId: oo.kundeId, erstelltVon: 'Chef (nachgetragen)'});
   });
   if(!neu.length){ toast('Bitte mindestens eine Uhrzeit eingeben'); return; }
   $('nSave').disabled = true; var fertig = 0;

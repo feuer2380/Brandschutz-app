@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-02 12:55';
-var APP_VERSION_TEXT = '02.11. 12:55';
+var APP_VERSION = '2026-11-03 03:45';
+var APP_VERSION_TEXT = '03.11. 03:45';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -576,6 +576,7 @@ function dbGetAll(store, cb){
 }
 
 function dbPut(store, obj, cb){
+  if(store === 'zeiten' && typeof zeitSchichtCache !== 'undefined') zeitSchichtCache.ref = null;
   // Firestore meldet "fertig" erst, wenn der Server bestätigt hat. Bei schwachem Netz würde die App
   // sonst hängen bleiben -> nach 4 Sekunden geht es lokal weiter, der Server bekommt es automatisch nachgesendet.
   var fertig = false;
@@ -608,6 +609,7 @@ function zeigeSpeicherFehler(err){
 }
 
 function dbDelete(store, id, cb){
+  if(store === 'zeiten' && typeof zeitSchichtCache !== 'undefined') zeitSchichtCache.ref = null;
   db.collection(store).doc(id).delete().then(function(){
     if(store === 'geraete'){
       db.collection(OEFFENTLICH_STORE).doc(id).delete().catch(function(){});
@@ -8087,9 +8089,58 @@ function zeitDauer(ms){
   return h + ':' + m + ' h';
 }
 
+// Arbeitstag eines Stempels = Tag des "Kommen" dieser Schicht (auch ueber Mitternacht, z.B. 14:10 bis 03:19)
+var ZEIT_SCHICHT_MAX_LUECKE = 20 * 3600000; // laenger offen = vergessenes Gehen -> neuer Tag
+var zeitSchichtCache = { ref: null, len: -1, sig: '', map: {} };
+function zeitSchichtMap(){
+  var alle = state.zeiten || [];
+  var sig = alle.length ? (alle[alle.length - 1].id + '|' + alle[0].id) : '';
+  if(zeitSchichtCache.ref === alle && zeitSchichtCache.len === alle.length && zeitSchichtCache.sig === sig) return zeitSchichtCache.map;
+  var map = {}, proPerson = {};
+  alle.forEach(function(z){
+    if(z.typ === 'notiz' || ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0) return;
+    (proPerson[z.mitarbeiter] = proPerson[z.mitarbeiter] || []).push(z);
+  });
+  Object.keys(proPerson).forEach(function(n){
+    var l = proPerson[n].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
+    var offenKey = null, letzte = null, nachArzt = null;
+    l.forEach(function(z){
+      var t = new Date(z.zeit);
+      if(offenKey && letzte && (t - letzte) > ZEIT_SCHICHT_MAX_LUECKE) offenKey = null;
+      if(!offenKey && nachArzt && z.typ === 'kommen' && (t - nachArzt.zeit) < 6 * 3600000){ offenKey = nachArzt.key; }
+      nachArzt = null;
+      if(!offenKey){
+        map[z.id] = zeitTagKey(z.zeit);
+        if(z.typ !== 'gehen') offenKey = map[z.id];
+      } else {
+        map[z.id] = offenKey;
+      }
+      if(z.typ === 'gehen'){
+        if(z.ort === 'Arzt') nachArzt = { key: map[z.id], zeit: t };
+        offenKey = null;
+      }
+      letzte = t;
+    });
+  });
+  zeitSchichtCache = { ref: alle, len: alle.length, sig: sig, map: map };
+  return map;
+}
+function zeitArbeitstagKey(z){
+  if(z.typ === 'notiz' || ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0) return zeitTagKey(z.zeit);
+  return zeitSchichtMap()[z.id] || zeitTagKey(z.zeit);
+}
+// Laufende Schicht (letzter Stempel ist nicht "Gehen" und nicht zu alt) -> deren Arbeitstag, sonst null
+function zeitOffeneSchichtKey(name){
+  var l = zeitEintraege(name, null);
+  if(!l.length) return null;
+  var last = l[l.length - 1];
+  if(last.typ === 'gehen') return null;
+  if((new Date() - new Date(last.zeit)) > ZEIT_SCHICHT_MAX_LUECKE) return null;
+  return zeitArbeitstagKey(last);
+}
 function zeitEintraege(name, tagKey){
   return (state.zeiten || []).filter(function(z){
-    return z.typ !== 'notiz' && ZEIT_ABW_TYPEN.indexOf(z.typ) < 0 && z.mitarbeiter === name && (!tagKey || zeitTagKey(z.zeit) === tagKey);
+    return z.typ !== 'notiz' && ZEIT_ABW_TYPEN.indexOf(z.typ) < 0 && z.mitarbeiter === name && (!tagKey || zeitArbeitstagKey(z) === tagKey);
   }).sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
 }
 
@@ -8127,7 +8178,8 @@ function zeitBerechne(liste, bisJetzt){
 
 function zeitStatus(name){
   var heute = zeitTagKey(new Date().toISOString());
-  var liste = zeitEintraege(name, heute);
+  var offenKey = zeitOffeneSchichtKey(name);
+  var liste = zeitEintraege(name, offenKey || heute);
   if(liste.length === 0){
     var abwHeute = (state.zeiten || []).filter(function(z){ return ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0 && z.mitarbeiter === name && zeitTagKey(z.zeit) === heute; })[0];
     return { key: 'abwesend', label: abwHeute ? ZEIT_TYPEN[abwHeute.typ] + ' (heute eingetragen)' : 'Nicht eingestempelt', farbe: abwHeute ? '#2a6fb0' : 'var(--muted, #888)', liste: liste };
@@ -8148,6 +8200,8 @@ function zeitStempeln(name, typ, ortWert, notiz, cb, uhrzeit){
   if(uhrzeit && /^\d{1,2}:\d{2}$/.test(uhrzeit)){
     var tp = uhrzeit.split(':');
     zeitD = new Date(jetztD.getFullYear(), jetztD.getMonth(), jetztD.getDate(), parseInt(tp[0], 10), parseInt(tp[1], 10), 0);
+    // Uhrzeit liegt in der Zukunft (z.B. nach Mitternacht "23:50" nachgetragen) -> war gestern
+    if(zeitD - jetztD > 5 * 60000) zeitD = new Date(zeitD.getTime() - 86400000);
   }
   var z = {
     id: uid(),
@@ -8366,9 +8420,8 @@ function zeitMonatDaten(name, jahr, monat){
   var tagesNotizen = {};
   (state.zeiten || []).forEach(function(z){
     if(z.mitarbeiter !== name) return;
-    var d = new Date(z.zeit);
-    if(d.getFullYear() !== jahr || d.getMonth() !== monat) return;
-    var key = zeitTagKey(z.zeit);
+    var key = zeitArbeitstagKey(z);
+    if(parseInt(key.substring(0, 4), 10) !== jahr || parseInt(key.substring(5, 7), 10) - 1 !== monat) return;
     if(z.typ === 'notiz'){ tagesNotizen[key] = z; return; }
     (tage[key] = tage[key] || []).push(z);
   });
@@ -8378,7 +8431,8 @@ function zeitMonatDaten(name, jahr, monat){
     var liste = tage[key].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
     var abwArten = [];
     liste.forEach(function(z){ if(ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0 && abwArten.indexOf(ZEIT_TYPEN[z.typ]) < 0){ abwArten.push(ZEIT_TYPEN[z.typ]); abwSumme[ZEIT_TYPEN[z.typ]] = (abwSumme[ZEIT_TYPEN[z.typ]] || 0) + 1; } });
-    var b = zeitBerechne(liste, key === zeitTagKey(new Date().toISOString()));
+    var offenK = zeitOffeneSchichtKey(name);
+    var b = zeitBerechne(liste, key === zeitTagKey(new Date().toISOString()) || key === offenK);
     summe += b.arbeit; summePause += b.pause; summeArzt += b.arzt;
     var kommen = liste.filter(function(z){ return z.typ === 'kommen'; })[0];
     var gehen = liste.filter(function(z){ return z.typ === 'gehen'; }).pop();
@@ -8403,10 +8457,10 @@ function zeitMonatDaten(name, jahr, monat){
     });
     if(cur) segs.push(cur);
     var segKommen = segs.map(function(g){ return zeitUhr(g.von.toISOString()); });
-    var segGehen = segs.filter(function(g){ return g.bis; }).map(function(g){ return zeitUhr(g.bis.toISOString()); });
+    var segGehen = segs.filter(function(g){ return g.bis; }).map(function(g){ return zeitUhr(g.bis.toISOString()) + (zeitTagKey(g.bis.toISOString()) !== key ? ' (+1 Tag)' : ''); });
     var uniq = function(typ){ var r = []; liste.forEach(function(z){ if(z.typ === typ){ var u = zeitUhr(z.zeit); if(r.indexOf(u) < 0) r.push(u); } }); return r; };
     var heuteKey = zeitTagKey(new Date().toISOString());
-    return { key: key, liste: liste, kommen: kommen, gehen: gehen, abwText: abwArten.join(', '), kommenListe: segKommen, gehenListe: segGehen, laeuft: b.offen && key === heuteKey, orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
+    return { key: key, liste: liste, kommen: kommen, gehen: gehen, abwText: abwArten.join(', '), kommenListe: segKommen, gehenListe: segGehen, laeuft: b.offen && (key === heuteKey || key === offenK), orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
   });
   var abwZeile = Object.keys(abwSumme).map(function(k){ return k + ': ' + abwSumme[k] + (abwSumme[k] === 1 ? ' Tag' : ' Tage'); }).join(' · ');
   return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt, abwZeile: abwZeile };
@@ -8669,6 +8723,15 @@ function modalZeitNachtragen(name, jahr, monat){
     var o = zeitOrtAusWert(document.getElementById('znOrt').value);
     var pGrund = document.getElementById('znPGrund').value;
     var neueEintraege = [];
+    // Zeiten vor dem Kommen (z.B. Gehen 03:19 bei Kommen 14:10) gehoeren zum naechsten Tag
+    var naechsterTag = function(d){ var x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + 1); return x.getFullYear() + '-' + ('0' + (x.getMonth() + 1)).slice(-2) + '-' + ('0' + x.getDate()).slice(-2); };
+    // Vergleich mit dem eingegebenen Kommen, sonst mit dem schon gestempelten Kommen dieses Tages
+    var kommenVergleich = f.kommen;
+    if(!kommenVergleich){
+      var schonDa = zeitEintraege(wer, dat).filter(function(z){ return z.typ === 'kommen'; })[0];
+      if(schonDa) kommenVergleich = zeitUhr(schonDa.zeit);
+    }
+    var datFuer = function(typ){ return (kommenVergleich && f[typ] && typ !== 'kommen' && f[typ] < kommenVergleich) ? naechsterTag(dat) : dat; };
     ['kommen','pause_start','pause_ende','gehen'].forEach(function(typ){
       if(!f[typ]) return;
       var istPause = (typ === 'pause_start');
@@ -8676,7 +8739,7 @@ function modalZeitNachtragen(name, jahr, monat){
       if(istPause && pGrund === 'arzt') ort = { ort: 'Arzt' };
       neueEintraege.push({
         id: uid(), mitarbeiter: wer, typ: typ,
-        zeit: new Date(dat + 'T' + f[typ] + ':00').toISOString(),
+        zeit: new Date(datFuer(typ) + 'T' + f[typ] + ':00').toISOString(),
         ort: ort.ort || null, kundeId: ort.kundeId || null,
         notiz: (document.getElementById('znNotiz').value || '').trim() || null,
         erstelltVon: 'Chef (nachgetragen)'
