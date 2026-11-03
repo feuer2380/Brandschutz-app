@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-03 03:45';
-var APP_VERSION_TEXT = '03.11. 03:45';
+var APP_VERSION = '2026-11-03 08:20';
+var APP_VERSION_TEXT = '03.11. 08:20';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -8130,8 +8130,10 @@ function zeitArbeitstagKey(z){
   return zeitSchichtMap()[z.id] || zeitTagKey(z.zeit);
 }
 // Laufende Schicht (letzter Stempel ist nicht "Gehen" und nicht zu alt) -> deren Arbeitstag, sonst null
+// Stempel, die mehr als 10 Minuten in der Zukunft liegen (Tippfehler bei der Uhrzeit)
+function zeitIstZukunft(z){ return (new Date(z.zeit) - new Date()) > 10 * 60000; }
 function zeitOffeneSchichtKey(name){
-  var l = zeitEintraege(name, null);
+  var l = zeitEintraege(name, null).filter(function(z){ return !zeitIstZukunft(z); });
   if(!l.length) return null;
   var last = l[l.length - 1];
   if(last.typ === 'gehen') return null;
@@ -8179,7 +8181,7 @@ function zeitBerechne(liste, bisJetzt){
 function zeitStatus(name){
   var heute = zeitTagKey(new Date().toISOString());
   var offenKey = zeitOffeneSchichtKey(name);
-  var liste = zeitEintraege(name, offenKey || heute);
+  var liste = zeitEintraege(name, offenKey || heute).filter(function(z){ return !zeitIstZukunft(z); });
   if(liste.length === 0){
     var abwHeute = (state.zeiten || []).filter(function(z){ return ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0 && z.mitarbeiter === name && zeitTagKey(z.zeit) === heute; })[0];
     return { key: 'abwesend', label: abwHeute ? ZEIT_TYPEN[abwHeute.typ] + ' (heute eingetragen)' : 'Nicht eingestempelt', farbe: abwHeute ? '#2a6fb0' : 'var(--muted, #888)', liste: liste };
@@ -8320,7 +8322,7 @@ function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
   var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
-  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version 30.10. 13:30</span></div>';
+  html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version ' + APP_VERSION_TEXT + '</span></div>';
   if(istChef){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
@@ -8343,6 +8345,11 @@ function renderZeit(){
       html += '<div class="meta">' + zeitZeilenText(st.liste).join(' &middot; ') + '</div>';
       html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + (b.arzt ? ' &middot; davon Arzt: ' + zeitDauer(b.arzt) : '') + '</div>';
     }
+    var zukunft = zeitEintraege(name, null).filter(zeitIstZukunft);
+    zukunft.forEach(function(z){
+      var d = new Date(z.zeit);
+      html += '<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#fbe9e3; color:#c23f12; font-size:13px; display:flex; gap:8px; align-items:center;"><span style="flex:1;">&#9888; Stempel in der Zukunft: <b>' + ZEIT_TYPEN[z.typ] + ' ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '. ' + zeitUhr(z.zeit) + '</b> &ndash; wahrscheinlich falsche Uhrzeit</span><button type="button" class="btn small" data-zeitzukunftdel="' + escapeHtml(z.id) + '" style="margin:0; background:#c23f12;">Löschen</button></div>';
+    });
     html += '<div style="margin-top:6px;">' + zeitAktionenHtml(name, st) + '</div>';
     html += '</div>';
   });
@@ -8350,6 +8357,17 @@ function renderZeit(){
 }
 
 function bindZeit(){
+  document.querySelectorAll('[data-zeitzukunftdel]').forEach(function(b){
+    b.onclick = function(){
+      var zid = b.getAttribute('data-zeitzukunftdel');
+      customConfirm('Diesen Stempel in der Zukunft löschen?', function(){
+        dbDelete('zeiten', zid, function(){
+          state.zeiten = (state.zeiten || []).filter(function(z){ return z.id !== zid; });
+          render(); toast('Stempel gelöscht');
+        });
+      });
+    };
+  });
   document.querySelectorAll('[data-zeitstempel]').forEach(function(btn){
     btn.onclick = function(){ zeitKlick(btn, function(){ render(); }); };
   });
