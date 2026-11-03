@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-03 12:55';
-var APP_VERSION_TEXT = '03.11. 12:55';
+var APP_VERSION = '2026-11-03 16:10';
+var APP_VERSION_TEXT = '03.11. 16:10';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -1366,7 +1366,7 @@ function kundeAufgabeKarteHtml(k, eintraege, statusFn){
     if(!kats[kat]){ kats[kat] = 0; katReihe.push(kat); }
     kats[kat]++;
   });
-  var zusammen = katReihe.map(function(kt){ return (kats[kt] > 1 ? kats[kt] + '&times; ' : '') + escapeHtml(kt); }).join(' &middot; ');
+  var zusammen = katReihe.map(function(kt){ return kats[kt] + '&times; ' + escapeHtml(kt); }).join(' &middot; ');
   if(liste.length === 1 && k && k.objekt) zusammen += ' &middot; ' + escapeHtml(k.objekt);
   var h = '<div class="aufgabe ' + st.cls + ' kunde-card" data-id="' + (k ? k.id : '') + '">';
   h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
