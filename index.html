@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-03 12:15';
-var APP_VERSION_TEXT = '03.11. 12:15';
+var APP_VERSION = '2026-11-03 12:55';
+var APP_VERSION_TEXT = '03.11. 12:55';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -1373,6 +1373,22 @@ function kundeAufgabeKarteHtml(k, eintraege, statusFn){
   h += '<div class="aufgabe-art">' + zusammen + '</div></div>';
   h += '<div class="aufgabe-datum"><b>' + (isNaN(dObj.getTime()) ? '' : wt[dObj.getDay()] + ' ') + kurz + '</b><span class="badge ' + st.cls + '">' + st.label + '</span></div></div>';
   if(k && k.adresse) h += '<div class="aufgabe-adr">&#128205; ' + escapeHtml(k.adresse) + '</div>';
+  // Offener Termin fuer diesen Kunden (naechster ab heute)? Dann auf der Karte anzeigen
+  var kTermin = null;
+  if(k){
+    var heuteKT = kalHeuteKey();
+    (state.termine || []).forEach(function(t){
+      if(t.kundeId !== k.id || t.erledigt) return;
+      var d = String(t.datum || '').substring(0, 10);
+      if(d < heuteKT) return;
+      if(!kTermin || d < String(kTermin.datum).substring(0, 10)) kTermin = t;
+    });
+  }
+  if(kTermin){
+    var ktD = new Date(String(kTermin.datum).substring(0, 10) + 'T12:00:00');
+    var ktWer = (kTermin.personen || []).indexOf('alle') > -1 ? 'Alle' : (kTermin.personen || []).map(zustaendigKurz).join(', ');
+    h += '<div class="aufgabe-adr" style="color:#1d5fa8; font-weight:600;">&#128197; Termin ' + wt[ktD.getDay()] + ' ' + fmtDate(String(kTermin.datum).substring(0, 10) + 'T12:00:00').substring(0, 6) + (kTermin.zeit ? ' &middot; ' + escapeHtml(kTermin.zeit) + ' Uhr' : '') + (ktWer ? ' &middot; ' + escapeHtml(ktWer) : '') + '</div>';
+  }
   if(istVollsicht()){
     var wer = {}, werReihe = [], ohne = 0;
     liste.forEach(function(p){
@@ -1389,12 +1405,39 @@ function kundeAufgabeKarteHtml(k, eintraege, statusFn){
       if(erste.zeit) text += ' &middot; ' + escapeHtml(erste.zeit) + ' Uhr';
       ini = String(zustaendigKurz(werReihe[0])).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join('');
     }
+    var ktPerson = kTermin ? (kTermin.personen || []).filter(function(n){ return n !== 'alle'; })[0] : null;
+    if(kTermin && ktPerson && (nieman || ohne)){
+      h += '<button type="button" class="zuordBtn kundeTerminUebernehmen" data-pids="' + liste.map(function(p){ return p.id; }).join(',') + '" data-tid="' + escapeHtml(kTermin.id) + '">';
+      h += '<span class="zuordAv">&#10003;</span><span class="zuordWer">Wie Termin zuteilen: ' + escapeHtml(zustaendigKurz(ktPerson)) + '</span><span class="zuordAkt">Übernehmen &rsaquo;</span></button>';
+    }
     h += '<button type="button" class="zuordBtn kundeZuordBtn' + (nieman || ohne ? ' leer' : '') + '" data-pids="' + liste.map(function(p){ return p.id; }).join(',') + '">';
     h += '<span class="zuordAv">' + escapeHtml(ini) + '</span><span class="zuordWer">' + text + '</span>';
     h += '<span class="zuordAkt">' + (nieman ? 'Zuteilen' : 'Ändern') + ' &rsaquo;</span></button>';
   }
   h += '</div>';
   return h;
+}
+// Pruefungen eines Kunden so zuteilen wie der Termin (Person, Datum, Uhrzeit)
+function pruefungenWieTermin(pids, tid){
+  var t = (state.termine || []).filter(function(x){ return x.id === tid; })[0];
+  if(!t) return;
+  var person = (t.personen || []).filter(function(n){ return n !== 'alle'; })[0] || null;
+  var datum = String(t.datum || '').substring(0, 10);
+  var liste = state.pruefungen.filter(function(p){ return pids.indexOf(p.id) > -1; });
+  var offen = liste.length;
+  if(!offen) return;
+  var fertig = function(){ offen--; if(offen <= 0){ toast(liste.length + ' Prüfung' + (liste.length === 1 ? '' : 'en') + ' ' + zustaendigKurz(person) + ' zugeteilt (' + fmtDate(datum + 'T12:00:00') + ')'); render(); } };
+  liste.forEach(function(p){
+    var g = geraetFuerPruefung(p);
+    var alt = String(p.datum || '').substring(0, 10);
+    p.datum = datum; p.zeit = t.zeit || '';
+    if(g){
+      g.zustaendig = person;
+      if(String(g.naechstePruefung || '').substring(0, 10) === alt) g.naechstePruefung = datum;
+      try{ dbPut('geraete', g, function(){}); }catch(e){}
+    }
+    dbPut('pruefungen', p, fertig);
+  });
 }
 function modalKundeZuteilen(pids){
   var liste = state.pruefungen.filter(function(p){ return pids.indexOf(p.id) > -1; });
@@ -1679,12 +1722,24 @@ function renderDashboard(){
       var kT = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
       var tagText = e.offset === 0 ? 'Heute' : (e.offset === 1 ? 'Morgen' : fmtDate(e.key + 'T12:00:00').substring(0, 6));
       var wer = (t.personen || []).indexOf('alle') >= 0 ? 'Alle' : (t.personen || []).map(function(n){ return zustaendigKurz(n); }).join(', ');
-      html += '<div class="card" data-dashtermin="' + e.key + '" style="cursor:pointer; border-left:6px solid ' + (t.erledigt ? '#2f7a4f' : (e.offset === 0 ? '#d9531e' : '#c9bfae')) + ';' + (t.erledigt ? ' opacity:.8;' : '') + '">';
-      html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : '<span class="badge ' + (e.offset === 0 ? 'soon' : 'blau') + '">' + tagText + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span>') + '</div>';
+      // Termin-Karte im gleichen Aussehen wie die Kundenkarten unten
+      var wtT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+      var dT = new Date(e.key + 'T12:00:00');
+      var clsT = t.erledigt ? 'ok' : (e.offset === 0 ? 'soon' : 'blau');
+      html += '<div class="aufgabe ' + clsT + '" data-dashtermin="' + e.key + '" style="cursor:pointer;' + (t.erledigt ? ' opacity:.85;' : '') + '">';
+      html += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(kT ? kT.name : (t.titel || 'Termin')) + '</h3>';
+      var artT = kT ? (t.titel || 'Termin') : '';
+      if(t.notiz) artT += (artT ? ' &middot; ' : '') + escapeHtml(t.notiz);
+      else artT = escapeHtml(artT);
+      if(kT && kT.objekt) artT += ' &middot; ' + escapeHtml(kT.objekt);
+      if(artT) html += '<div class="aufgabe-art">' + artT + '</div>';
+      html += '</div>';
+      html += '<div class="aufgabe-datum"><b>' + wtT[dT.getDay()] + ' ' + fmtDate(e.key + 'T12:00:00').substring(0, 6) + '</b>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : '<span class="badge ' + clsT + '">' + (e.offset > 1 ? 'in ' + e.offset + ' Tagen' : tagText) + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span>') + '</div></div>';
+      if(kT && kT.adresse) html += '<div class="aufgabe-adr">&#128205; ' + escapeHtml(kT.adresse) + '</div>';
       if(t.erledigt) html += '<div class="meta" style="color:#2f7a4f;">erledigt von ' + escapeHtml(zustaendigKurz(t.erledigtVon || '')) + ' am ' + fmtDate(t.erledigtAm) + '</div>';
-      if(kT) html += '<div class="meta">' + escapeHtml(kT.name) + '</div>';
-      if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
-      html += '<div class="meta">' + escapeHtml(wer) + '</div>';
+      var plT = (t.personen || []).indexOf('alle') >= 0 ? ['alle'] : (t.personen || []);
+      var iniT = plT[0] === 'alle' ? 'A' : (plT.length ? String(zustaendigKurz(plT[0])).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join('') : '!');
+      html += '<div class="zuordBtn' + (plT.length ? '' : ' leer') + '" style="cursor:default;"><span class="zuordAv">' + escapeHtml(iniT) + '</span><span class="zuordWer">' + (plT.length ? escapeHtml(wer) : 'Noch niemand eingeteilt') + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) + ' Uhr' : '') + '</span></div>';
       var tbStil = 'flex:1 1 0; min-width:0; padding:10px 6px; font-size:14px; margin:0;';
       html += '<div style="display:flex; gap:8px; margin-top:10px;">';
       if(istVollsicht()) html += '<button type="button" class="btn secondary" data-dtbearb="' + t.id + '" style="' + tbStil + '">Bearbeiten</button>';
@@ -12096,6 +12151,7 @@ function bindKundenCards(container){
   container.querySelectorAll('.zuordBtn').forEach(function(btn){
     btn.onclick = function(ev){
       ev.stopPropagation();
+      if(btn.classList.contains('kundeTerminUebernehmen')){ pruefungenWieTermin(btn.getAttribute('data-pids').split(','), btn.getAttribute('data-tid')); return; }
       if(btn.getAttribute('data-pids')) modalKundeZuteilen(btn.getAttribute('data-pids').split(','));
       else modalPruefungZuteilen(btn.getAttribute('data-pid'));
     };
