@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-03 08:35';
-var APP_VERSION_TEXT = '03.11. 08:35';
+var APP_VERSION = '2026-11-03 12:15';
+var APP_VERSION_TEXT = '03.11. 12:15';
 // Alte Service Worker und Zwischenspeicher entfernen, damit immer die neueste Version geladen wird
 try {
   if('serviceWorker' in navigator){
@@ -9931,7 +9931,9 @@ function modalKalenderTermin(terminId, datumVorgabe){
   } else if(t.serieId){
     html += '<div class="meta" style="margin-bottom:8px;">&#8635; Teil einer Terminserie (' + escapeHtml(kalWdhLabel(t.serieArt)) + ')</div>';
   }
+  html += '<div id="ktDoppelt" style="display:none; margin:6px 0 10px; padding:10px 12px; border-radius:10px; background:#fbe9e3; color:#c23f12; font-size:13px;"></div>';
   html += '<button class="btn block" id="ktSpeichern">Speichern</button>';
+  if(t && (t.erstelltVon || t.erstelltAm)) html += '<div class="meta" style="margin-top:10px; text-align:center;">Angelegt' + (t.erstelltVon ? ' von <b>' + escapeHtml(t.erstelltVon) + '</b>' : '') + (t.erstelltAm ? ' am ' + fmtDate(t.erstelltAm) + ' um ' + fmtZeit(t.erstelltAm) + ' Uhr' : '') + '</div>';
   if(t) html += '<button class="btn block secondary" id="ktLoeschen" style="margin-top:10px; color:#c23f12; border-color:#e6b19d;">Termin löschen</button>';
   if(t && t.serieId) html += '<button class="btn block secondary" id="ktSerieLoeschen" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">Diesen und alle folgenden der Serie löschen</button>';
   openModal(html);
@@ -9970,6 +9972,27 @@ function modalKalenderTermin(terminId, datumVorgabe){
       kTreffer = neuerKunde;
     }
     obj.kundeId = kTreffer ? kTreffer.id : '';
+    // Hat der Kunde schon einen offenen Termin? Dann im Fenster warnen, bevor ein zweiter entsteht
+    if(!t && obj.kundeId && !window.__ktDoppeltOk){
+      var heuteK = kalHeuteKey();
+      var schon = (state.termine || []).filter(function(x){ return x.kundeId === obj.kundeId && !x.erledigt && String(x.datum || '').substring(0, 10) >= heuteK; });
+      if(schon.length){
+        var box = document.getElementById('ktDoppelt');
+        var wh = '<div style="font-weight:700; margin-bottom:4px;">&#9888; ' + escapeHtml(kTreffer ? kTreffer.name : 'Dieser Kunde') + ' hat schon ' + (schon.length === 1 ? 'einen offenen Termin' : schon.length + ' offene Termine') + ':</div>';
+        schon.forEach(function(x){
+          wh += '<div style="margin:2px 0;">&bull; ' + fmtDate(String(x.datum).substring(0, 10) + 'T12:00:00') + (x.zeit ? ' ' + escapeHtml(x.zeit) : '') + ' &bdquo;' + escapeHtml(x.titel || 'Termin') + '&ldquo;' + ((x.personen || []).length ? ' &ndash; ' + escapeHtml(x.personen.indexOf('alle') > -1 ? 'Alle' : x.personen.map(zustaendigKurz).join(', ')) : '') + (x.erstelltVon ? ' <span style="opacity:.8;">(angelegt von ' + escapeHtml(x.erstelltVon) + ')</span>' : '') + ' <span class="ktDoppeltOeffnen" data-tid="' + escapeHtml(x.id) + '" style="text-decoration:underline; cursor:pointer;">öffnen</span></div>';
+        });
+        wh += '<button type="button" class="btn small" id="ktDoppeltTrotzdem" style="margin-top:8px; background:#c23f12;">Trotzdem zweiten Termin anlegen</button>';
+        box.innerHTML = wh; box.style.display = 'block';
+        try{ box.scrollIntoView({ block: 'center' }); }catch(e){}
+        document.getElementById('ktDoppeltTrotzdem').onclick = function(){
+          window.__ktDoppeltOk = true;
+          try{ document.getElementById('ktSpeichern').onclick(); } finally { window.__ktDoppeltOk = false; }
+        };
+        box.querySelectorAll('.ktDoppeltOeffnen').forEach(function(el){ el.onclick = function(){ modalKalenderTermin(el.getAttribute('data-tid')); }; });
+        return;
+      }
+    }
     if(!state.termine) state.termine = [];
     if(!state.termine.some(function(x){ return x.id === obj.id; })) state.termine.push(obj);
     state.kalTag = datum; state.kalMonat = datum.substring(0, 7);
