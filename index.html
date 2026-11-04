@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-04 20:10';
-var APP_VERSION_TEXT = '04.11. 20:10';
+var APP_VERSION = '2026-11-04 23:30';
+var APP_VERSION_TEXT = '04.11. 23:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -853,7 +853,8 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   try{ if(pa.querySelector('.pb-tabelle')) pa.classList.add('kompakt'); else pa.classList.remove('kompakt'); }catch(eK){}
 
   // Safari ignoriert Querformat im Druckdialog -> bei aktivem Querformat immer ueber das PDF (jsPDF) gehen
-  var querWunsch = bsvQuerformat() && !pa.querySelector('.qr-etikett');
+  var nurHoch = !!pa.querySelector('.nur-hochformat');
+  var querWunsch = bsvQuerformat() && !pa.querySelector('.qr-etikett') && !nurHoch;
   var pdfErzwingen = !!window.__bsvPdfErzwingen;
   window.__bsvPdfErzwingen = false;
   if((!eigenstaendig && !querWunsch && !pdfErzwingen) || !window.html2canvas || !window.jspdf){
@@ -862,7 +863,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       var istEtikett = !!pa.querySelector('.qr-etikett');
       var st = document.createElement('style');
       st.id = 'bsvSeitenStil';
-      st.textContent = istEtikett ? '@page{ size:40mm 30mm; margin:0; }' : (bsvQuerformat() ? '@page{ size:A4 landscape; margin:12mm; }' : '@page{ margin:12mm; }');
+      st.textContent = istEtikett ? '@page{ size:40mm 30mm; margin:0; }' : ((bsvQuerformat() && !nurHoch) ? '@page{ size:A4 landscape; margin:12mm; }' : '@page{ size:A4 portrait; margin:12mm; }');
       document.head.appendChild(st);
       var weg = function(){ var x = document.getElementById('bsvSeitenStil'); if(x && x.parentNode) x.parentNode.removeChild(x); window.removeEventListener('afterprint', weg); };
       window.addEventListener('afterprint', weg);
@@ -877,7 +878,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   pa.style.position = 'absolute';
   pa.style.left = '0';
   pa.style.top = '0';
-  var quer = bsvQuerformat() && !pa.querySelector('.qr-etikett');
+  var quer = bsvQuerformat() && !pa.querySelector('.qr-etikett') && !nurHoch;
   pa.style.width = (quer ? '1100' : '780') + 'px';
   pa.style.background = '#fff';
   pa.style.zIndex = '-1';
@@ -984,7 +985,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       aufraeumen();
       if(!canvas || !canvas.width || !canvas.height) throw new Error('Leeres Bild (Bericht konnte nicht gezeichnet werden)');
 
-      var pdf = new window.jspdf.jsPDF({ orientation: (quer ? 'landscape' : 'portrait'), unit: 'pt', format: 'a4' });
+      var pdf = new window.jspdf.jsPDF({ orientation: (quer ? 'landscape' : 'portrait'), unit: 'pt', format: 'a4', compress: true });
       var rand = 20;
       var pageWidth = pdf.internal.pageSize.getWidth();
       var pageHeight = pdf.internal.pageSize.getHeight();
@@ -1036,7 +1037,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         if(kt) tctx.drawImage(canvas, 0, kt.kopfOben, canvas.width, kHoehe, 0, 0, canvas.width, kHoehe);
         tctx.drawImage(canvas, 0, startPx, canvas.width, hoehePx, 0, kHoehe, canvas.width, hoehePx);
         if(idx > 0) pdf.addPage();
-        pdf.addImage(tc.toDataURL('image/png'), 'PNG', rand, rand, nutzbreite, (hoehePx + kHoehe) * nutzbreite / canvas.width);
+        pdf.addImage(tc.toDataURL('image/jpeg', 0.85), 'JPEG', rand, rand, nutzbreite, (hoehePx + kHoehe) * nutzbreite / canvas.width, undefined, 'FAST');
       });
 
       var blob = pdf.output('blob');
@@ -12296,7 +12297,7 @@ function tbAbschnitt(titel, hinweistext, inhalt, hoehe){
   html += '<div style="font-weight:700; font-size:11px; text-decoration:underline; text-transform:uppercase; margin-bottom:4px;">' + titel + '</div>';
   html += '<div style="border:1px solid #333; min-height:' + hoehe + 'px; padding:5px 7px;">';
   if(hinweistext) html += '<div style="font-weight:700; font-size:9px; margin-bottom:3px;">' + hinweistext + '</div>';
-  if(inhalt) html += '<div style="white-space:pre-wrap; font-size:10px; line-height:1.5;">' + inhalt + '</div>';
+  if(inhalt) html += '<div style="white-space:pre-wrap; font-size:12px; line-height:1.5;">' + inhalt + '</div>';
   html += '</div></div>';
   return html;
 }
@@ -12316,7 +12317,7 @@ function tbMaterialTabelleLeer(){
 function tbMaterialTabelleAusgefuellt(text){
   var html = '<div style="margin-top:10px;">';
   html += '<div style="font-weight:700; font-size:11px; text-decoration:underline; text-transform:uppercase; margin-bottom:4px;">3. Verwendetes Material / Ersatzteile</div>';
-  html += '<table style="width:100%; border-collapse:collapse; font-size:9px;">';
+  html += '<table style="width:100%; border-collapse:collapse; font-size:11px;">';
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:4px 5px; font-weight:700;">Material / Ersatzteil &amp; Details</td></tr>';
   var zeilen = (text || '').split('\n').filter(function(z){ return z.trim().length > 0; });
   if(zeilen.length === 0){
@@ -12330,14 +12331,15 @@ function tbMaterialTabelleAusgefuellt(text){
   return html;
 }
 
-function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName){
+function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName, feldHoehe){
+  var fh = feldHoehe || 50;
   var html = '<div style="margin-top:14px;">';
   html += '<div style="font-weight:700; font-size:11px; text-decoration:underline; text-transform:uppercase; margin-bottom:4px;">5. Bestätigung</div>';
   html += '<table style="width:100%; border-collapse:collapse; font-size:9px;">';
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:4px 6px; font-weight:700; width:50%;">Techniker &ndash; Name / Unterschrift</td><td style="border:1px solid #333; background:#eee; padding:4px 6px; font-weight:700; width:50%;">Auftraggeber / Kunde' + (kundeName ? ' (' + escapeHtml(kundeName) + ')' : '') + ' &ndash; Unterschrift</td></tr>';
   html += '<tr>';
-  html += '<td style="border:1px solid #333; padding:5px; height:50px; text-align:center; vertical-align:middle;">' + (bildTechniker ? '<img src="' + bildTechniker + '" style="max-height:45px;">' : '') + '</td>';
-  html += '<td style="border:1px solid #333; padding:5px; height:50px; text-align:center; vertical-align:middle;">' + (bildKunde ? '<img src="' + bildKunde + '" style="max-height:45px;">' : '') + '</td>';
+  html += '<td style="border:1px solid #333; padding:5px; height:' + fh + 'px; text-align:center; vertical-align:middle;">' + (bildTechniker ? '<img src="' + bildTechniker + '" style="max-height:' + (fh - 5) + 'px;">' : '') + '</td>';
+  html += '<td style="border:1px solid #333; padding:5px; height:' + fh + 'px; text-align:center; vertical-align:middle;">' + (bildKunde ? '<img src="' + bildKunde + '" style="max-height:' + (fh - 5) + 'px;">' : '') + '</td>';
   html += '</tr>';
   html += '</table></div>';
   return html;
@@ -12349,7 +12351,7 @@ function tbFusszeile(){
 
 function buildTagesberichtDruckHtml(tb, k, qrId){
   var html = '';
-  html += '<div class="bericht-brief" style="font-family:-apple-system,Arial,sans-serif;">';
+  html += '<div class="bericht-brief nur-hochformat" style="font-family:-apple-system,Arial,sans-serif;">';
   html += tbBriefkopf(k ? qrId : null);
 
   html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
@@ -12359,11 +12361,11 @@ function buildTagesberichtDruckHtml(tb, k, qrId){
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', escapeHtml(tb.anlageBereich || ''));
   html += '</table>';
 
-  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', '', escapeHtml(tb.taetigkeitenAuftrag || ''), 65);
-  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', '', escapeHtml(tb.durchgefuehrt || ''), 100);
+  html += tbAbschnitt('1. Tätigkeiten laut Auftrag', '', escapeHtml(tb.taetigkeitenAuftrag || ''), 100);
+  html += tbAbschnitt('2. Durchgeführte Tätigkeiten', '', escapeHtml(tb.durchgefuehrt || ''), 190);
   html += tbMaterialTabelleAusgefuellt(tb.material);
-  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', escapeHtml(tb.feststellungen || ''), 100);
-  html += tbUnterschriftTabelle(tb.unterschriftTechniker, tb.unterschriftKunde, k ? k.name : null);
+  html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', escapeHtml(tb.feststellungen || ''), 180);
+  html += tbUnterschriftTabelle(tb.unterschriftTechniker, tb.unterschriftKunde, k ? k.name : null, 85);
   html += tbFusszeile();
 
   html += '</div>';
@@ -12435,7 +12437,7 @@ function modalTagesberichtAnsicht(tbId){
 
 function buildTagesberichtLeerDruckHtml(k, qrId){
   var html = '';
-  html += '<div class="bericht-brief" style="font-family:-apple-system,Arial,sans-serif;">';
+  html += '<div class="bericht-brief nur-hochformat" style="font-family:-apple-system,Arial,sans-serif;">';
   html += tbBriefkopf(qrId);
 
   html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
