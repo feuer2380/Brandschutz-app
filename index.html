@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-04 19:30';
-var APP_VERSION_TEXT = '04.11. 19:30';
+var APP_VERSION = '2026-11-04 20:10';
+var APP_VERSION_TEXT = '04.11. 20:10';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1758,6 +1758,9 @@ function renderDashboard(){
   if(terminTage.length){
     terminTage.sort(function(a, b){ return a.key.localeCompare(b.key) || (a.t.zeit || '99:99').localeCompare(b.t.zeit || '99:99'); });
     html += '<div class="section-title" style="margin-top:14px;">Termine (' + terminTage.length + ')</div>';
+    var routeHeute = routeStopps(0).length, routeMorgen = routeStopps(1).length;
+    var routeTag = routeHeute ? 0 : 1, routeAnz = routeHeute || routeMorgen;
+    if(routeAnz) html += '<button type="button" class="btn block secondary" id="routeHeuteBtn" data-routetag="' + routeTag + '" style="margin-bottom:10px;">&#128506; Route für ' + (routeTag === 0 ? 'heute' : 'morgen') + ' (' + routeAnz + ' ' + (routeAnz === 1 ? 'Stopp' : 'Stopps') + ')</button>';
     terminTage.forEach(function(e){
       var t = e.t;
       var kT = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
@@ -1776,7 +1779,7 @@ function renderDashboard(){
       if(artT) html += '<div class="aufgabe-art">' + artT + '</div>';
       html += '</div>';
       html += '<div class="aufgabe-datum"><b>' + wtT[dT.getDay()] + ' ' + fmtDate(e.key + 'T12:00:00').substring(0, 6) + '</b>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : '<span class="badge ' + clsT + '">' + (e.offset > 1 ? 'in ' + e.offset + ' Tagen' : tagText) + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span>') + '</div></div>';
-      if(kT && kT.adresse) html += '<div class="aufgabe-adr">&#128205; ' + escapeHtml(kT.adresse) + '</div>';
+      if(kT && routeAdresse(kT)) html += '<div class="aufgabe-adr"><a href="' + escapeHtml(routeNaviLink(routeAdresse(kT))) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:inherit; text-decoration:none;">&#128205; ' + escapeHtml(routeAdresse(kT)) + ' <span style="color:#1d5fa8; font-weight:600;">&rsaquo; Navi</span></a></div>';
       if(t.erledigt) html += '<div class="meta" style="color:#2f7a4f;">erledigt von ' + escapeHtml(zustaendigKurz(t.erledigtVon || '')) + ' am ' + fmtDate(t.erledigtAm) + '</div>';
       var plT = (t.personen || []).indexOf('alle') >= 0 ? ['alle'] : (t.personen || []);
       var iniT = plT[0] === 'alle' ? 'A' : (plT.length ? String(zustaendigKurz(plT[0])).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join('') : '!');
@@ -13027,6 +13030,75 @@ function lagerBestelllisteHtml(){
   html += '</div>';
   return html;
 }
+// ---------- Tagesroute ----------
+function routeAdresse(k){
+  if(!k) return '';
+  var a = String(k.objektAdresse || '').trim() || String(k.adresse || '').trim();
+  if(!a){ a = [k.strasse, ((k.plz || '') + ' ' + (k.ort || '')).trim()].filter(function(x){ return x && String(x).trim(); }).join(', '); }
+  return a;
+}
+function routeIstApple(){
+  return /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || '');
+}
+function routeNaviLink(adresse){
+  if(routeIstApple()) return 'https://maps.apple.com/?daddr=' + encodeURIComponent(adresse) + '&dirflg=d';
+  return 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(adresse) + '&travelmode=driving';
+}
+function routeGoogleGesamt(adressen){
+  if(!adressen.length) return '';
+  var ziel = adressen[adressen.length - 1];
+  var zw = adressen.slice(0, adressen.length - 1).slice(0, 9);
+  return 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(ziel) + (zw.length ? '&waypoints=' + encodeURIComponent(zw.join('|')) : '') + '&travelmode=driving';
+}
+function routeStopps(offset){
+  var j = new Date();
+  var d = new Date(j.getFullYear(), j.getMonth(), j.getDate() + offset);
+  var key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  var liste = [];
+  (state.termine || []).forEach(function(t){
+    if(String(t.datum || '').substring(0, 10) !== key) return;
+    if(t.erledigt) return;
+    var pl = t.personen || [];
+    if(istEingeschraenkt() && pl.indexOf('alle') < 0 && pl.indexOf(state.mitarbeiterName) < 0) return;
+    var k = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+    var adr = routeAdresse(k);
+    if(!adr) return;
+    liste.push({ t: t, k: k, adresse: adr });
+  });
+  liste.sort(function(a, b){ return (a.t.zeit || '99:99').localeCompare(b.t.zeit || '99:99'); });
+  return liste;
+}
+function modalRoute(offset){
+  var stopps = routeStopps(offset);
+  var ohneAdresse = 0;
+  var html = '<div class="modal-head"><h3>Route ' + (offset === 0 ? 'heute' : 'morgen') + '</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="display:flex; gap:8px; margin-bottom:10px;">';
+  html += '<button type="button" class="btn ' + (offset === 0 ? '' : 'secondary') + '" id="routeTag0" style="flex:1;">Heute</button>';
+  html += '<button type="button" class="btn ' + (offset === 1 ? '' : 'secondary') + '" id="routeTag1" style="flex:1;">Morgen</button>';
+  html += '</div>';
+  if(!stopps.length){
+    html += '<div class="empty">Keine offenen Termine mit Adresse</div>';
+  } else {
+    stopps.forEach(function(st, i){
+      html += '<div class="card" style="margin-top:8px; display:flex; gap:12px; align-items:center;">';
+      html += '<div style="width:32px; height:32px; border-radius:16px; background:#e8541e; color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;">' + (i + 1) + '</div>';
+      html += '<div style="flex:1; min-width:0;"><div style="font-weight:700;">' + escapeHtml(st.k ? st.k.name : (st.t.titel || 'Termin')) + (st.t.zeit ? ' <span class="meta">· ' + escapeHtml(st.t.zeit) + ' Uhr</span>' : '') + '</div>';
+      html += '<div class="meta">' + escapeHtml(st.adresse) + '</div>';
+      if(st.k && st.k.telefon) html += '<div class="meta"><a href="tel:' + escapeHtml(String(st.k.telefon).replace(/[^0-9+]/g, '')) + '" style="color:#1d5fa8;">&#128222; ' + escapeHtml(st.k.telefon) + '</a></div>';
+      html += '</div>';
+      html += '<a class="btn" href="' + escapeHtml(routeNaviLink(st.adresse)) + '" target="_blank" rel="noopener" style="flex-shrink:0; text-decoration:none; padding:10px 12px;">Navi</a>';
+      html += '</div>';
+    });
+    if(stopps.length > 1){
+      html += '<a class="btn block secondary" href="' + escapeHtml(routeGoogleGesamt(stopps.map(function(s){ return s.adresse; }))) + '" target="_blank" rel="noopener" style="margin-top:12px; text-decoration:none; text-align:center;">Ganze Route in Google Maps</a>';
+      html += '<div class="meta" style="margin-top:4px; text-align:center;">Reihenfolge nach Uhrzeit. Startpunkt ist dein aktueller Standort.</div>';
+    }
+  }
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('routeTag0').onclick = function(){ modalRoute(0); };
+  document.getElementById('routeTag1').onclick = function(){ modalRoute(1); };
+}
 // ---------- Kunden an fällige Prüfung erinnern ----------
 function pruefErinnerungGruppen(){
   var jetzt = new Date();
@@ -13857,6 +13929,8 @@ function bindDynamic(){
 
   var terminlisteBtn = document.getElementById('terminlisteBtn');
   if(terminlisteBtn) terminlisteBtn.onclick = modalTerminliste;
+  var routeHeuteBtn = document.getElementById('routeHeuteBtn');
+  if(routeHeuteBtn) routeHeuteBtn.onclick = function(){ modalRoute(parseInt(routeHeuteBtn.getAttribute('data-routetag'), 10) || 0); };
   var pruefErinnernBtn = document.getElementById('pruefErinnernBtn');
   if(pruefErinnernBtn) pruefErinnernBtn.onclick = function(){ modalPruefErinnerungListe(); };
   var baldFaelligDruckBtn = document.getElementById('baldFaelligDruckBtn');
