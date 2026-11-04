@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-04 17:00';
-var APP_VERSION_TEXT = '04.11. 17:00';
+var APP_VERSION = '2026-11-04 19:30';
+var APP_VERSION_TEXT = '04.11. 19:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -13043,6 +13043,8 @@ function pruefErinnerungGruppen(){
   relevant.forEach(function(p){
     var k = kundeFuerPruefung(p);
     if(!k) return;
+    var gp = geraetFuerPruefung(p);
+    if(gp && istFuellKategorie(String(gp.kategorie || '').trim())) return;
     if(!gruppen[k.id]){ gruppen[k.id] = { kunde: k, eintraege: [] }; liste.push(gruppen[k.id]); }
     gruppen[k.id].eintraege.push(p);
   });
@@ -13056,11 +13058,16 @@ function pruefErinnerungNurText(html){
 function pruefErinnerungZusammenfassung(eintraege){
   var zaehler = {}, reihe = [];
   eintraege.forEach(function(p){
-    var t = pruefErinnerungNurText(pruefungAnzeigeText(p)).replace(/\s*·\s*Nr\.?\s*[^·]*$/, '').replace(/\s*·\s*Nr\.?\s*[^·]*·/, ' ·') || 'Prüfung';
-    if(!zaehler[t]){ zaehler[t] = { anzahl: 0, datum: p.datum }; reihe.push(t); }
-    zaehler[t].anzahl++;
+    var g = geraetFuerPruefung(p);
+    var kat = g ? String(g.kategorie || 'Feuerlöscher').trim() : String(p.typ || 'Überprüfung');
+    if(!zaehler[kat]){ zaehler[kat] = { anzahl: 0, datum: p.datum }; reihe.push(kat); }
+    zaehler[kat].anzahl++;
+    if(new Date(p.datum) < new Date(zaehler[kat].datum)) zaehler[kat].datum = p.datum;
   });
-  return reihe.map(function(t){ return '- ' + (zaehler[t].anzahl > 1 ? zaehler[t].anzahl + ' x ' : '') + t + ' (fällig ' + fmtDate(zaehler[t].datum) + ')'; });
+  return reihe.map(function(kat){
+    var z = zaehler[kat];
+    return { text: kat + (z.anzahl > 1 ? ': ' + z.anzahl + ' Stück' : ''), datum: z.datum };
+  });
 }
 function pruefErinnerungTelefon(k){
   var t = String(k.telefon || '').replace(/[^0-9+]/g, '');
@@ -13097,14 +13104,21 @@ function modalPruefErinnerung(kundeId){
   if(!g) return;
   var k = g.kunde;
   var zeilen = pruefErinnerungZusammenfassung(g.eintraege);
+  var kurzDatum = function(iso){ var d = new Date(iso); return d.getDate() + '.' + (d.getMonth() + 1) + '.'; };
+  var ort = k.objekt ? ' für ' + k.objekt : '';
   var text = 'Sehr geehrte Damen und Herren,\n\n'
-    + 'wir dürfen Sie daran erinnern, dass bei Ihnen' + (k.objekt ? ' (' + k.objekt + ')' : '') + ' folgende Überprüfung(en) anstehen:\n\n'
-    + zeilen.join('\n') + '\n\n'
-    + 'Gerne vereinbaren wir mit Ihnen einen Termin. Bitte melden Sie sich kurz telefonisch unter 0676/305 83 98 oder per Antwort auf diese Nachricht.\n\n'
+    + 'die regelmäßige Überprüfung Ihrer Brandschutzeinrichtungen' + ort + ' steht wieder an:\n\n'
+    + zeilen.map(function(z){ return '• ' + z.text + ' (fällig ab ' + fmtDate(z.datum) + ')'; }).join('\n') + '\n\n'
+    + 'Damit Ihr Brandschutz weiterhin auf dem aktuellen Stand ist, würden wir gerne einen Termin mit Ihnen vereinbaren. '
+    + 'Rufen Sie uns einfach unter 0676/305 83 98 an oder antworten Sie auf diese E-Mail – wir richten uns gerne nach Ihnen.\n\n'
     + 'Mit freundlichen Grüßen\n\n'
-    + 'Wolfgang Janiba Brandschutztechnik GmbH\nKetzergasse 299, 2380 Perchtoldsdorf\nTel 0676/305 83 98 · info@loeschtechnik.at';
-  var sms = 'Guten Tag, hier Brandschutztechnik Janiba. Bei Ihnen' + (k.objekt ? ' (' + k.objekt + ')' : '') + ' steht die Überprüfung an: '
-    + zeilen.map(function(z){ return z.replace(/^- /, ''); }).join(', ') + '. Wann dürfen wir vorbeikommen? Tel 0676/305 83 98';
+    + 'Wolfgang Janiba\nWolfgang Janiba Brandschutztechnik GmbH\nKetzergasse 299, 2380 Perchtoldsdorf\nTel 0676/305 83 98 · info@loeschtechnik.at\nwww.brandschutztechnik-janiba.at';
+  var smsName = ((k.vorname || '') + ' ' + (k.nachname || '')).trim() || String(k.name || '').trim();
+  var nurLoescher = zeilen.length === 1 && /^Feuerlöscher/.test(zeilen[0].text);
+  var smsWas = nurLoescher ? 'Ihrer Feuerlöscher' : 'Ihrer Brandschutzeinrichtungen';
+  var sms = 'Hallo' + (smsName ? ' ' + smsName : '') + ', kurze Erinnerung: Die Prüfung ' + smsWas + ' steht wieder an. '
+    + 'Damit im Ernstfall alles sicher funktioniert, machen wir die Geräte gerne schnell wieder fit. '
+    + 'Rufen Sie uns für einen Termin einfach unter 0676 30 58 398 an. Schöne Grüße, Wolfgang Janiba, Brandschutztechnik Janiba';
   var betreff = 'Erinnerung: Überprüfung Ihrer Brandschutzeinrichtungen';
   var html = '<div class="modal-head"><h3>Erinnerung</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(k.name || '') + (k.email ? ' &middot; ' + escapeHtml(k.email) : '') + (k.telefon ? ' &middot; ' + escapeHtml(k.telefon) : '') + '</div>';
@@ -13112,15 +13126,15 @@ function modalPruefErinnerung(kundeId){
   html += '<label>Betreff</label><input id="peBetreff" type="text" value="' + escapeHtml(betreff) + '">';
   html += '<label>Text für E-Mail (kannst du anpassen)</label><textarea id="peText" rows="12" style="width:100%; font-size:14px;">' + escapeHtml(text) + '</textarea>';
   html += '<label>Text für SMS</label><textarea id="peSms" rows="4" style="width:100%; font-size:14px;">' + escapeHtml(sms) + '</textarea>';
-  html += '<button class="btn block" id="peMail" style="margin-top:10px;">E-Mail öffnen' + (k.email ? '' : ' (keine Adresse hinterlegt)') + '</button>';
-  html += '<button class="btn block secondary" id="peSmsBtn" style="margin-top:8px;">SMS öffnen' + (k.telefon ? '' : ' (kein Telefon hinterlegt)') + '</button>';
+  html += '<button class="btn block' + (k.email ? '' : ' secondary') + '" id="peMail" style="margin-top:10px;">E-Mail öffnen' + (k.email ? '' : ' (keine Adresse hinterlegt)') + '</button>';
+  html += '<button class="btn block' + (!k.email && k.telefon ? '' : ' secondary') + '" id="peSmsBtn" style="margin-top:8px;">SMS öffnen' + (k.telefon ? '' : ' (kein Telefon hinterlegt)') + '</button>';
   html += '<button class="btn block secondary" id="peKopie" style="margin-top:8px;">SMS-Text kopieren (für WhatsApp)</button>';
   html += '<button class="btn block secondary" id="peZurueck" style="margin-top:8px;">Zurück zur Liste</button>';
   openModal(html);
   var vermerken = function(art){
     k.pruefErinnertAm = new Date().toISOString();
     if(!k.vermerke) k.vermerke = [];
-    k.vermerke.push({ id: uid(), text: 'An Prüfung erinnert (' + art + '): ' + zeilen.map(function(z){ return z.replace(/^- /, ''); }).join(', '), erstelltAm: k.pruefErinnertAm, erstelltVon: lagerAktuellerBenutzer(), erledigt: true, erledigtAm: k.pruefErinnertAm });
+    k.vermerke.push({ id: uid(), text: 'An Prüfung erinnert (' + art + '): ' + zeilen.map(function(z){ return z.text; }).join(', '), erstelltAm: k.pruefErinnertAm, erstelltVon: lagerAktuellerBenutzer(), erledigt: true, erledigtAm: k.pruefErinnertAm });
     dbPut('kunden', k, function(){});
   };
   document.getElementById('mClose').onclick = closeModal;
