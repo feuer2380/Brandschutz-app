@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-04 16:30';
-var APP_VERSION_TEXT = '04.11. 16:30';
+var APP_VERSION = '2026-11-04 17:00';
+var APP_VERSION_TEXT = '04.11. 17:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1665,6 +1665,7 @@ function renderDashboard(){
   html += '<div class="stat"><div class="n" style="color:' + (ueberfaelligGeraete.length ? '#c23f12' : '#2f7a4f') + '">' + ueberfaelligGeraete.length + '</div><div class="l">Überfällig</div></div>';
   html += '</div>';
   if(istVollsicht()) html += '<button class="btn block secondary" id="baldFaelligDruckBtn" style="margin-top:12px;">Bald fällig drucken (für unterwegs)</button>';
+  if(istVollsicht()) html += '<button class="btn block secondary" id="pruefErinnernBtn" style="margin-top:8px;">Kunden an Prüfung erinnern</button>';
 
   var lagerNiedrig = state.lagerartikel.filter(function(a){ return (a.mindestbestand != null) && (a.bestand < a.mindestbestand); });
   if(lagerNiedrig.length > 0){
@@ -13026,6 +13027,119 @@ function lagerBestelllisteHtml(){
   html += '</div>';
   return html;
 }
+// ---------- Kunden an fällige Prüfung erinnern ----------
+function pruefErinnerungGruppen(){
+  var jetzt = new Date();
+  var nm = new Date(jetzt.getFullYear(), jetzt.getMonth() + 1, 1);
+  var offen = state.pruefungen.filter(function(p){ return !p.erledigt && p.datum && kundeIstAktiv(p.kundeId); });
+  var relevant = offen.filter(function(p){
+    var d = new Date(p.datum);
+    if(daysUntil(p.datum) < 0) return true;
+    if(d.getMonth() === jetzt.getMonth() && d.getFullYear() === jetzt.getFullYear()) return true;
+    return d.getMonth() === nm.getMonth() && d.getFullYear() === nm.getFullYear();
+  });
+  relevant.sort(function(a, b){ return new Date(a.datum) - new Date(b.datum); });
+  var gruppen = {}, liste = [];
+  relevant.forEach(function(p){
+    var k = kundeFuerPruefung(p);
+    if(!k) return;
+    if(!gruppen[k.id]){ gruppen[k.id] = { kunde: k, eintraege: [] }; liste.push(gruppen[k.id]); }
+    gruppen[k.id].eintraege.push(p);
+  });
+  return liste;
+}
+function pruefErinnerungNurText(html){
+  var d = document.createElement('div');
+  d.innerHTML = String(html || '').replace(/<br\s*\/?>/gi, ' ');
+  return (d.textContent || '').replace(/\s+/g, ' ').trim();
+}
+function pruefErinnerungZusammenfassung(eintraege){
+  var zaehler = {}, reihe = [];
+  eintraege.forEach(function(p){
+    var t = pruefErinnerungNurText(pruefungAnzeigeText(p)).replace(/\s*·\s*Nr\.?\s*[^·]*$/, '').replace(/\s*·\s*Nr\.?\s*[^·]*·/, ' ·') || 'Prüfung';
+    if(!zaehler[t]){ zaehler[t] = { anzahl: 0, datum: p.datum }; reihe.push(t); }
+    zaehler[t].anzahl++;
+  });
+  return reihe.map(function(t){ return '- ' + (zaehler[t].anzahl > 1 ? zaehler[t].anzahl + ' x ' : '') + t + ' (fällig ' + fmtDate(zaehler[t].datum) + ')'; });
+}
+function pruefErinnerungTelefon(k){
+  var t = String(k.telefon || '').replace(/[^0-9+]/g, '');
+  if(t.indexOf('00') === 0) t = '+' + t.substring(2);
+  else if(t.indexOf('0') === 0) t = '+43' + t.substring(1);
+  return t;
+}
+function modalPruefErinnerungListe(){
+  var gruppen = pruefErinnerungGruppen();
+  var html = '<div class="modal-head"><h3>Kunden erinnern</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Kunden mit Prüfungen, die überfällig sind oder diesen bzw. nächsten Monat fällig werden.</div>';
+  if(gruppen.length === 0){
+    html += '<div class="empty">Keine fälligen Prüfungen</div>';
+  }
+  gruppen.forEach(function(g){
+    var k = g.kunde;
+    var ueberf = g.eintraege.filter(function(p){ return daysUntil(p.datum) < 0; }).length;
+    html += '<div class="card" style="margin-top:8px; cursor:pointer;" data-erinnernkunde="' + escapeHtml(k.id) + '">';
+    html += '<div class="row" style="justify-content:space-between; align-items:flex-start;"><div style="font-weight:700;">' + escapeHtml(k.name || '') + '</div>';
+    html += '<span class="badge ' + (ueberf ? 'warn' : 'soon') + '">' + g.eintraege.length + (ueberf ? ' · ' + ueberf + ' überfällig' : '') + '</span></div>';
+    html += '<div class="meta">Fällig ab ' + fmtDate(g.eintraege[0].datum) + (k.email ? '' : ' · <span style="color:#c23f12;">keine E-Mail</span>') + (k.telefon ? '' : ' · <span style="color:#c23f12;">kein Telefon</span>') + '</div>';
+    if(k.pruefErinnertAm) html += '<div class="meta" style="color:#2f7a4f;">&#10003; Zuletzt erinnert am ' + fmtDate(k.pruefErinnertAm) + '</div>';
+    html += '</div>';
+  });
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('[data-erinnernkunde]').forEach(function(el){
+    el.onclick = function(){ modalPruefErinnerung(el.getAttribute('data-erinnernkunde')); };
+  });
+}
+function modalPruefErinnerung(kundeId){
+  var gruppen = pruefErinnerungGruppen();
+  var g = gruppen.filter(function(x){ return x.kunde.id === kundeId; })[0];
+  if(!g) return;
+  var k = g.kunde;
+  var zeilen = pruefErinnerungZusammenfassung(g.eintraege);
+  var text = 'Sehr geehrte Damen und Herren,\n\n'
+    + 'wir dürfen Sie daran erinnern, dass bei Ihnen' + (k.objekt ? ' (' + k.objekt + ')' : '') + ' folgende Überprüfung(en) anstehen:\n\n'
+    + zeilen.join('\n') + '\n\n'
+    + 'Gerne vereinbaren wir mit Ihnen einen Termin. Bitte melden Sie sich kurz telefonisch unter 0676/305 83 98 oder per Antwort auf diese Nachricht.\n\n'
+    + 'Mit freundlichen Grüßen\n\n'
+    + 'Wolfgang Janiba Brandschutztechnik GmbH\nKetzergasse 299, 2380 Perchtoldsdorf\nTel 0676/305 83 98 · info@loeschtechnik.at';
+  var sms = 'Guten Tag, hier Brandschutztechnik Janiba. Bei Ihnen' + (k.objekt ? ' (' + k.objekt + ')' : '') + ' steht die Überprüfung an: '
+    + zeilen.map(function(z){ return z.replace(/^- /, ''); }).join(', ') + '. Wann dürfen wir vorbeikommen? Tel 0676/305 83 98';
+  var betreff = 'Erinnerung: Überprüfung Ihrer Brandschutzeinrichtungen';
+  var html = '<div class="modal-head"><h3>Erinnerung</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + escapeHtml(k.name || '') + (k.email ? ' &middot; ' + escapeHtml(k.email) : '') + (k.telefon ? ' &middot; ' + escapeHtml(k.telefon) : '') + '</div>';
+  if(k.pruefErinnertAm) html += '<div class="meta" style="color:#2f7a4f;">&#10003; Zuletzt erinnert am ' + fmtDate(k.pruefErinnertAm) + '</div>';
+  html += '<label>Betreff</label><input id="peBetreff" type="text" value="' + escapeHtml(betreff) + '">';
+  html += '<label>Text für E-Mail (kannst du anpassen)</label><textarea id="peText" rows="12" style="width:100%; font-size:14px;">' + escapeHtml(text) + '</textarea>';
+  html += '<label>Text für SMS</label><textarea id="peSms" rows="4" style="width:100%; font-size:14px;">' + escapeHtml(sms) + '</textarea>';
+  html += '<button class="btn block" id="peMail" style="margin-top:10px;">E-Mail öffnen' + (k.email ? '' : ' (keine Adresse hinterlegt)') + '</button>';
+  html += '<button class="btn block secondary" id="peSmsBtn" style="margin-top:8px;">SMS öffnen' + (k.telefon ? '' : ' (kein Telefon hinterlegt)') + '</button>';
+  html += '<button class="btn block secondary" id="peKopie" style="margin-top:8px;">SMS-Text kopieren (für WhatsApp)</button>';
+  html += '<button class="btn block secondary" id="peZurueck" style="margin-top:8px;">Zurück zur Liste</button>';
+  openModal(html);
+  var vermerken = function(art){
+    k.pruefErinnertAm = new Date().toISOString();
+    if(!k.vermerke) k.vermerke = [];
+    k.vermerke.push({ id: uid(), text: 'An Prüfung erinnert (' + art + '): ' + zeilen.map(function(z){ return z.replace(/^- /, ''); }).join(', '), erstelltAm: k.pruefErinnertAm, erstelltVon: lagerAktuellerBenutzer(), erledigt: true, erledigtAm: k.pruefErinnertAm });
+    dbPut('kunden', k, function(){});
+  };
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('peZurueck').onclick = function(){ modalPruefErinnerungListe(); };
+  document.getElementById('peMail').onclick = function(){
+    var b = document.getElementById('peBetreff').value, t = document.getElementById('peText').value;
+    vermerken('E-Mail');
+    location.href = 'mailto:' + encodeURIComponent(k.email || '') + '?subject=' + encodeURIComponent(b) + '&body=' + encodeURIComponent(t);
+  };
+  document.getElementById('peSmsBtn').onclick = function(){
+    var t = document.getElementById('peSms').value;
+    vermerken('SMS');
+    location.href = 'sms:' + pruefErinnerungTelefon(k) + '&body=' + encodeURIComponent(t);
+  };
+  document.getElementById('peKopie').onclick = function(){
+    var t = document.getElementById('peSms').value;
+    try{ navigator.clipboard.writeText(t).then(function(){ vermerken('WhatsApp/Text'); toast('Text kopiert'); }, function(){ toast('Kopieren nicht möglich'); }); }catch(e){ toast('Kopieren nicht möglich'); }
+  };
+}
 function modalZahlungserinnerung(kundeId, rechnungId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   if(!k) return;
@@ -13729,6 +13843,8 @@ function bindDynamic(){
 
   var terminlisteBtn = document.getElementById('terminlisteBtn');
   if(terminlisteBtn) terminlisteBtn.onclick = modalTerminliste;
+  var pruefErinnernBtn = document.getElementById('pruefErinnernBtn');
+  if(pruefErinnernBtn) pruefErinnernBtn.onclick = function(){ modalPruefErinnerungListe(); };
   var baldFaelligDruckBtn = document.getElementById('baldFaelligDruckBtn');
   if(baldFaelligDruckBtn) baldFaelligDruckBtn.onclick = function(){
     bsvDruckenOderTeilen(buildBaldFaelligDruckHtml(), 'Baldige-Termine.pdf');
