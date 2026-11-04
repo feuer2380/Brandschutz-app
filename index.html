@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-04 16:00';
-var APP_VERSION_TEXT = '04.11. 16:00';
+var APP_VERSION = '2026-11-04 16:30';
+var APP_VERSION_TEXT = '04.11. 16:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1245,8 +1245,9 @@ function renderInner(){
     var pinInput = document.getElementById('loginPin');
     var pruefen = function(){
       var wert = pinInput.value.trim();
-      var mitarbeiterTreffer = MITARBEITER_LISTE.filter(function(m){ return m.pin === wert; })[0];
-      if(wert === CHEF_PIN){ state.rolle = 'chef'; state.mitarbeiterName = null; anmeldungMerken(); render(); }
+      var pw = wert ? pinPruefwert(wert) : '';
+      var mitarbeiterTreffer = MITARBEITER_LISTE.filter(function(m){ return m.pinPruefwert === pw; })[0];
+      if(pw && pw === CHEF_PIN_PRUEFWERT){ state.rolle = 'chef'; state.mitarbeiterName = null; anmeldungMerken(); render(); }
       else if(mitarbeiterTreffer){ state.rolle = 'mitarbeiter'; state.mitarbeiterName = mitarbeiterTreffer.name; anmeldungMerken(); render(); }
       else {
         document.getElementById('loginFehler').textContent = 'Falscher PIN';
@@ -3765,15 +3766,61 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
 }
 
 // ---------- Kunden ----------
-var CHEF_PIN = '0239';
+// PIN-Prüfwert (SHA-256, mehrfach mit Salz) – im Code stehen keine PINs mehr
+function pinSha256(ascii){
+  var rr = function(v, n){ return (v >>> n) | (v << (32 - n)); };
+  var K = pinSha256.K, H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  if(!K){
+    K = pinSha256.K = [];
+    var p = 2, z = 0;
+    while(z < 64){
+      var ist = true;
+      for(var d = 2; d * d <= p; d++){ if(p % d === 0){ ist = false; break; } }
+      if(ist){ K[z++] = (Math.pow(p, 1/3) * 4294967296) | 0; }
+      p++;
+    }
+  }
+  var bytes = [], i, j;
+  for(i = 0; i < ascii.length; i++){ bytes.push(ascii.charCodeAt(i) & 255); }
+  var bitLen = bytes.length * 8;
+  bytes.push(0x80);
+  while(bytes.length % 64 !== 56){ bytes.push(0); }
+  for(i = 7; i >= 0; i--){ bytes.push(i >= 4 ? 0 : (bitLen >>> (i * 8)) & 255); }
+  var w = [];
+  for(j = 0; j < bytes.length; j += 64){
+    for(i = 0; i < 16; i++){ w[i] = (bytes[j+i*4] << 24) | (bytes[j+i*4+1] << 16) | (bytes[j+i*4+2] << 8) | bytes[j+i*4+3]; }
+    for(i = 16; i < 64; i++){
+      var s0 = rr(w[i-15], 7) ^ rr(w[i-15], 18) ^ (w[i-15] >>> 3);
+      var s1 = rr(w[i-2], 17) ^ rr(w[i-2], 19) ^ (w[i-2] >>> 10);
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+    }
+    var a = H[0], b = H[1], c = H[2], dd = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for(i = 0; i < 64; i++){
+      var t1 = h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i];
+      var t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+      h = g; g = f; f = e; e = (dd + t1) | 0; dd = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + dd) | 0;
+    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  var hex = '';
+  for(i = 0; i < 8; i++){ var x = (H[i] >>> 0).toString(16); while(x.length < 8){ x = '0' + x; } hex += x; }
+  return hex;
+}
+function pinPruefwert(pin){
+  var wert = 'janiba-bsv|' + pin;
+  for(var i = 0; i < 3000; i++){ wert = pinSha256(wert + '|' + pin); }
+  return wert;
+}
+var CHEF_PIN_PRUEFWERT = '7b0ac164b46333502459bc71928b9ba693510030212e6ac99fa58ef1a2df7a34';
 var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
-  { name: 'Janiba Wolfgang sen.', pin: '8276', lagerbuch: true, vollzugriff: true, statistik: true },
-  { name: 'Prominzer Tobias', pin: '8277' },
-  { name: 'Mayerhofer Tobias', pin: '8278' },
-  { name: 'Holakovsky Manuela', pin: '8279', aufgabenVergeben: true, vollzugriff: true, statistik: true },
-  { name: 'Henke Alexander', pin: '8281' },
-  { name: 'Harris Sandra', pin: '8280', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
+  { name: 'Janiba Wolfgang sen.', pinPruefwert: 'b1b89ef39b06b58a21533ed951b596ec651fa17a89b69523f05cf6558777a9da', lagerbuch: true, vollzugriff: true, statistik: true },
+  { name: 'Prominzer Tobias', pinPruefwert: 'd6508a86e67e359c12c96a90b69e0db0bc9a80e84e3a7585261f6c3ed6591e78' },
+  { name: 'Mayerhofer Tobias', pinPruefwert: '9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd' },
+  { name: 'Holakovsky Manuela', pinPruefwert: 'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38', aufgabenVergeben: true, vollzugriff: true, statistik: true },
+  { name: 'Henke Alexander', pinPruefwert: '82e8e2870105ec7f465aa8c8e99b0e0a65c9713bb2ac845d48b9d51c1bfc723f' },
+  { name: 'Harris Sandra', pinPruefwert: 'af0757f3208d062e6a6e80e4c771fce69f9dbc951daec8378c3788710015180c', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
 var ZEIT_ALTE_NAMEN = {
@@ -10552,6 +10599,54 @@ function kalMonatWechseln(delta){
   render();
 }
 
+// ---------- Datensicherung ----------
+function datensicherungErstellen(){
+  var jetzt = new Date();
+  var zwei = function(n){ return (n < 10 ? '0' : '') + n; };
+  var stempel = jetzt.getFullYear() + '-' + zwei(jetzt.getMonth() + 1) + '-' + zwei(jetzt.getDate()) + '_' + zwei(jetzt.getHours()) + '-' + zwei(jetzt.getMinutes());
+  var daten = { programm: 'Brandschutzverwaltung', version: APP_VERSION, erstelltAm: jetzt.toISOString(), erstelltVon: (state.rolle === 'chef' ? CHEF_NAME : state.mitarbeiterName), bereiche: {} };
+  var anzahl = 0, uebersicht = [];
+  for(var i = 0; i < LADE_STORES.length; i++){
+    var st = LADE_STORES[i];
+    var liste = state[st] || [];
+    daten.bereiche[st] = liste;
+    anzahl += liste.length;
+  }
+  uebersicht.push((state.kunden || []).length + ' Kunden');
+  uebersicht.push((state.geraete || []).length + ' Geräte');
+  uebersicht.push((state.pruefungen || []).length + ' Prüfungen');
+  uebersicht.push((state.zeiten || []).length + ' Zeiteinträge');
+  uebersicht.push((state.fahrten || []).length + ' Fahrten');
+  var text;
+  try{ text = JSON.stringify(daten); }catch(e){ toast('Sicherung fehlgeschlagen: ' + e.message); return; }
+  var name = 'Sicherung_Brandschutz_' + stempel + '.json';
+  var blob = new Blob([text], { type: 'application/json' });
+  var fertig = function(){
+    var anzeige = zwei(jetzt.getDate()) + '.' + zwei(jetzt.getMonth() + 1) + '.' + jetzt.getFullYear() + ' ' + zwei(jetzt.getHours()) + ':' + zwei(jetzt.getMinutes());
+    try{ localStorage.setItem('bsvLetzteSicherung', anzeige); }catch(e){}
+    toast('Sicherung erstellt: ' + uebersicht.join(', '));
+  };
+  var datei = null;
+  try{ datei = new File([blob], name, { type: 'application/json' }); }catch(e){ datei = null; }
+  if(datei && navigator.canShare && navigator.share && navigator.canShare({ files: [datei] })){
+    navigator.share({ files: [datei], title: name }).then(fertig).catch(function(err){
+      if(err && err.name === 'AbortError') return;
+      sicherungHerunterladen(blob, name); fertig();
+    });
+    return;
+  }
+  sicherungHerunterladen(blob, name);
+  fertig();
+}
+function sicherungHerunterladen(blob, name){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = name; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+}
+
 function modalMehrMenu(){
   var html = '';
   html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
@@ -10573,10 +10668,17 @@ function modalMehrMenu(){
     html += e.label + '</button>';
   });
   html += '<label style="display:flex; align-items:center; gap:10px; margin-top:16px; font-size:15px;"><input type="checkbox" id="mehrQuer" style="width:22px; height:22px;"' + (bsvQuerformat() ? ' checked' : '') + '> Berichte im Querformat drucken</label>';
+  if(darfInfoVerwalten()){
+    var letzte = '';
+    try{ letzte = localStorage.getItem('bsvLetzteSicherung') || ''; }catch(e){}
+    html += '<button type="button" class="btn block" id="mehrSichern" style="margin-top:16px;">Alles sichern (Datei herunterladen)</button>';
+    html += '<div class="meta" style="margin-top:4px; text-align:center;">' + (letzte ? 'Letzte Sicherung auf diesem Gerät: ' + escapeHtml(letzte) : 'Auf diesem Gerät noch keine Sicherung gemacht') + '</div>';
+  }
   html += '<button type="button" class="btn block secondary" id="mehrGeraetAbmelden" style="margin-top:16px; color:#c23f12;">Gerät abmelden (Firmen-Konto)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mehrGeraetAbmelden').onclick = function(){ closeModal(); geraetAbmelden(); };
+  if(document.getElementById('mehrSichern')) document.getElementById('mehrSichern').onclick = function(){ closeModal(); datensicherungErstellen(); };
   document.getElementById('mehrQuer').onchange = function(){ bsvQuerformatSetzen(this.checked); toast(this.checked ? 'Querformat ein' : 'Hochformat'); };
   document.querySelectorAll('[data-mehrtab]').forEach(function(b){
     b.onclick = function(){

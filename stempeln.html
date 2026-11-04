@@ -43,8 +43,54 @@ var FIREBASE_CONFIG = {
   messagingSenderId: "466445019724",
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
-var CHEF_PIN = '0239';
-var MITARBEITER = [{name:'Janiba Wolfgang sen.',pin:'8276'},{name:'Prominzer Tobias',pin:'8277'},{name:'Mayerhofer Tobias',pin:'8278'},{name:'Holakovsky Manuela',pin:'8279'},{name:'Harris Sandra',pin:'8280'},{name:'Henke Alexander',pin:'8281'}];
+// PIN-Prüfwert (SHA-256, mehrfach mit Salz) – im Code stehen keine PINs mehr
+function pinSha256(ascii){
+  var rr = function(v, n){ return (v >>> n) | (v << (32 - n)); };
+  var K = pinSha256.K, H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  if(!K){
+    K = pinSha256.K = [];
+    var p = 2, z = 0;
+    while(z < 64){
+      var ist = true;
+      for(var d = 2; d * d <= p; d++){ if(p % d === 0){ ist = false; break; } }
+      if(ist){ K[z++] = (Math.pow(p, 1/3) * 4294967296) | 0; }
+      p++;
+    }
+  }
+  var bytes = [], i, j;
+  for(i = 0; i < ascii.length; i++){ bytes.push(ascii.charCodeAt(i) & 255); }
+  var bitLen = bytes.length * 8;
+  bytes.push(0x80);
+  while(bytes.length % 64 !== 56){ bytes.push(0); }
+  for(i = 7; i >= 0; i--){ bytes.push(i >= 4 ? 0 : (bitLen >>> (i * 8)) & 255); }
+  var w = [];
+  for(j = 0; j < bytes.length; j += 64){
+    for(i = 0; i < 16; i++){ w[i] = (bytes[j+i*4] << 24) | (bytes[j+i*4+1] << 16) | (bytes[j+i*4+2] << 8) | bytes[j+i*4+3]; }
+    for(i = 16; i < 64; i++){
+      var s0 = rr(w[i-15], 7) ^ rr(w[i-15], 18) ^ (w[i-15] >>> 3);
+      var s1 = rr(w[i-2], 17) ^ rr(w[i-2], 19) ^ (w[i-2] >>> 10);
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+    }
+    var a = H[0], b = H[1], c = H[2], dd = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for(i = 0; i < 64; i++){
+      var t1 = h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i];
+      var t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+      h = g; g = f; f = e; e = (dd + t1) | 0; dd = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + dd) | 0;
+    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  var hex = '';
+  for(i = 0; i < 8; i++){ var x = (H[i] >>> 0).toString(16); while(x.length < 8){ x = '0' + x; } hex += x; }
+  return hex;
+}
+function pinPruefwert(pin){
+  var wert = 'janiba-bsv|' + pin;
+  for(var i = 0; i < 3000; i++){ wert = pinSha256(wert + '|' + pin); }
+  return wert;
+}
+var CHEF_PIN_PRUEFWERT = '7b0ac164b46333502459bc71928b9ba693510030212e6ac99fa58ef1a2df7a34';
+var MITARBEITER = [{name:'Janiba Wolfgang sen.',pw:'b1b89ef39b06b58a21533ed951b596ec651fa17a89b69523f05cf6558777a9da'},{name:'Prominzer Tobias',pw:'d6508a86e67e359c12c96a90b69e0db0bc9a80e84e3a7585261f6c3ed6591e78'},{name:'Mayerhofer Tobias',pw:'9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd'},{name:'Holakovsky Manuela',pw:'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38'},{name:'Harris Sandra',pw:'af0757f3208d062e6a6e80e4c771fce69f9dbc951daec8378c3788710015180c'},{name:'Henke Alexander',pw:'82e8e2870105ec7f465aa8c8e99b0e0a65c9713bb2ac845d48b9d51c1bfc723f'}];
 var TYPEN = {kommen:'Kommen',pause_start:'Pause Beginn',pause_ende:'Pause Ende',gehen:'Gehen'};
 var MONATE = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 var db, zeiten = [], kunden = [], me = null, ansicht = 'heute', zielName = null, mJahr, mMonat, geladen = false;
@@ -137,13 +183,14 @@ function stempeln(name, typ, ortWert){
 }
 
 function renderLogin(){
-  $('app').innerHTML = '<div class="card"><h2>PIN eingeben</h2><div class="meta">Version 06.10. 13:30 &middot; Stempeln</div>' +
+  $('app').innerHTML = '<div class="card"><h2>PIN eingeben</h2><div class="meta">Version 04.11. 16:30 &middot; Stempeln</div>' +
     '<input type="password" id="pin" inputmode="numeric" placeholder="PIN" autocomplete="off">' +
     '<button class="btn" id="ok">Anmelden</button></div>';
   $('ok').onclick = function(){
     var p = $('pin').value.trim();
-    if(p === CHEF_PIN){ me = {name:'Janiba Wolfgang', chef:true}; }
-    else { var m = MITARBEITER.filter(function(x){ return x.pin === p; })[0]; if(m) me = {name:m.name, chef:false}; }
+    var pw = p ? pinPruefwert(p) : '';
+    if(pw && pw === CHEF_PIN_PRUEFWERT){ me = {name:'Janiba Wolfgang', chef:true}; }
+    else { var m = MITARBEITER.filter(function(x){ return x.pw === pw; })[0]; if(m) me = {name:m.name, chef:false}; }
     if(!me){ toast('PIN falsch'); return; }
     zielName = me.name; render();
   };
