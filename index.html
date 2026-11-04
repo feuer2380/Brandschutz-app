@@ -34,7 +34,7 @@
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
 var APP_VERSION = '2026-11-04 23:30';
-var APP_VERSION_TEXT = '04.11. 23:45';
+var APP_VERSION_TEXT = '04.11. 23:55';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -12355,9 +12355,9 @@ function buildTagesberichtDruckHtml(tb, k, qrId){
   html += tbBriefkopf(k ? qrId : null);
 
   html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
-  html += tbKopfzeile('Datum', fmtDate(tb.datum), 'Techniker', escapeHtml(tb.techniker || ''));
-  html += tbKopfzeile('Von', escapeHtml(tb.von || ''), 'Bis', escapeHtml(tb.bis || ''));
-  html += tbKopfzeile('Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : ''), k ? escapeHtml(k.name) : '-', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
+  html += tbKopfzeile('Datum', fmtDate(tb.datum), 'Kundennummer', k && k.kundennummer ? '<b style="font-size:14px;">' + escapeHtml(k.kundennummer) + '</b>' : '');
+  html += tbKopfzeile('Zeit', escapeHtml(tb.von || '') + ((tb.von || tb.bis) ? ' &ndash; ' : '') + escapeHtml(tb.bis || ''), 'Techniker', escapeHtml(tb.techniker || ''));
+  html += tbKopfzeile('Firma / Auftraggeber', k ? escapeHtml(k.name) : '-', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', escapeHtml(tb.anlageBereich || ''));
   html += '</table>';
 
@@ -12443,9 +12443,9 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
 
   html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
   var lvg = k ? tagesberichtVorgabe(k.id) : null;
-  html += tbKopfzeile('Datum', lvg ? fmtDate(lvg.datum) : '', 'Techniker', lvg ? escapeHtml(lvg.techniker || '') : '');
-  html += tbKopfzeile('Von', lvg ? escapeHtml(lvg.von || '') : '', 'Bis', '');
-  html += tbKopfzeile('Firma / Auftraggeber' + (k && k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : ''), k ? escapeHtml(k.name) : '', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
+  html += tbKopfzeile('Datum', lvg ? fmtDate(lvg.datum) : '', 'Kundennummer', k && k.kundennummer ? '<b style="font-size:14px;">' + escapeHtml(k.kundennummer) + '</b>' : '');
+  html += tbKopfzeile('Zeit', 'von ' + (lvg && lvg.von ? escapeHtml(lvg.von) : '________') + ' bis ________', 'Techniker', lvg ? escapeHtml(lvg.techniker || '') : '');
+  html += tbKopfzeile('Firma / Auftraggeber', k ? escapeHtml(k.name) : '', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', '');
   html += '</table>';
 
