@@ -34,7 +34,7 @@
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
 var APP_VERSION = '2026-11-04 23:30';
-var APP_VERSION_TEXT = '05.11. 02:00';
+var APP_VERSION_TEXT = '05.11. 02:10';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -12784,13 +12784,15 @@ function umsatzKarteHtml(k){
   else h += '<div class="meta" style="margin-top:4px;">Noch keine Rechnung eingetragen</div>';
   liste.forEach(function(r){
     h += '<div class="row" style="padding:7px 0; border-bottom:1px solid var(--line);"><div style="flex:1; min-width:0;"><b>' + eurText(r.betrag) + '</b><div class="meta">' + fmtDate(r.datum) + (r.notiz ? ' &middot; ' + escapeHtml(r.notiz) : '') + (r.bezahlt && r.bezahltAm ? ' &middot; bezahlt am ' + fmtDate(r.bezahltAm) : '') + '</div></div>';
-    h += '<button type="button" class="badge ' + (r.bezahlt ? 'ok' : 'warn') + '" data-rgpaid="' + escapeHtml(r.id) + '" style="border:0; cursor:pointer; padding:6px 11px; font-size:12px;">' + (r.bezahlt ? '&#10003; Bezahlt' : 'Offen') + '</button>';
+    h += '<button type="button" class="badge ' + (r.bezahlt ? 'ok' : 'warn') + '" data-rgpaid="' + escapeHtml(r.id) + '" style="border:0; cursor:pointer; padding:6px 11px; font-size:12px;">' + (r.bezahlt ? '&#10003; Bezahlt' : 'Offen &ndash; tippen = bezahlt') + '</button>';
     h += '<button class="btn small secondary" data-rgdel="' + escapeHtml(r.id) + '">&times;</button></div>';
   });
-  h += '<div class="row" style="gap:8px; margin-top:12px;"><div style="flex:1;"><label style="margin-top:0;">Betrag (&euro;)</label><input type="text" inputmode="decimal" id="rgBetrag" placeholder="z.B. 245,50" autocomplete="off"></div>';
+  if(liste.some(function(r){ return !r.bezahlt; })) h += '<div class="meta" style="margin-top:6px;">Bezahlt? Einfach bei der Rechnung oben auf den roten Knopf &bdquo;Offen&ldquo; tippen.</div>';
+  h += '<div style="font-weight:700; font-size:13px; margin-top:14px; padding-top:10px; border-top:2px solid var(--line);">Neue Rechnung eintragen</div>';
+  h += '<div class="row" style="gap:8px; margin-top:6px;"><div style="flex:1;"><label style="margin-top:0;">Betrag (&euro;)</label><input type="text" inputmode="decimal" id="rgBetrag" placeholder="z.B. 245,50" autocomplete="off"></div>';
   h += '<div style="flex:1;"><label style="margin-top:0;">Datum</label><input type="date" id="rgDatum" value="' + heute + '"></div></div>';
   h += '<label>Notiz (optional)</label><input type="text" id="rgNotiz" placeholder="z.B. Rechnungsnummer" autocomplete="off">';
-  h += '<label>Status</label><select id="rgStatus"><option value="offen">Offen (noch nicht bezahlt)</option><option value="bezahlt">Bezahlt</option></select>';
+  h += '<label>Status</label><select id="rgStatus"><option value="offen">Offen (noch nicht bezahlt)</option><option value="bezahlt">Schon bezahlt</option></select>';
   h += '<button class="btn block" id="rgAdd" style="margin-top:10px;">Rechnung speichern</button>';
   h += '</div>';
   return h;
@@ -12803,7 +12805,20 @@ function bindUmsatz(){
     var roh = document.getElementById('rgBetrag').value.trim().replace(/\s/g, '').replace(/€/g, '');
     if(roh.indexOf(',') !== -1) roh = roh.replace(/\./g, '').replace(',', '.');
     var betrag = parseFloat(roh);
-    if(!(betrag > 0)){ toast('Bitte einen Betrag eingeben'); return; }
+    if(!(betrag > 0)){
+      var offeneRg = (k.rechnungen || []).filter(function(x){ return !x.bezahlt; });
+      if(offeneRg.length && document.getElementById('rgStatus').value === 'bezahlt'){
+        customConfirm('Hier wird eine NEUE Rechnung eingetragen. Willst du stattdessen die offene Rechnung' + (offeneRg.length === 1 ? ' über ' + eurText(offeneRg[0].betrag) : 'en') + ' als bezahlt markieren?' + (offeneRg.length > 1 ? ' (Dann bitte oben bei der richtigen Rechnung auf „Offen“ tippen.)' : ''), function(){
+          if(offeneRg.length !== 1) return;
+          offeneRg[0].bezahlt = true;
+          offeneRg[0].bezahltAm = new Date().toISOString().substring(0, 10);
+          dbPut('kunden', k, function(){ render(); toast('Als bezahlt markiert'); });
+        });
+        return;
+      }
+      toast('Bitte einen Betrag eingeben');
+      return;
+    }
     var datum = document.getElementById('rgDatum').value || new Date().toISOString().substring(0, 10);
     if(!k.rechnungen) k.rechnungen = [];
     k.rechnungen.push({ id: uid(), datum: datum, betrag: Math.round(betrag * 100) / 100, notiz: document.getElementById('rgNotiz').value.trim(), bezahlt: document.getElementById('rgStatus').value === 'bezahlt', bezahltAm: document.getElementById('rgStatus').value === 'bezahlt' ? datum : null });
