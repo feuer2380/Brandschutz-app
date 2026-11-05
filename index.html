@@ -34,7 +34,7 @@
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
 var APP_VERSION = '2026-11-04 23:30';
-var APP_VERSION_TEXT = '05.11. 13:00';
+var APP_VERSION_TEXT = '05.11. 14:40';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -711,7 +711,7 @@ function generiereZugangscode(){
 }
 
 function baueOeffentlichesGeraet(g, k){
-  var bj = istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
+  var bj = istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null;
   return {
     id: g.id,
     kundenname: k ? (k.name || '') : '',
@@ -1989,7 +1989,7 @@ function renderDashboard(){
   html += '<div class="section-title">Fällige Innenrevisionen</div>';
   var innenrevListe = [];
   state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); }).forEach(function(g){
-    var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+    var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
     if(istEingeschraenkt() && g.zustaendig !== state.mitarbeiterName) return;
     if(bj && bj.cls === 'soon' && bj.label.indexOf('Innenrevision') === 0){
       innenrevListe.push({ geraet:g, bj:bj });
@@ -3268,7 +3268,7 @@ function renderGeraetCheck(geraetId){
   var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
   if(!g) return '<div class="empty">Gerät nicht gefunden</div>';
   var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
-  var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+  var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
 
   var html = '';
   html += '<button class="btn secondary small" id="backToScan">&larr; Zurück</button>';
@@ -4240,7 +4240,7 @@ function renderKundeDetail(kundeId){
         return;
       }
       var st = istFuellKategorie(katKey) ? statusFuerAbfuellAlter(g.abfuelldatum, g.leer) : statusForDate(g.naechstePruefung);
-      var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+      var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
       html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
       var katBadgeZeigen = g.kategorie && g.kategorie !== 'Feuerlöscher' && state.kundeGeraeteKatFilter !== katKey;
@@ -4847,7 +4847,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
-        var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
+        var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null;
         var statusSpalte = (!istPZ && !istBegehung && zeigtInnenrevision) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
         var mittelspalten;
         if(istPZ){
@@ -6607,7 +6607,7 @@ function modalGeraetBearbeiten(geraetId){
   });
   html += '</select>';
   var istCO2Loescher = /kohlendioxid|co2/i.test(g.typ || '');
-  var bjStatus = (aktKategorie === 'Feuerlöscher' && !istCO2Loescher) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null;
+  var bjStatus = (aktKategorie === 'Feuerlöscher' && !istCO2Loescher) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null;
   if(bjStatus){
     html += '<div class="card" style="margin:6px 0 4px 0; padding:10px 12px;"><span class="badge ' + bjStatus.cls + '">' + bjStatus.label + '</span><div class="meta" style="margin-top:6px;">Alle 6 Jahre ab letzter Innenrevision (bzw. ab Baujahr) &middot; Ausscheiden spätestens: ' + bjStatus.ausscheideJahr + '</div>';
     if(g.letzteInnenrevision){
@@ -6907,12 +6907,26 @@ function kategorieFarbe(kat){
   return farben[kat] || '#1d5fa8';
 }
 
-function baujahrStatus(baujahr, letzteInnenrevision){
+function baujahrStatus(baujahr, letzteInnenrevision, g){
   if(!baujahr) return null;
   var jetzt = new Date().getFullYear();
   var alter = jetzt - baujahr;
   var ausscheideJahr = baujahr + 20;
   if(alter >= 20){
+    // Regel: Im Jahr, in dem das Geraet 20 Jahre alt wird, darf es noch EINMAL geprueft werden.
+    // Die naechste Pruefung danach ist das Ausscheiden.
+    var lpJahr = (g && g.letztePruefung) ? new Date(g.letztePruefung).getFullYear() : 0;
+    if(lpJahr >= ausscheideJahr){
+      var np = g && g.naechstePruefung ? new Date(g.naechstePruefung) : null;
+      var npText = (np && !isNaN(np.getTime())) ? (' (' + ('0' + (np.getMonth() + 1)).slice(-2) + '/' + np.getFullYear() + ')') : '';
+      if(np && !isNaN(np.getTime()) && np <= new Date()){
+        return { cls:'warn', label:'Jetzt ausscheiden (letzte Prüfung ' + lpJahr + ')', ausscheideJahr: ausscheideJahr, letztePruefungErfolgt: true };
+      }
+      return { cls:'soon', label:'Letzte Prüfung ' + lpJahr + ' – bei nächster Prüfung ausscheiden' + npText, ausscheideJahr: ausscheideJahr, letztePruefungErfolgt: true };
+    }
+    if(alter === 20){
+      return { cls:'soon', label:'20 Jahre: noch 1 Prüfung möglich, danach ausscheiden', ausscheideJahr: ausscheideJahr };
+    }
     return { cls:'warn', label:'Zu alt (' + alter + ' J.) - ausscheiden', ausscheideJahr: ausscheideJahr };
   }
   var basisJahr = letzteInnenrevision ? new Date(letzteInnenrevision).getFullYear() : baujahr;
@@ -7464,7 +7478,7 @@ function buildBerichtHtml(p, k){
   html += '<td>' + (gRef && gRef.seriennummer ? escapeHtml(gRef.seriennummer) : '-') + '</td>';
   if(istFeuerloescherSingle){
     html += '<td>' + (gRef && gRef.baujahr ? gRef.baujahr : '-') + '</td>';
-    var bjRefSingle = (gRef && istInnenrevisionspflichtig(gRef)) ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision) : null;
+    var bjRefSingle = (gRef && istInnenrevisionspflichtig(gRef)) ? baujahrStatus(gRef.baujahr, gRef.letzteInnenrevision, gRef) : null;
     var innenrevKurzSingle = bjRefSingle ? bjRefSingle.label.replace(/^Innenrevision /, '') : '';
     html += '<td>' + (gRef && gRef.letzteInnenrevision ? '<span style="color:var(--ok); font-weight:600;">Zuletzt durchgeführt: ' + fmtDate(gRef.letzteInnenrevision) + '</span><br>' : '') + (innenrevKurzSingle ? 'Nächste fällig: ' + escapeHtml(innenrevKurzSingle) : '-') + '</td>';
   }
@@ -11986,7 +12000,7 @@ function modalSammelbericht(kundeId){
 
       if(ergebnis === 'nur_abfuellen'){
         dbPut('geraete', g, function(){
-          var bjSnapAbf = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+          var bjSnapAbf = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
           snapshot.push({
             nr: g.nr || (idx + 1),
             typ: g.typ,
@@ -12031,7 +12045,7 @@ function modalSammelbericht(kundeId){
 
       dbPut('pruefungen', offenePruefung, function(){
         var weiter = function(naechstePruefungWert){
-          var bjSnap = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision) : null);
+          var bjSnap = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
           snapshot.push({
             nr: g.nr || (idx + 1),
             typ: g.typ,
