@@ -34,7 +34,7 @@
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
 var APP_VERSION = '2026-11-04 23:30';
-var APP_VERSION_TEXT = '05.11. 14:40';
+var APP_VERSION_TEXT = '05.11. 15:10';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -864,6 +864,17 @@ function loadAll(cb){
 function bsvQuerformat(){
   try{ return localStorage.getItem('bsvQuerformat') === '1'; }catch(e){ return false; }
 }
+function querSchalterHtml(){
+  return '<label class="no-print" style="display:flex; align-items:center; gap:10px; margin:6px 0 10px 0; font-size:15px; color:var(--ink);"><input type="checkbox" class="querSchalter" style="width:22px; height:22px; margin:0;"' + (bsvQuerformat() ? ' checked' : '') + '> Im <b>Querformat</b> drucken / als PDF</label>';
+}
+document.addEventListener('change', function(ev){
+  var t = ev.target;
+  if(!t || !t.classList || !t.classList.contains('querSchalter')) return;
+  bsvQuerformatSetzen(t.checked);
+  document.querySelectorAll('.querSchalter').forEach(function(c){ c.checked = t.checked; });
+  var mq = document.getElementById('mehrQuer'); if(mq) mq.checked = t.checked;
+  toast(t.checked ? 'Querformat ein' : 'Hochformat');
+});
 function bsvQuerformatSetzen(an){
   try{ localStorage.setItem('bsvQuerformat', an ? '1' : '0'); }catch(e){}
 }
@@ -950,13 +961,31 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
     };
     bruchCss = messeBruch(pa);
     // Defekte / leere Bilder (z.B. leere Unterschrift 'data:,') würden die PDF-Erstellung abbrechen -> durch Platzhalter ersetzen
-    try {
-      pa.querySelectorAll('img').forEach(function(im){
-        var src = im.getAttribute('src') || '';
-        var kaputt = !src || src === 'data:,' || (im.complete && im.naturalWidth === 0);
-        if(kaputt){ var ph = document.createElement('div'); ph.style.height = '60px'; if(im.parentNode) im.parentNode.replaceChild(ph, im); }
-      });
-    } catch(eImg){}
+    // Erst warten, bis alle Bilder (z.B. Unterschriften) fertig geladen sind - sonst gelten sie faelschlich als defekt
+    var bilderBereit = function(){
+      var liste = [];
+      try{
+        pa.querySelectorAll('img').forEach(function(im){
+          liste.push(new Promise(function(ok){
+            var fertig = false; var los = function(){ if(!fertig){ fertig = true; ok(); } };
+            setTimeout(los, 3000);
+            if(im.decode){ im.decode().then(los, los); }
+            else if(im.complete){ los(); }
+            else { im.onload = los; im.onerror = los; }
+          }));
+        });
+      }catch(eB){}
+      return Promise.all(liste);
+    };
+    var bilderPruefen = function(){
+      try {
+        pa.querySelectorAll('img').forEach(function(im){
+          var src = im.getAttribute('src') || '';
+          var kaputt = !src || src === 'data:,' || (im.complete && im.naturalWidth === 0);
+          if(kaputt){ var ph = document.createElement('div'); ph.style.height = '60px'; if(im.parentNode) im.parentNode.replaceChild(ph, im); }
+        });
+      } catch(eImg){}
+    };
     var fehlerListe = [];
     var pdfVersuch = function(skala, extra){
       var o = {
@@ -991,7 +1020,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       var zurueck = canvasWeg();
       return pdfVersuch(2).then(function(c){ zurueck(); return c; }, function(e){ zurueck(); throw e; });
     };
-    pdfVersuch(3).catch(function(e1){
+    bilderBereit().then(function(){ bilderPruefen(); return pdfVersuch(3); }).catch(function(e1){
       fehlerListe.push('V1: ' + (e1 && e1.message ? e1.message : e1));
       return versuch2();
     }).catch(function(e2){
@@ -4927,6 +4956,7 @@ function modalGeraeteuebersicht(kundeId){
     }
     html += '<div id="alInhalt">' + buildGeraeteuebersichtHtml(kundeId, aktKat) + '</div>';
     html += '<div class="no-print" style="margin-top:16px;">';
+    html += querSchalterHtml();
     html += '<button class="btn block" id="druckBtnAL">Drucken / Als PDF teilen</button>';
     html += '<button class="btn block secondary" id="mailBtnAL" style="margin-top:10px;">Per E-Mail senden</button>';
   html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
@@ -7556,6 +7586,7 @@ function modalBerichteMehrere(liste){
   html += '<div class="modal-head no-print"><h3>Prüfberichte ' + tag + ' (' + liste.length + ')</h3><button class="close" id="mClose">&times;</button></div>';
   html += bauen();
   html += '<div class="no-print" style="margin-top:16px;">';
+  html += querSchalterHtml();
   html += '<button class="btn block" id="druckBtnMehr">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtnMehr" style="margin-top:10px;">Per E-Mail senden</button>';
   html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
@@ -7593,6 +7624,7 @@ function modalBerichtAnsicht(pruefungId){
   html += buildBerichtHtml(p, k);
 
   html += '<div class="no-print" style="margin-top:16px;">';
+  html += querSchalterHtml();
   html += '<button class="btn block" id="druckBtn">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtn" style="margin-top:10px;">Per E-Mail senden</button>';
   html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
@@ -12699,6 +12731,7 @@ function modalSammelberichtAnsicht(sbId){
   html += '<div class="no-print" style="margin-bottom:10px;"><label>Prüfbericht-Nr.</label><input id="sbNrBearbeiten" type="text" value="' + escapeHtml(sb.berichtNr || '') + '"><button class="btn small secondary" id="sbNrSpeichern">Nummer speichern</button></div>';
   html += buildSammelberichtHtml(sb, k);
   html += '<div class="no-print" style="margin-top:16px;">';
+  html += querSchalterHtml();
   html += '<button class="btn block" id="druckBtnSb">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtnSb" style="margin-top:10px;">Per E-Mail senden</button>';
   html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
