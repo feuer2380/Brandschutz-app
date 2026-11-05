@@ -34,7 +34,7 @@
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
 var APP_VERSION = '2026-11-04 23:30';
-var APP_VERSION_TEXT = '05.11. 15:10';
+var APP_VERSION_TEXT = '05.11. 15:40';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -977,6 +977,38 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       }catch(eB){}
       return Promise.all(liste);
     };
+    // Unterschriften (transparente PNGs mit object-fit) werden von html2canvas auf dem iPhone nicht gezeichnet.
+    // Deshalb vorher in ein einfaches JPEG mit weissem Hintergrund und genau passender Groesse umwandeln.
+    var bilderVereinfachen = function(){
+      try{
+        pa.querySelectorAll('img').forEach(function(im){
+          var src = im.getAttribute('src') || '';
+          if(src.indexOf('data:image/png') !== 0) return;
+          if(!im.naturalWidth || !im.naturalHeight) return;
+          var r = im.getBoundingClientRect();
+          var bw = Math.max(1, Math.round(r.width)), bh = Math.max(1, Math.round(r.height));
+          var stil = window.getComputedStyle(im);
+          var bt = parseFloat(stil.borderTopWidth) || 0, bb = parseFloat(stil.borderBottomWidth) || 0, bl = parseFloat(stil.borderLeftWidth) || 0, br = parseFloat(stil.borderRightWidth) || 0;
+          var iw = Math.max(1, bw - bl - br), ih = Math.max(1, bh - bt - bb);
+          var f = 2;
+          var c = document.createElement('canvas');
+          c.width = iw * f; c.height = ih * f;
+          var cx = c.getContext('2d');
+          cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, c.width, c.height);
+          var sk = Math.min(c.width / im.naturalWidth, c.height / im.naturalHeight);
+          var dw = im.naturalWidth * sk, dh = im.naturalHeight * sk;
+          cx.drawImage(im, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+          var neu = c.toDataURL('image/jpeg', 0.92);
+          im.style.objectFit = 'fill';
+          im.style.width = iw + 'px';
+          im.style.height = ih + 'px';
+          im.style.maxHeight = 'none';
+          im.style.maxWidth = 'none';
+          im.setAttribute('src', neu);
+          im.setAttribute('data-flach', '1');
+        });
+      }catch(eV){ console.warn('Bild vereinfachen', eV); }
+    };
     var bilderPruefen = function(){
       try {
         pa.querySelectorAll('img').forEach(function(im){
@@ -987,6 +1019,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       } catch(eImg){}
     };
     var fehlerListe = [];
+    var flachePos = [];
     var pdfVersuch = function(skala, extra){
       var o = {
         scale: skala,
@@ -999,6 +1032,18 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         // Seitenumbruch-Stellen direkt im gezeichneten Abbild messen (genau dieselbe Anordnung wie im PDF)
         onclone: function(klonDoc, klonEl){
           try{ var m = messeBruch(klonEl); if(m.p.length) bruchCss = m; }catch(eM){}
+          // Lage der vereinfachten Bilder (Unterschriften) im gezeichneten Abbild merken
+          try{
+            var kb = klonEl.getBoundingClientRect();
+            var orig = pa.querySelectorAll('img');
+            flachePos = [];
+            klonEl.querySelectorAll('img').forEach(function(ki, idx){
+              if(ki.getAttribute('data-flach') !== '1' || !orig[idx]) return;
+              var rr = ki.getBoundingClientRect(), st = klonDoc.defaultView.getComputedStyle(ki);
+              var bt = parseFloat(st.borderTopWidth) || 0, bb = parseFloat(st.borderBottomWidth) || 0, bl = parseFloat(st.borderLeftWidth) || 0, br = parseFloat(st.borderRightWidth) || 0;
+              flachePos.push({ img: orig[idx], x: rr.left - kb.left + bl, y: rr.top - kb.top + bt, w: rr.width - bl - br, h: rr.height - bt - bb });
+            });
+          }catch(eP){}
         }
       };
       if(extra) Object.keys(extra).forEach(function(k2){ o[k2] = extra[k2]; });
@@ -1020,7 +1065,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       var zurueck = canvasWeg();
       return pdfVersuch(2).then(function(c){ zurueck(); return c; }, function(e){ zurueck(); throw e; });
     };
-    bilderBereit().then(function(){ bilderPruefen(); return pdfVersuch(3); }).catch(function(e1){
+    bilderBereit().then(function(){ bilderVereinfachen(); return bilderBereit(); }).then(function(){ bilderPruefen(); return pdfVersuch(3); }).catch(function(e1){
       fehlerListe.push('V1: ' + (e1 && e1.message ? e1.message : e1));
       return versuch2();
     }).catch(function(e2){
@@ -1039,6 +1084,16 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
     }).then(function(canvas){
       aufraeumen();
       if(!canvas || !canvas.width || !canvas.height) throw new Error('Leeres Bild (Bericht konnte nicht gezeichnet werden)');
+      // Unterschriften selbst ins fertige Abbild malen (html2canvas verliert sie auf dem iPhone)
+      try{
+        var fz = canvas.width / cssBreite;
+        var cctx = canvas.getContext('2d');
+        cctx.save(); cctx.setTransform(1, 0, 0, 1, 0, 0);
+        flachePos.forEach(function(fp){
+          if(fp.w > 0 && fp.h > 0 && fp.img.naturalWidth) cctx.drawImage(fp.img, fp.x * fz, fp.y * fz, fp.w * fz, fp.h * fz);
+        });
+        cctx.restore();
+      }catch(eZ){ console.warn('Unterschrift nachzeichnen', eZ); }
 
       var pdf = new window.jspdf.jsPDF({ orientation: (quer ? 'landscape' : 'portrait'), unit: 'pt', format: 'a4', compress: true });
       var rand = 20;
