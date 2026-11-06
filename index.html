@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-06 19:15';
-var APP_VERSION_TEXT = '06.11. 19:15';
+var APP_VERSION = '2026-11-06 22:45';
+var APP_VERSION_TEXT = '06.11. 22:45';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -651,6 +651,7 @@ setTimeout(function(){ if(navigator.onLine === false) offlineHinweisAktualisiere
 
 function dbPut(store, obj, cb){
   if(store === 'zeiten' && typeof zeitSchichtCache !== 'undefined') zeitSchichtCache.ref = null;
+  if(DATEI_STORES.indexOf(store) > -1 && obj && obj.dataUrl){ dateiAuslagern(obj); }
   // Firestore meldet "fertig" erst, wenn der Server bestätigt hat. Bei schwachem Netz würde die App
   // sonst hängen bleiben -> nach 4 Sekunden geht es lokal weiter, der Server bekommt es automatisch nachgesendet.
   var fertig = false;
@@ -690,6 +691,12 @@ function dbDelete(store, id, cb){
   var weiterD = function(){ if(fertigD) return; fertigD = true; if(cb) cb(); };
   var timerD = setTimeout(function(){ offlineHinweisAktualisieren(true); weiterD(); }, (navigator.onLine === false) ? 300 : 4000);
   if(store === 'geraete'){ try{ portalGeraetSchreiben({ id: id }, null); }catch(e){} }
+  if(DATEI_STORES.indexOf(store) > -1){
+    try{
+      var altD = (state[store] || []).filter(function(x){ return x && x.id === id; })[0];
+      if(altD && altD.dateiId){ db.collection(DATEIEN_STORE).doc(altD.dateiId).delete().catch(function(){}); delete dateiSpeicher[altD.dateiId]; }
+    }catch(e){}
+  }
   loeschVermerkSchreiben(store, id);
   db.collection(store).doc(id).delete().then(function(){
     clearTimeout(timerD);
@@ -825,6 +832,63 @@ document.addEventListener('focusin', function(e){
 function uid(){
   return 'id_' + Date.now() + '_' + Math.floor(Math.random()*10000);
 }
+
+// ---------- Grosse Dateien (PDFs) erst beim Oeffnen laden ----------
+// Brandschutzplaene und Dokumente: Die PDF-Daten liegen in der eigenen Sammlung "dateien"
+// (wird NICHT beim Start synchronisiert). Im Eintrag selbst steht nur noch "dateiId".
+var DATEIEN_STORE = 'dateien';
+var DATEI_STORES = ['dokumente', 'brandschutzplaene'];
+var dateiSpeicher = {}; // waehrend der Sitzung schon geladene Dateien
+function dateiAuslagern(obj){
+  var did = obj.dateiId || ('datei_' + obj.id);
+  var inhalt = obj.dataUrl;
+  dateiSpeicher[did] = inhalt;
+  try{
+    db.collection(DATEIEN_STORE).doc(did).set({ id: did, dataUrl: inhalt }).catch(function(err){ console.error('Datei speichern Fehler', err); });
+  }catch(e){ console.error(e); }
+  obj.dateiId = did;
+  obj.dateiGroesseKB = Math.round(inhalt.length * 0.75 / 1024);
+  delete obj.dataUrl;
+}
+function dateiLaden(obj, cb){
+  if(!obj){ cb(null); return; }
+  if(obj.dataUrl){ cb(obj.dataUrl); return; }
+  if(!obj.dateiId){ cb(null); return; }
+  if(dateiSpeicher[obj.dateiId]){ cb(dateiSpeicher[obj.dateiId]); return; }
+  db.collection(DATEIEN_STORE).doc(obj.dateiId).get().then(function(doc){
+    var inhalt = doc.exists ? doc.data().dataUrl : null;
+    if(inhalt) dateiSpeicher[obj.dateiId] = inhalt;
+    cb(inhalt);
+  }).catch(function(err){
+    console.error('Datei laden Fehler', err);
+    toast('Datei konnte nicht geladen werden – Internetverbindung prüfen');
+    cb(null);
+  });
+}
+// Einmalige Umstellung: vorhandene PDFs aus den Eintraegen herausnehmen (laeuft beim Chef, einmal)
+var DATEI_UMSTELLUNG_KEY = 'bsvDateiUmstellung1';
+var dateiUmstellungTimer = setInterval(function(){
+  try{ if(localStorage.getItem(DATEI_UMSTELLUNG_KEY) === '1'){ clearInterval(dateiUmstellungTimer); return; } }
+  catch(e){ clearInterval(dateiUmstellungTimer); return; }
+  if(typeof appGestartet === 'undefined' || !appGestartet || state.rolle !== 'chef' || !db) return;
+  if(navigator.onLine === false) return;
+  clearInterval(dateiUmstellungTimer);
+  var offen = [];
+  DATEI_STORES.forEach(function(st){
+    (state[st] || []).forEach(function(x){ if(x && x.dataUrl) offen.push({ store: st, obj: x }); });
+  });
+  var i = 0;
+  var naechste = function(){
+    if(i >= offen.length){
+      try{ localStorage.setItem(DATEI_UMSTELLUNG_KEY, '1'); }catch(e){}
+      if(offen.length) toast(offen.length + ' PDFs umgestellt – App startet jetzt schneller');
+      return;
+    }
+    var e = offen[i++];
+    dbPut(e.store, e.obj, function(){ setTimeout(naechste, 400); });
+  };
+  naechste();
+}, 6000);
 
 // ---------- Sparsame Synchronisierung ----------
 // Frueher: bei jedem Start ALLE Daten jeder Sammlung vom Server (tausende Lesevorgaenge).
@@ -8554,8 +8618,13 @@ function modalDokumenteListe(kundeId){
       var d = state.dokumente.filter(function(x){ return x.id === b.getAttribute('data-dokansehen'); })[0];
       if(!d) return;
       var w = window.open();
+      if(w){ try{ w.document.write('<p style="font-family:sans-serif;padding:20px;">Dokument wird geladen ...</p>'); }catch(e){} }
+      var altText = b.textContent; b.textContent = 'Lädt ...'; b.disabled = true;
+      dateiLaden(d, function(dataUrl){
+      b.textContent = altText; b.disabled = false;
+      if(!dataUrl){ if(w){ try{ w.close(); }catch(e){} } return; }
       try {
-        var parts = d.dataUrl.split(',');
+        var parts = dataUrl.split(',');
         var mimeMatch = parts[0].match(/:(.*?);/);
         var mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
         var bstr = atob(parts[1]);
@@ -8566,8 +8635,9 @@ function modalDokumenteListe(kundeId){
         var url = URL.createObjectURL(blob);
         if(w){ w.location.href = url; } else { window.location.href = url; }
       } catch(err){
-        if(w){ w.location.href = d.dataUrl; }
+        if(w){ w.location.href = dataUrl; }
       }
+      });
     };
   });
   document.querySelectorAll('[data-dokloeschen]').forEach(function(b){
@@ -11547,8 +11617,22 @@ function bsplanPinchAktivieren(){
 }
 
 function bsplanPdfLaden(plan, cb){
+  if(!plan.dataUrl && plan.dateiId && !dateiSpeicher[plan.dateiId]){
+    var info0 = document.getElementById('bsplanSeiteInfo');
+    if(info0) info0.textContent = 'Plan wird geladen ...';
+  }
+  dateiLaden(plan, function(dataUrl){
+    if(!dataUrl){
+      var info1 = document.getElementById('bsplanSeiteInfo');
+      if(info1) info1.textContent = 'Plan konnte nicht geladen werden';
+      return;
+    }
+    bsplanPdfAusDaten(dataUrl, cb);
+  });
+}
+function bsplanPdfAusDaten(dataUrl, cb){
   try {
-    var u8arr = bsplanDataUrlZuUint8Array(plan.dataUrl);
+    var u8arr = bsplanDataUrlZuUint8Array(dataUrl);
     var ladeAufgabe = pdfjsLib.getDocument({ data: u8arr });
     ladeAufgabe.promise.then(function(pdfDoc){
       cb(pdfDoc);
