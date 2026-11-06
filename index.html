@@ -34,7 +34,7 @@
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
 var APP_VERSION = '2026-11-04 23:30';
-var APP_VERSION_TEXT = '05.11. 15:40';
+var APP_VERSION_TEXT = '06.11. 11:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1977,6 +1977,19 @@ function renderDashboard(){
       html += '</div>';
       html += '<div class="aufgabe-datum"><b>' + wtT[dT.getDay()] + ' ' + fmtDate(e.key + 'T12:00:00').substring(0, 6) + '</b>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : '<span class="badge ' + clsT + '">' + (e.offset > 1 ? 'in ' + e.offset + ' Tagen' : tagText) + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span>') + '</div></div>';
       if(kT && routeAdresse(kT)) html += '<div class="aufgabe-adr"><a href="' + escapeHtml(routeNaviLink(routeAdresse(kT))) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:inherit; text-decoration:none;">&#128205; ' + escapeHtml(routeAdresse(kT)) + ' <span style="color:#1d5fa8; font-weight:600;">&rsaquo; Navi</span></a></div>';
+      // Was ist bei diesem Kunden zu pruefen? (nur faellige Geraete, nach Kategorie)
+      if(kT && !t.erledigt){
+        var zuPruefen = {};
+        state.geraete.forEach(function(g){
+          if(g.kundeId !== kT.id || g.ausgeschieden) return;
+          var kk = (g.kategorie || 'Feuerlöscher').trim();
+          if(istFuellKategorie(kk)) return;
+          var cc = statusForDate(g.naechstePruefung).cls;
+          if(cc === 'warn' || cc === 'soon') zuPruefen[kk] = (zuPruefen[kk] || 0) + 1;
+        });
+        var zpK = Object.keys(zuPruefen);
+        if(zpK.length) html += '<div class="meta" style="margin-top:4px; color:var(--ink);">&#128269; Zu prüfen: <b>' + zpK.map(function(kk){ return zuPruefen[kk] + '&times; ' + escapeHtml(kk); }).join(', ') + '</b></div>';
+      }
       if(t.erledigt) html += '<div class="meta" style="color:#2f7a4f;">erledigt von ' + escapeHtml(zustaendigKurz(t.erledigtVon || '')) + ' am ' + fmtDate(t.erledigtAm) + '</div>';
       var plT = (t.personen || []).indexOf('alle') >= 0 ? ['alle'] : (t.personen || []);
       var iniT = plT[0] === 'alle' ? 'A' : (plT.length ? String(zustaendigKurz(plT[0])).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join('') : '!');
@@ -4292,6 +4305,22 @@ function renderKundeDetail(kundeId){
       html += '</select>';
     }
     var geraeteGefiltert = state.kundeGeraeteKatFilter ? geraete.filter(function(g){ return (g.kategorie || 'Feuerlöscher').trim() === state.kundeGeraeteKatFilter; }) : geraete;
+    // Nur faellige Geraete (ueberfaellig oder in den naechsten 30 Tagen) - Standard, wenn der Kunde aus einem Termin geoeffnet wurde
+    var istFaelligG = function(g){
+      var kk = (g.kategorie || 'Feuerlöscher').trim();
+      if(g.ausgeschieden || istFuellKategorie(kk)) return false;
+      var c = statusForDate(g.naechstePruefung).cls;
+      return c === 'warn' || c === 'soon';
+    };
+    var faelligAnz = geraeteGefiltert.filter(istFaelligG).length;
+    var nurFaellig = state.kundeNurFaelligFuer === kundeId && faelligAnz > 0;
+    if(faelligAnz > 0){
+      html += '<div class="filter-bar" style="margin-top:8px;">';
+      html += '<button class="filter-btn' + (nurFaellig ? ' active' : '') + '" data-kdfaellig="1">&#9888; Nur fällige (' + faelligAnz + ')</button>';
+      html += '<button class="filter-btn' + (!nurFaellig ? ' active' : '') + '" data-kdfaellig="0">Alle Geräte (' + geraeteGefiltert.length + ')</button>';
+      html += '</div>';
+    }
+    if(nurFaellig) geraeteGefiltert = geraeteGefiltert.filter(istFaelligG);
     var geraeteNachNr = geraeteGefiltert.slice().sort(function(a,b){ return geraeteSortierVergleich(a, b); });
     var katReihenfolge1 = [];
     geraeteNachNr.forEach(function(g){
@@ -10490,6 +10519,7 @@ function dashTerminKunde(id){
   if(!k){ if(istVollsicht()) modalTerminKundeZuordnen(t, null); else dashTerminKundeAnlegen(t, null); return; }
   if(dashKundeUnvollstaendig(k) && (istVollsicht())){ modalTerminKundeZuordnen(t, k); return; }
   state.activeKundeId = k.id;
+  state.kundeNurFaelligFuer = k.id;
   state.tab = 'kundeDetail';
   render();
 }
@@ -13498,6 +13528,12 @@ function modalZahlungserinnerung(kundeId, rechnungId){
   };
 }
 
+document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('[data-kdfaellig]') : null;
+  if(!b) return;
+  state.kundeNurFaelligFuer = b.getAttribute('data-kdfaellig') === '1' ? state.activeKundeId : null;
+  render();
+});
 function bindDynamic(){
   if(state.tab === 'kundeDetail'){ bindVermerke(); bindUmsatz(); }
   bindKundenCards(document);
