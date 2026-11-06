@@ -98,14 +98,20 @@
     font-size: 14px;
   }
   #druckBereich { display: none; }
+  @page { size: A4 portrait; margin: 12mm; }
   @media print {
+    html, body { height: auto !important; overflow: visible !important; }
     body > *:not(#druckBereich) { display: none !important; }
     #druckBereich { display: block !important; }
-    body { background: #fff; padding: 0; }
+    body { background: #fff; padding: 0; margin: 0; }
+    #druckBereich, #druckBereich * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
-  #druckBereich table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 14px; }
-  #druckBereich th, #druckBereich td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  #druckBereich table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 12px; table-layout: fixed; }
+  #druckBereich thead { display: table-header-group; }
+  #druckBereich tr { page-break-inside: avoid; break-inside: avoid; }
+  #druckBereich th, #druckBereich td { border: 1px solid #ccc; padding: 5px 6px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
   #druckBereich th { background: #f0f0f0; }
+  #druckBereich .kopfblock { page-break-after: avoid; break-after: avoid; }
 </style>
 </head>
 <body>
@@ -173,7 +179,7 @@ function render(g){
   html += '<div class="zeile"><span class="label">Letzte Prüfung</span><span class="wert">' + fmtDate(g.letztePruefung) + '</span></div>';
   html += '<div class="zeile"><span class="label">Nächste Prüfung</span><span class="wert">' + fmtDate(g.naechstePruefung) + '</span></div>';
   if(g.innenrevisionNoetig){
-    html += '<div class="zeile"><span class="label">Innenrevision</span><span class="wert">' + escapeHtml(g.innenrevisionLabel || '-') + '</span></div>';
+    html += '<div class="zeile"><span class="label">Innenrevision</span><span class="wert">' + escapeHtml(String(g.innenrevisionLabel || '-').replace(/^Innenrevision:\s*/, '')) + '</span></div>';
     if(g.letzteInnenrevision){
       html += '<div class="zeile"><span class="label">Innenrevision zuletzt</span><span class="wert">' + fmtDate(g.letzteInnenrevision) + '</span></div>';
     }
@@ -187,21 +193,42 @@ function render(g){
   ladeAlleGeraete(g);
 }
 
+// Der Kunde sieht nur Geraete aus demselben Bereich wie das gescannte Geraet
+// (Feuerloescher nur Feuerloescher, Sodawasser/CO2 nur Sodawasser/CO2 usw.)
+function gruppeVon(x){
+  var k = String((x && x.kategorie) || 'Feuerlöscher').trim();
+  if(k === 'Perchtl Zisch' || k === 'CO2-Flaschen') return 'zisch';
+  return k;
+}
+function gruppenTitel(gr, anzahl){
+  if(gr === 'zisch') return 'Ihre Sodawasser- und CO2-Flaschen';
+  if(gr === 'Feuerlöscher') return 'Ihre Feuerlöscher';
+  if(gr === 'Brandschutzbegehung') return 'Ihre Brandschutzbegehungen';
+  return 'Ihre Geräte: ' + gr;
+}
+function berichtTitel(gr){
+  if(gr === 'zisch') return 'Sodawasser- und CO2-Flaschen';
+  return gr;
+}
 function ladeAlleGeraete(g){
   if(!g.zugangscode) return;
+  var gruppe = gruppeVon(g);
   firebase.firestore().collection('oeffentlich_geraete').where('zugangscode', '==', g.zugangscode).get().then(function(snap){
     var alle = [];
-    snap.forEach(function(doc){ alle.push(doc.data()); });
-    if(alle.length <= 1) return;
+    snap.forEach(function(doc){
+      var d = doc.data();
+      if(gruppeVon(d) === gruppe) alle.push(d);
+    });
+    if(alle.length === 0) alle.push(g);
     alle.sort(function(a,b){ return (a.standort || '').localeCompare(b.standort || ''); });
-    zeigeGeraeteliste(alle, g.kundenname);
-    baueDruckbereich(alle, g.kundenname);
+    zeigeGeraeteliste(alle, g.kundenname, gruppe);
+    baueDruckbereich(alle, g.kundenname, gruppe);
   }).catch(function(err){ console.error('Geräteliste-Fehler', err); });
 }
 
-function zeigeGeraeteliste(alle, kundenname){
+function zeigeGeraeteliste(alle, kundenname, gruppe){
   var html = '<div class="card">';
-  html += '<h2 style="margin-bottom:6px;">Alle Ihre Geräte (' + alle.length + ')</h2>';
+  html += '<h2 style="margin-bottom:6px;">' + escapeHtml(gruppenTitel(gruppe)) + ' (' + alle.length + ')</h2>';
   alle.forEach(function(x){
     var st = statusBadge(x.naechstePruefung);
     html += '<div class="geraeteliste-zeile">';
@@ -216,19 +243,24 @@ function zeigeGeraeteliste(alle, kundenname){
   document.getElementById('druckBtn').onclick = function(){ window.print(); };
 }
 
-function baueDruckbereich(alle, kundenname){
+function baueDruckbereich(alle, kundenname, gruppe){
+  var mitIR = (gruppe === 'Feuerlöscher');
   var heute = new Date();
   var heuteStr = fmtDate(heute.toISOString());
   var html = '';
-  html += '<div style="padding:24px; font-family:-apple-system,Arial,sans-serif;">';
+  html += '<div style="padding:0; font-family:-apple-system,Arial,sans-serif;"><div class="kopfblock">';
   html += '<h1 style="font-size:18px; color:#c23f12; margin-bottom:2px;">Wolfgang Janiba Brandschutztechnik GmbH</h1>';
   html += '<div style="font-size:12px; color:#555; margin-bottom:16px;">Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at</div>';
-  html += '<h2 style="font-size:15px; margin-bottom:2px;">Prüfbericht &ndash; Geräteübersicht</h2>';
-  html += '<div style="font-size:12px; color:#555; margin-bottom:10px;">Kunde: ' + escapeHtml(kundenname || '') + ' &middot; Stand: ' + heuteStr + '</div>';
-  html += '<table><thead><tr><th>Typ</th><th>Standort</th><th>Letzte Prüfung</th><th>Nächste Prüfung</th><th>Status</th></tr></thead><tbody>';
+  html += '<h2 style="font-size:15px; margin-bottom:2px;">Prüfbericht &ndash; ' + escapeHtml(berichtTitel(gruppe)) + '</h2>';
+  html += '<div style="font-size:12px; color:#555; margin-bottom:10px;">Kunde: ' + escapeHtml(kundenname || '') + ' &middot; Anzahl: ' + alle.length + ' &middot; Stand: ' + heuteStr + '</div></div>';
+  html += '<table><colgroup>';
+  if(mitIR) html += '<col style="width:24%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:14%"><col style="width:18%">';
+  else html += '<col style="width:30%"><col style="width:24%"><col style="width:14%"><col style="width:14%"><col style="width:18%">';
+  html += '</colgroup><thead><tr><th>Typ</th><th>Standort</th><th>Letzte Prüfung</th><th>Nächste Prüfung</th>' + (mitIR ? '<th>Innenrevision</th>' : '') + '<th>Status</th></tr></thead><tbody>';
   alle.forEach(function(x){
     var st = statusBadge(x.naechstePruefung);
-    html += '<tr><td>' + escapeHtml(x.typ || x.kategorie || '') + '</td><td>' + escapeHtml(x.standort || '') + '</td><td>' + fmtDate(x.letztePruefung) + '</td><td>' + fmtDate(x.naechstePruefung) + '</td><td>' + escapeHtml(st.label) + '</td></tr>';
+    var ir = x.innenrevisionNoetig ? String(x.innenrevisionLabel || '').replace(/^Innenrevision:\s*/, '') : '-';
+    html += '<tr><td>' + escapeHtml(x.typ || x.kategorie || '') + '</td><td>' + escapeHtml(x.standort || '') + '</td><td>' + fmtDate(x.letztePruefung) + '</td><td>' + fmtDate(x.naechstePruefung) + '</td>' + (mitIR ? '<td>' + escapeHtml(ir) + '</td>' : '') + '<td>' + escapeHtml(st.label) + '</td></tr>';
   });
   html += '</tbody></table>';
   html += '<div style="font-size:11px; color:#888; margin-top:16px;">Automatisch erstellter Prüfbericht aus dem Kundenportal von Wolfgang Janiba Brandschutztechnik GmbH, ersetzt keine offiziellen Prüfprotokolle.</div>';
