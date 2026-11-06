@@ -327,18 +327,24 @@ function erzeugePruefberichtPdf(alle, kundenname, gruppe, einzeln){
 
   // Spalten
   var spalten = mitIR
-    ? [['Typ', 0.24], ['Standort', 0.22], ['Letzte Prüfung', 0.12], ['Nächste Prüfung', 0.12], ['Innenrev.', 0.10], ['Status', 0.20]]
-    : [['Typ', 0.30], ['Standort', 0.25], ['Letzte Prüfung', 0.13], ['Nächste Prüfung', 0.13], ['Status', 0.19]];
+    ? [[['Typ'], 0.25], [['Standort'], 0.21], [['Letzte', 'Prüfung'], 0.12], [['Nächste', 'Prüfung'], 0.12], [['Innen-', 'revision'], 0.11], [['Status'], 0.19]]
+    : [[['Typ'], 0.30], [['Standort'], 0.25], [['Letzte', 'Prüfung'], 0.13], [['Nächste', 'Prüfung'], 0.13], [['Status'], 0.19]];
   var xs = [], x = links;
   for(var c = 0; c < spalten.length; c++){ xs.push(x); x += spalten[c][1] * breite; }
   var pad = 1.6, zeilenH = 4.2;
 
   var kopfZeichnen = function(y){
-    doc.setFillColor(238, 238, 238); doc.rect(links, y, breite, 7.5, 'F');
-    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.2); doc.rect(links, y, breite, 7.5);
+    var kh = 10;
+    doc.setFillColor(238, 238, 238); doc.rect(links, y, breite, kh, 'F');
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.2); doc.rect(links, y, breite, kh);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(30, 30, 30);
-    for(var i = 0; i < spalten.length; i++){ doc.text(spalten[i][0], xs[i] + pad, y + 5); }
-    return y + 7.5;
+    for(var i = 0; i < spalten.length; i++){
+      if(i > 0) doc.line(xs[i], y, xs[i], y + kh);
+      var zeilen = spalten[i][0];
+      var ty = (zeilen.length === 1) ? y + 6.2 : y + 4.3;
+      doc.text(zeilen, xs[i] + pad, ty);
+    }
+    return y + kh;
   };
 
   var y = kopfZeichnen(45);
