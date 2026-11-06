@@ -7,6 +7,7 @@
 <link rel="icon" href="data:,">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -190,7 +191,7 @@ function render(g, schluessel){
   html += '</div>';
   html += '<div id="alleGeraeteBereich"></div>';
   document.getElementById('inhalt').innerHTML = html;
-  druckKnopf('einzelDruckBtn', function(){ baueDruckbereich([g], g.kundenname, gruppeVon(g), true); });
+  druckKnopf('einzelDruckBtn', [g], g.kundenname, gruppeVon(g), true);
   protokolliereZugriff(g);
   ladeAlleGeraete(g, schluessel);
 }
@@ -255,27 +256,139 @@ function zeigeGeraeteliste(alle, kundenname, gruppe){
     html += '</div>';
   });
   html += '<button class="btn-druck" id="druckBtn">Gesamtbericht: ' + escapeHtml(berichtTitel(gruppe)) + ' (' + alle.length + ')</button>';
-  html += '<div class="meta">Öffnet die Druckansicht Ihres Geräts/Browsers &ndash; dort "Als PDF sichern" bzw. "In Dateien sichern" wählen.</div>';
+  html += '<div class="meta">Erstellt ein PDF &ndash; danach können Sie es drucken, in Dateien sichern oder per Mail senden.</div>';
   html += '</div>';
   document.getElementById('alleGeraeteBereich').innerHTML = html;
-  druckKnopf('druckBtn', function(){ baueDruckbereich(alle, kundenname, gruppe, false); });
+  druckKnopf('druckBtn', alle, kundenname, gruppe, false);
 }
 
-function druckKnopf(knopfId, vorbereiten){
+function druckKnopf(knopfId, liste, kundenname, gruppe, einzeln){
   var b = document.getElementById(knopfId);
   if(!b) return;
   b.onclick = function(){
+    // Schnellweg: PDF direkt im Browser erzeugen (ohne die langsame Druckvorschau)
+    if(window.jspdf && window.jspdf.jsPDF){
+      try{
+        var erg = erzeugePruefberichtPdf(liste, kundenname, gruppe, einzeln);
+        pdfAnbieten(erg.blob, erg.dateiname);
+        return;
+      }catch(e){ console.error('PDF-Fehler', e); }
+    }
+    // Ersatzweg: normale Druckansicht
     var alt = b.textContent;
-    b.disabled = true;
-    b.textContent = 'Bericht wird vorbereitet ...';
-    b.style.opacity = '0.6';
-    // kurz warten, damit der Hinweis sichtbar wird, dann Druckansicht oeffnen
+    b.disabled = true; b.textContent = 'Bericht wird vorbereitet ...'; b.style.opacity = '0.6';
+    baueDruckbereich(liste, kundenname, gruppe, einzeln);
     setTimeout(function(){
-      try{ vorbereiten(); }catch(e){ console.error(e); }
       try{ window.print(); }catch(e){}
       setTimeout(function(){ b.disabled = false; b.textContent = alt; b.style.opacity = ''; }, 1500);
     }, 60);
   };
+}
+
+function pdfAnbieten(blob, dateiname){
+  var datei = null;
+  try{ datei = new File([blob], dateiname, { type: 'application/pdf' }); }catch(e){}
+  if(datei && navigator.canShare && navigator.share){
+    try{
+      if(navigator.canShare({ files: [datei] })){
+        navigator.share({ files: [datei], title: dateiname }).catch(function(){});
+        return;
+      }
+    }catch(e){}
+  }
+  var url = URL.createObjectURL(blob);
+  var w = null;
+  try{ w = window.open(url, '_blank'); }catch(e){}
+  if(!w){
+    var a = document.createElement('a');
+    a.href = url; a.download = dateiname; a.target = '_blank';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
+}
+
+function erzeugePruefberichtPdf(alle, kundenname, gruppe, einzeln){
+  var doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  var mitIR = (gruppe === 'Feuerlöscher');
+  var links = 14, rechts = 196, breite = rechts - links, unten = 280;
+  var heuteStr = fmtDate(new Date().toISOString());
+  var titel = einzeln ? 'Prüfbericht – Einzelgerät' : ('Prüfbericht – ' + berichtTitel(gruppe) + ' (Gesamt)');
+
+  // Kopf
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(194, 63, 18);
+  doc.text('Wolfgang Janiba Brandschutztechnik GmbH', links, 18);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90, 90, 90);
+  doc.text('Ketzergasse 299, 2380 Perchtoldsdorf · Tel 0676/305 83 98 · info@loeschtechnik.at', links, 23.5);
+  doc.setDrawColor(194, 63, 18); doc.setLineWidth(0.6); doc.line(links, 26.5, rechts, 26.5);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(30, 30, 30);
+  doc.text(titel, links, 35);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(90, 90, 90);
+  doc.text('Kunde: ' + (kundenname || '') + (einzeln ? '' : ' · Anzahl: ' + alle.length) + ' · Stand: ' + heuteStr, links, 40.5);
+
+  // Spalten
+  var spalten = mitIR
+    ? [['Typ', 0.24], ['Standort', 0.22], ['Letzte Prüfung', 0.12], ['Nächste Prüfung', 0.12], ['Innenrev.', 0.10], ['Status', 0.20]]
+    : [['Typ', 0.30], ['Standort', 0.25], ['Letzte Prüfung', 0.13], ['Nächste Prüfung', 0.13], ['Status', 0.19]];
+  var xs = [], x = links;
+  for(var c = 0; c < spalten.length; c++){ xs.push(x); x += spalten[c][1] * breite; }
+  var pad = 1.6, zeilenH = 4.2;
+
+  var kopfZeichnen = function(y){
+    doc.setFillColor(238, 238, 238); doc.rect(links, y, breite, 7.5, 'F');
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.2); doc.rect(links, y, breite, 7.5);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(30, 30, 30);
+    for(var i = 0; i < spalten.length; i++){ doc.text(spalten[i][0], xs[i] + pad, y + 5); }
+    return y + 7.5;
+  };
+
+  var y = kopfZeichnen(45);
+  doc.setFontSize(8.5);
+  for(var r = 0; r < alle.length; r++){
+    var g = alle[r];
+    var st = statusBadge(g.naechstePruefung);
+    var ir = g.innenrevisionNoetig ? String(g.innenrevisionLabel || '').replace(/^Innenrevision:\s*/, '') : '-';
+    var werte = [g.typ || g.kategorie || '', g.standort || '', fmtDate(g.letztePruefung), fmtDate(g.naechstePruefung)];
+    if(mitIR) werte.push(ir);
+    werte.push(st.label);
+    doc.setFont('helvetica', 'normal');
+    var zellen = [], maxZ = 1;
+    for(var j = 0; j < werte.length; j++){
+      var zl = doc.splitTextToSize(String(werte[j]), spalten[j][1] * breite - 2 * pad);
+      zellen.push(zl);
+      if(zl.length > maxZ) maxZ = zl.length;
+    }
+    var h = maxZ * zeilenH + 2.6;
+    if(y + h > unten){ doc.addPage(); y = kopfZeichnen(15); }
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.2); doc.rect(links, y, breite, h);
+    for(var k = 0; k < zellen.length; k++){
+      if(k > 0) doc.line(xs[k], y, xs[k], y + h);
+      var istStatus = (k === zellen.length - 1);
+      if(istStatus){
+        if(st.cls === 'warn') doc.setTextColor(163, 48, 13);
+        else if(st.cls === 'soon') doc.setTextColor(138, 90, 0);
+        else doc.setTextColor(34, 107, 50);
+        doc.setFont('helvetica', 'bold');
+      } else { doc.setTextColor(30, 30, 30); doc.setFont('helvetica', 'normal'); }
+      doc.text(zellen[k], xs[k] + pad, y + 4.6);
+    }
+    y += h;
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(130, 130, 130);
+  var hinweis = doc.splitTextToSize('Automatisch erstellter Prüfbericht aus dem Kundenportal von Wolfgang Janiba Brandschutztechnik GmbH, ersetzt keine offiziellen Prüfprotokolle.', breite);
+  if(y + 10 > unten){ doc.addPage(); y = 15; }
+  doc.text(hinweis, links, y + 6);
+
+  // Seitenzahlen
+  var seiten = doc.getNumberOfPages();
+  for(var p = 1; p <= seiten; p++){
+    doc.setPage(p);
+    doc.setFontSize(8); doc.setTextColor(130, 130, 130);
+    doc.text('Seite ' + p + ' von ' + seiten, rechts, 290, { align: 'right' });
+  }
+  var name = (kundenname || 'Kunde').replace(/[^A-Za-z0-9ÄÖÜäöüß_-]+/g, '_');
+  var dateiname = 'Pruefbericht_' + (einzeln ? 'Geraet' : berichtTitel(gruppe).replace(/[^A-Za-z0-9ÄÖÜäöüß]+/g, '_')) + '_' + name + '_' + heuteStr.replace(/\./g, '-') + '.pdf';
+  dateiname = dateiname.replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/Ä/g,'Ae').replace(/Ö/g,'Oe').replace(/Ü/g,'Ue').replace(/ß/g,'ss');
+  return { blob: doc.output('blob'), dateiname: dateiname };
 }
 
 function baueDruckbereich(alle, kundenname, gruppe, einzeln){
