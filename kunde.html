@@ -168,7 +168,7 @@ function zeigeFehler(text){
   document.getElementById('inhalt').innerHTML = '<div class="zustand">' + escapeHtml(text) + '</div>';
 }
 
-function render(g){
+function render(g, schluessel){
   var st = statusBadge(g.naechstePruefung);
   var html = '<div class="card">';
   html += '<h2>' + escapeHtml(g.typ || g.kategorie || 'Gerät') + '</h2>';
@@ -192,7 +192,7 @@ function render(g){
   document.getElementById('inhalt').innerHTML = html;
   druckKnopf('einzelDruckBtn', function(){ baueDruckbereich([g], g.kundenname, gruppeVon(g), true); });
   protokolliereZugriff(g);
-  ladeAlleGeraete(g);
+  ladeAlleGeraete(g, schluessel);
 }
 
 // Der Kunde sieht nur Geraete aus demselben Bereich wie das gescannte Geraet
@@ -220,10 +220,19 @@ function berichtTitel(gr){
   if(gr === 'zisch') return 'Sodawasser- und CO2-Flaschen';
   return gr;
 }
-function ladeAlleGeraete(g){
-  if(!g.zugangscode) return;
+function ladeAlleGeraete(g, schluessel){
   var gruppe = gruppeVon(g);
-  firebase.firestore().collection('oeffentlich_geraete').where('zugangscode', '==', g.zugangscode).get().then(function(snap){
+  var abfrage;
+  if(schluessel){
+    abfrage = firebase.firestore().collection('portal').doc(schluessel).collection('geraete').get();
+  } else if(g.zugangscode){
+    // Uebergangszeit: alte Ablage, bis die App alles umgestellt hat
+    abfrage = firebase.firestore().collection('oeffentlich_geraete').where('zugangscode', '==', g.zugangscode).get();
+  } else {
+    zeigeGeraeteliste([g], g.kundenname, gruppe);
+    return;
+  }
+  abfrage.then(function(snap){
     var alle = [];
     snap.forEach(function(doc){
       var d = doc.data();
@@ -316,6 +325,31 @@ function protokolliereZugriff(g){
   } catch(e){}
 }
 
+function normalisiereCode(s){
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+// Aus dem Code wird ein Schluessel berechnet (gleiches Verfahren wie in der App).
+// Der Code selbst steht nirgends oeffentlich.
+function berechneSchluessel(code, cb){
+  try{
+    if(!window.crypto || !window.crypto.subtle || typeof TextEncoder === 'undefined'){ cb(null); return; }
+    var daten = new TextEncoder().encode('bsv-portal|' + normalisiereCode(code));
+    window.crypto.subtle.digest('SHA-256', daten).then(function(buf){
+      var b = new Uint8Array(buf), hex = '';
+      for(var i = 0; i < b.length; i++){ hex += ('0' + b[i].toString(16)).slice(-2); }
+      cb(hex);
+    }).catch(function(){ cb(null); });
+  }catch(e){ cb(null); }
+}
+
+function ladeGeschuetzt(schluessel, id, cb){
+  if(!schluessel){ cb(null); return; }
+  firebase.firestore().collection('portal').doc(schluessel).collection('geraete').doc(id).get().then(function(doc){
+    cb(doc.exists ? doc.data() : null);
+  }).catch(function(){ cb(null); });
+}
+
 function start(){
   var params = new URLSearchParams(window.location.search);
   var id = params.get('id');
@@ -332,16 +366,15 @@ function start(){
         return;
       }
       var g = doc.data();
-      if(g.zugangscode){
-        var freigeschaltet = false;
-        try { freigeschaltet = sessionStorage.getItem('zugang_' + id) === normalisiereCode(g.zugangscode); } catch(e){}
-        if(freigeschaltet){
-          render(g);
-        } else {
-          zeigeZugangsAbfrage(g, id);
-        }
+      if(g.codeNoetig || g.zugangscode){
+        var gemerkt = null;
+        try { gemerkt = sessionStorage.getItem('portalSchluessel'); } catch(e){}
+        ladeGeschuetzt(gemerkt, id, function(voll){
+          if(voll) render(voll, gemerkt);
+          else zeigeZugangsAbfrage(g, id);
+        });
       } else {
-        render(g);
+        render(g, null);
       }
     }).catch(function(err){
       console.error(err);
@@ -353,32 +386,43 @@ function start(){
   }
 }
 
-function normalisiereCode(s){
-  return String(s || '').trim().toLowerCase().replace(/\s+/g, '');
-}
-
 function zeigeZugangsAbfrage(g, id){
   var html = '<div class="card">';
   html += '<h2>Zugangscode</h2>';
   html += '<div class="meta" style="margin-top:0;">Bitte den Zugangscode eingeben, den Sie von Wolfgang Janiba Brandschutztechnik GmbH erhalten haben.</div>';
-  html += '<input id="pinInput" type="text" autocapitalize="characters" placeholder="z.B. X7K2P9" style="width:100%; margin-top:14px; padding:12px; font-size:18px; text-align:center; letter-spacing:2px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">';
+  html += '<input id="pinInput" type="text" autocapitalize="characters" autocomplete="off" placeholder="z.B. X7K2P9" style="width:100%; margin-top:14px; padding:12px; font-size:18px; text-align:center; letter-spacing:2px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">';
   html += '<button id="pinBtn" style="width:100%; margin-top:12px; padding:12px; border:none; border-radius:8px; background:#c23f12; color:#fff; font-weight:700; font-size:15px;">Bestätigen</button>';
   html += '<div id="pinFehler" class="meta" style="color:#a3300d; margin-top:8px; display:none;">Zugangscode nicht erkannt, bitte erneut versuchen.</div>';
   html += '</div>';
   document.getElementById('inhalt').innerHTML = html;
   var input = document.getElementById('pinInput');
+  var btn = document.getElementById('pinBtn');
   input.focus();
-  var pruefen = function(){
-    if(normalisiereCode(input.value) === normalisiereCode(g.zugangscode)){
-      try { sessionStorage.setItem('zugang_' + id, normalisiereCode(g.zugangscode)); } catch(e){}
-      render(g);
-    } else {
-      document.getElementById('pinFehler').style.display = 'block';
-      input.value = '';
-      input.focus();
-    }
+  var fehler = function(){
+    btn.disabled = false; btn.textContent = 'Bestätigen';
+    document.getElementById('pinFehler').style.display = 'block';
+    input.value = '';
+    input.focus();
   };
-  document.getElementById('pinBtn').onclick = pruefen;
+  var pruefen = function(){
+    var eingabe = input.value;
+    if(!normalisiereCode(eingabe)){ fehler(); return; }
+    btn.disabled = true; btn.textContent = 'Wird geprüft ...';
+    berechneSchluessel(eingabe, function(schluessel){
+      ladeGeschuetzt(schluessel, id, function(voll){
+        if(voll){
+          try { sessionStorage.setItem('portalSchluessel', schluessel); } catch(e){}
+          render(voll, schluessel);
+        } else if(g.zugangscode && normalisiereCode(eingabe) === normalisiereCode(g.zugangscode)){
+          // Uebergangszeit: Geraet ist noch nicht umgestellt
+          render(g, null);
+        } else {
+          fehler();
+        }
+      });
+    });
+  };
+  btn.onclick = pruefen;
   input.addEventListener('keydown', function(e){ if(e.key === 'Enter') pruefen(); });
 }
 

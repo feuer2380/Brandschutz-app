@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-06 12:45';
-var APP_VERSION_TEXT = '06.11. 12:45';
+var APP_VERSION = '2026-11-06 19:15';
+var APP_VERSION_TEXT = '06.11. 19:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -689,7 +689,7 @@ function dbDelete(store, id, cb){
   var fertigD = false;
   var weiterD = function(){ if(fertigD) return; fertigD = true; if(cb) cb(); };
   var timerD = setTimeout(function(){ offlineHinweisAktualisieren(true); weiterD(); }, (navigator.onLine === false) ? 300 : 4000);
-  if(store === 'geraete'){ try{ db.collection(OEFFENTLICH_STORE).doc(id).delete().catch(function(){}); }catch(e){} }
+  if(store === 'geraete'){ try{ portalGeraetSchreiben({ id: id }, null); }catch(e){} }
   loeschVermerkSchreiben(store, id);
   db.collection(store).doc(id).delete().then(function(){
     clearTimeout(timerD);
@@ -730,39 +730,89 @@ function baueOeffentlichesGeraet(g, k){
   };
 }
 
+// ---------- Kundenportal: geschuetzte Ablage ----------
+// Der Zugangscode wird NICHT mehr mitgeliefert. Aus dem Code wird ein Schluessel (SHA-256) berechnet,
+// die Geraetedaten liegen unter portal/<schluessel>/geraete/<id>. Nur wer den Code kennt, findet sie.
+// oeffentlich_geraete/<id> enthaelt bei Kunden mit Code nur noch { id, codeNoetig: true }.
+var PORTAL_STORE = 'portal';
+var PORTAL_INDEX_STORE = 'portal_index'; // privat: unter welchem Schluessel liegt ein Geraet gerade
+function portalCodeNormalisieren(s){
+  return String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+function portalSchluessel(code, cb){
+  try{
+    if(!window.crypto || !window.crypto.subtle || typeof TextEncoder === 'undefined'){ cb(null, true); return; }
+    var daten = new TextEncoder().encode('bsv-portal|' + portalCodeNormalisieren(code));
+    window.crypto.subtle.digest('SHA-256', daten).then(function(buf){
+      var b = new Uint8Array(buf), hex = '';
+      for(var i = 0; i < b.length; i++){ hex += ('0' + b[i].toString(16)).slice(-2); }
+      cb(hex, false);
+    }).catch(function(){ cb(null, true); });
+  }catch(e){ cb(null, true); }
+}
+function portalGeraetSchreiben(g, k){
+  if(!g || !g.id) return;
+  var aktiv = !!(k && k.freigabe && !g.ausgeschieden && g.kundeId);
+  var mitIndex = function(alterKey){
+    var weiter = function(neuerKey, fehler){
+      if(fehler){ console.error('Kundenportal: Verschluesselung nicht verfuegbar, nichts veroeffentlicht'); return; }
+      if(alterKey && alterKey !== neuerKey){
+        db.collection(PORTAL_STORE).doc(alterKey).collection('geraete').doc(g.id).delete().catch(function(){});
+      }
+      if(!aktiv){
+        db.collection(OEFFENTLICH_STORE).doc(g.id).delete().catch(function(){});
+        if(alterKey) db.collection(PORTAL_INDEX_STORE).doc(g.id).delete().catch(function(){});
+        return;
+      }
+      var daten = baueOeffentlichesGeraet(g, k);
+      delete daten.zugangscode;
+      if(neuerKey){
+        db.collection(PORTAL_STORE).doc(neuerKey).collection('geraete').doc(g.id).set(daten).catch(function(err){ console.error('Kundenportal-Sync Fehler', err); });
+        db.collection(OEFFENTLICH_STORE).doc(g.id).set({ id: g.id, codeNoetig: true }).catch(function(err){ console.error('Kundenportal-Sync Fehler', err); });
+        if(alterKey !== neuerKey) db.collection(PORTAL_INDEX_STORE).doc(g.id).set({ id: g.id, key: neuerKey }).catch(function(){});
+      } else {
+        db.collection(OEFFENTLICH_STORE).doc(g.id).set(daten).catch(function(err){ console.error('Kundenportal-Sync Fehler', err); });
+        if(alterKey) db.collection(PORTAL_INDEX_STORE).doc(g.id).delete().catch(function(){});
+      }
+    };
+    if(aktiv && k.zugangscode) portalSchluessel(k.zugangscode, weiter);
+    else weiter(null, false);
+  };
+  db.collection(PORTAL_INDEX_STORE).doc(g.id).get().then(function(idx){
+    mitIndex(idx.exists ? (idx.data().key || null) : null);
+  }).catch(function(){ mitIndex(null); });
+}
+
 function syncOeffentlichesGeraet(g){
   if(!g || !g.id) return;
-  if(g.ausgeschieden){
-    db.collection(OEFFENTLICH_STORE).doc(g.id).delete().catch(function(){});
-    return;
-  }
+  if(g.ausgeschieden || !g.kundeId){ portalGeraetSchreiben(g, null); return; }
   db.collection('kunden').doc(g.kundeId).get().then(function(kDoc){
-    var k = kDoc.exists ? kDoc.data() : null;
-    if(k && k.freigabe){
-      db.collection(OEFFENTLICH_STORE).doc(g.id).set(baueOeffentlichesGeraet(g, k)).catch(function(err){
-        console.error('Kundenportal-Sync Fehler', err);
-      });
-    } else {
-      db.collection(OEFFENTLICH_STORE).doc(g.id).delete().catch(function(){});
-    }
+    portalGeraetSchreiben(g, kDoc.exists ? kDoc.data() : null);
   }).catch(function(err){ console.error('Kundenportal-Sync Kunde-Lookup Fehler', err); });
 }
 
 function syncOeffentlichFuerKunde(k){
   if(!k || !k.id) return;
   db.collection('geraete').where('kundeId', '==', k.id).get().then(function(snap){
-    snap.forEach(function(doc){
-      var g = doc.data();
-      if(!k.freigabe || g.ausgeschieden){
-        db.collection(OEFFENTLICH_STORE).doc(g.id).delete().catch(function(){});
-      } else {
-        db.collection(OEFFENTLICH_STORE).doc(g.id).set(baueOeffentlichesGeraet(g, k)).catch(function(err){
-          console.error('Kundenportal-Sync Fehler', err);
-        });
-      }
-    });
+    snap.forEach(function(doc){ portalGeraetSchreiben(doc.data(), k); });
   }).catch(function(err){ console.error('Kundenportal-Sync Geräte-Lookup Fehler', err); });
 }
+
+// Einmalige Umstellung: alle freigegebenen Kunden in die geschuetzte Ablage uebertragen
+// (laeuft einmal, sobald der Chef angemeldet ist)
+var PORTAL_UMSTELLUNG_KEY = 'bsvPortalUmstellung1';
+var portalUmstellungTimer = setInterval(function(){
+  try{
+    if(localStorage.getItem(PORTAL_UMSTELLUNG_KEY) === '1'){ clearInterval(portalUmstellungTimer); return; }
+  }catch(e){ clearInterval(portalUmstellungTimer); return; }
+  if(typeof appGestartet === 'undefined' || !appGestartet || state.rolle !== 'chef' || !db) return;
+  if(navigator.onLine === false) return;
+  clearInterval(portalUmstellungTimer);
+  var liste = (state.kunden || []).filter(function(k){ return k && k.freigabe; });
+  liste.forEach(function(k){ syncOeffentlichFuerKunde(k); });
+  try{ localStorage.setItem(PORTAL_UMSTELLUNG_KEY, '1'); }catch(e){}
+  if(liste.length) toast('Kundenportal: ' + liste.length + ' Kunden auf geschützten Zugang umgestellt');
+}, 5000);
 
 // Suchfelder: beim Antippen wird der alte Text markiert, die neue Eingabe ersetzt ihn
 document.addEventListener('focusin', function(e){
