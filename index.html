@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-04 23:30';
-var APP_VERSION_TEXT = '06.11. 11:30';
+var APP_VERSION = '2026-11-06 12:00';
+var APP_VERSION_TEXT = '06.11. 12:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -666,7 +666,7 @@ function dbPut(store, obj, cb){
     offlineHinweisAktualisieren(true);
     weiter();
   }, offline ? 300 : 4000);
-  db.collection(store).doc(obj.id).set(obj).then(function(){
+  db.collection(store).doc(obj.id).set(mitZeitstempel(obj)).then(function(){
     clearTimeout(timer);
     if(store === 'geraete') syncOeffentlichesGeraet(obj);
     if(store === 'kunden') syncOeffentlichFuerKunde(obj);
@@ -690,6 +690,7 @@ function dbDelete(store, id, cb){
   var weiterD = function(){ if(fertigD) return; fertigD = true; if(cb) cb(); };
   var timerD = setTimeout(function(){ offlineHinweisAktualisieren(true); weiterD(); }, (navigator.onLine === false) ? 300 : 4000);
   if(store === 'geraete'){ try{ db.collection(OEFFENTLICH_STORE).doc(id).delete().catch(function(){}); }catch(e){} }
+  loeschVermerkSchreiben(store, id);
   db.collection(store).doc(id).delete().then(function(){
     clearTimeout(timerD);
     weiterD();
@@ -775,25 +776,144 @@ function uid(){
   return 'id_' + Date.now() + '_' + Math.floor(Math.random()*10000);
 }
 
+// ---------- Sparsame Synchronisierung ----------
+// Frueher: bei jedem Start ALLE Daten jeder Sammlung vom Server (tausende Lesevorgaenge).
+// Jetzt: Daten kommen aus dem Handy-Speicher, vom Server werden nur geänderte Eintraege geholt
+// (jeder Schreibvorgang bekommt einen Server-Zeitstempel "_ts"). Geloeschtes wird ueber "loeschungen" gemeldet.
+var LOESCH_STORE = 'loeschungen';
+var SYNC_SICHERHEIT_MS = 5 * 60000;
+function mitZeitstempel(obj){
+  var kopie = {};
+  for(var k in obj){ if(Object.prototype.hasOwnProperty.call(obj, k)) kopie[k] = obj[k]; }
+  try{ kopie._ts = firebase.firestore.FieldValue.serverTimestamp(); }catch(e){}
+  return kopie;
+}
+function loeschVermerkSchreiben(store, id){
+  try{
+    var vid = store + '__' + id;
+    db.collection(LOESCH_STORE).doc(vid).set({ id: vid, store: store, docId: id, _ts: firebase.firestore.FieldValue.serverTimestamp() }).catch(function(err){ console.warn('Loeschvermerk fehlgeschlagen', err); });
+  }catch(e){}
+}
+function syncStandLesen(store){
+  try{ var v = localStorage.getItem('bsvSyncStand_' + store); return v ? parseInt(v, 10) || 0 : 0; }catch(e){ return 0; }
+}
+function syncStandSetzen(store, ms){
+  try{ if(ms > syncStandLesen(store)) localStorage.setItem('bsvSyncStand_' + store, String(ms)); }catch(e){}
+}
+function tsMillis(t){
+  if(!t) return 0;
+  if(typeof t.toMillis === 'function') return t.toMillis();
+  if(typeof t.seconds === 'number') return t.seconds * 1000;
+  return 0;
+}
+function stateEintragSetzen(store, obj){
+  var liste = state[store] || [];
+  for(var i = 0; i < liste.length; i++){
+    if(liste[i] && liste[i].id === obj.id){ liste[i] = obj; state[store] = liste; return; }
+  }
+  liste.push(obj);
+  state[store] = liste;
+}
+function stateEintragEntfernen(store, id){
+  var liste = state[store] || [];
+  var neu = [];
+  for(var i = 0; i < liste.length; i++){ if(!(liste[i] && liste[i].id === id)) neu.push(liste[i]); }
+  state[store] = neu;
+}
+function dbGetKundeGeraete(kundeId, cb){
+  db.collection('geraete').where('kundeId', '==', kundeId).get().then(function(snap){
+    var erg = [];
+    snap.forEach(function(doc){ erg.push(doc.data()); });
+    cb(erg);
+  }).catch(function(err){
+    console.error('Geraete laden Fehler', err);
+    dbGetAll('geraete', cb, 'cache');
+  });
+}
+var renderGeplant = null;
+function renderBald(){
+  if(renderGeplant) return;
+  renderGeplant = setTimeout(function(){ renderGeplant = null; render(); }, 150);
+}
+function aenderungsListener(store, beiAenderung){
+  var stand = syncStandLesen(store);
+  var ab = new Date(Math.max(0, stand - SYNC_SICHERHEIT_MS));
+  return db.collection(store).where('_ts', '>', ab).onSnapshot(function(snap){
+    var geaendert = false;
+    var maxTs = 0;
+    snap.docChanges().forEach(function(ch){
+      var d = ch.doc.data({ serverTimestamps: 'estimate' });
+      if(!d.id) d.id = ch.doc.id;
+      if(!ch.doc.metadata.hasPendingWrites){
+        var t = tsMillis(ch.doc.get('_ts'));
+        if(t > maxTs) maxTs = t;
+      }
+      beiAenderung(ch.type, d);
+      geaendert = true;
+    });
+    if(maxTs) syncStandSetzen(store, maxTs);
+    if(geaendert){
+      if(store === 'zeiten') { try{ zeitNamenMigrieren(); }catch(e){} }
+      renderBald();
+    }
+  }, function(err){
+    console.error('Sync-Fehler bei ' + store, err);
+  });
+}
+// Einmalig nach dem Update (noch kein Sync-Stand): alles einmal vom Server holen, damit der Speicher sicher aktuell ist
+function ersterVollAbgleich(store, cb){
+  if(syncStandLesen(store) > 0){ cb(); return; }
+  var start = Date.now();
+  db.collection(store).get().then(function(snap){
+    var frisch = [];
+    snap.forEach(function(doc){ frisch.push(doc.data()); });
+    state[store] = frisch;
+    try{ localStorage.setItem('bsvSyncStand_' + store, String(start - 10 * 60000)); }catch(e){}
+    if(store === 'zeiten') { try{ zeitNamenMigrieren(); }catch(e){} }
+    renderBald();
+    cb();
+  }).catch(function(err){
+    console.error('Voll-Abgleich Fehler ' + store, err);
+    cb();
+  });
+}
+
 function starteEchtzeitSync(){
   realtimeUnsubscribers.forEach(function(u){ try{ u(); } catch(e){} });
   realtimeUnsubscribers = [];
   SYNC_STORES.forEach(function(store){
-    var unsub = db.collection(store).onSnapshot(function(snap){
-      var geaendert = false;
-      snap.docChanges().forEach(function(){ geaendert = true; });
-      if(!geaendert) return;
-      var frisch = [];
-      snap.forEach(function(doc){ frisch.push(doc.data()); });
-      state[store] = frisch;
-      if(store === 'zeiten') zeitNamenMigrieren();
-      render();
-    }, function(err){
-      console.error('Sync-Fehler bei ' + store, err);
+    ersterVollAbgleich(store, function(){
+      realtimeUnsubscribers.push(aenderungsListener(store, function(typ, d){
+        if(typ === 'removed') stateEintragEntfernen(store, d.id);
+        else stateEintragSetzen(store, d);
+      }));
     });
-    realtimeUnsubscribers.push(unsub);
+  });
+  // Loeschungen von anderen Geraeten
+  ersterVollAbgleich(LOESCH_STORE, function(){
+    realtimeUnsubscribers.push(aenderungsListener(LOESCH_STORE, function(typ, v){
+      if(typ === 'removed' || !v.store || !v.docId) return;
+      if(SYNC_STORES.indexOf(v.store) < 0) return;
+      var vorhanden = (state[v.store] || []).some(function(x){ return x && x.id === v.docId; });
+      if(!vorhanden) return;
+      stateEintragEntfernen(v.store, v.docId);
+      // Einmal beim Server nachfragen, damit der Eintrag auch aus dem Handy-Speicher verschwindet
+      try{ db.collection(v.store).doc(v.docId).get({ source: 'server' }).then(function(doc){
+        if(doc.exists){ stateEintragSetzen(v.store, doc.data()); renderBald(); }
+      }).catch(function(){}); }catch(e){}
+    }));
   });
 }
+// Nach langer Pause im Hintergrund (iPhone trennt die Verbindung) neu verbinden – nur mit Aenderungen seit dem letzten Stand
+var versteckSeit = 0;
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'hidden'){ versteckSeit = Date.now(); return; }
+  if(versteckSeit && Date.now() - versteckSeit > 20 * 60000 && typeof appGestartet !== 'undefined' && appGestartet){
+    versteckSeit = 0;
+    try{ starteEchtzeitSync(); }catch(e){}
+  }
+  versteckSeit = 0;
+});
 
 // ---------- State ----------
 var state = {
@@ -6046,23 +6166,23 @@ function modalPruefungenKorrigieren(kundeId){
       ausgewaehlt.forEach(function(p){
         p.datum = richtigesDatum;
         p.erledigtAm = richtigesDatum + 'T12:00:00';
-        db.collection('pruefungen').doc(p.id).set(p).then(function(){
+        db.collection('pruefungen').doc(p.id).set(mitZeitstempel(p)).then(function(){
           var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
           if(g){
             g.letztePruefung = richtigesDatum;
             var neuerTermin = naechsterTerminNach(richtigesDatum + 'T12:00:00', g.intervallMonate);
             g.naechstePruefung = neuerTermin;
-            db.collection('geraete').doc(g.id).set(g).then(function(){
+            db.collection('geraete').doc(g.id).set(mitZeitstempel(g)).then(function(){
               var offenePruefung = state.pruefungen.filter(function(x){ return x.geraetId === g.id && !x.erledigt && x.id !== p.id; })[0];
               if(offenePruefung){
                 offenePruefung.datum = neuerTermin;
-                db.collection('pruefungen').doc(offenePruefung.id).set(offenePruefung).then(fertig).catch(function(err){
+                db.collection('pruefungen').doc(offenePruefung.id).set(mitZeitstempel(offenePruefung)).then(fertig).catch(function(err){
                   console.error('Korrigieren-Fehler (offene Prüfung)', p.id, err);
                   fehlerListe.push(p.id); fertig();
                 });
               } else {
                 var pNeu = { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: neuerTermin, erledigt: false };
-                db.collection('pruefungen').doc(pNeu.id).set(pNeu).then(fertig).catch(function(err){
+                db.collection('pruefungen').doc(pNeu.id).set(mitZeitstempel(pNeu)).then(fertig).catch(function(err){
                   console.error('Korrigieren-Fehler (neue Prüfung)', p.id, err);
                   fehlerListe.push(p.id); fertig();
                 });
@@ -6149,7 +6269,7 @@ function nummernNeuOrdnen(kundeId){
   openModal('<div class="modal-head"><h3>Gerätenummern neu ordnen</h3><button class="close" id="mClose">&times;</button></div><div class="meta">Lade aktuellen Gerätestand...</div>');
   document.getElementById('mClose').onclick = closeModal;
 
-  dbGetAll('geraete', function(alleGeraete){
+  dbGetKundeGeraete(kundeId, function(alleGeraete){
     var alle = alleGeraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
     var ausgeschiedeneAnzahl = alleGeraete.filter(function(g){ return g.kundeId === kundeId && g.ausgeschieden; }).length;
     if(alle.length === 0){
@@ -6239,7 +6359,7 @@ function nummernNeuOrdnen(kundeId){
         g.nr = proKategorie[kat];
         neueWerte[g.id] = g.nr;
         try{
-          db.collection('geraete').doc(g.id).set(g).then(function(){
+          db.collection('geraete').doc(g.id).set(mitZeitstempel(g)).then(function(){
             fertig();
           }).catch(function(err){
             console.error('Nummerieren-Fehler bei Gerät', g.id, g.typ, err);
@@ -11020,7 +11140,7 @@ function modalBrandschutzplan(kundeId){
         dbGetAll('brandschutzplaene', function(alle){
           state.brandschutzplaene = alle;
           modalBrandschutzplan(kundeId);
-        });
+        }, 'cache');
       });
     };
   });
@@ -12384,7 +12504,7 @@ function modalTagesberichtListe(kundeId){
         dbGetAll('tagesberichte', function(alle){
           state.tagesberichte = alle;
           modalTagesberichtListe(kundeId);
-        });
+        }, 'cache');
       });
     };
   });
