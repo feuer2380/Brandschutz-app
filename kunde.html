@@ -185,10 +185,12 @@ function render(g){
     }
   }
   html += '</div>';
+  html += '<button class="btn-druck" id="einzelDruckBtn">Prüfbericht für dieses Gerät</button>';
   html += '<div class="meta">Diese Ansicht wird automatisch aktualisiert, sobald bei Ihnen eine Prüfung durchgeführt wurde.</div>';
   html += '</div>';
   html += '<div id="alleGeraeteBereich"></div>';
   document.getElementById('inhalt').innerHTML = html;
+  druckKnopf('einzelDruckBtn', function(){ baueDruckbereich([g], g.kundenname, gruppeVon(g), true); });
   protokolliereZugriff(g);
   ladeAlleGeraete(g);
 }
@@ -198,6 +200,14 @@ function render(g){
 function gruppeVon(x){
   var k = String((x && x.kategorie) || 'Feuerlöscher').trim();
   if(k === 'Perchtl Zisch' || k === 'CO2-Flaschen') return 'zisch';
+  // Sicherheitsnetz: Geraete mit Gramm-Angabe (z. B. "2000g", "425g") oder Soda im Namen
+  // sind CO2-/Sodaflaschen, auch wenn in der App versehentlich "Feuerloescher" eingetragen ist.
+  // (Feuerloescher werden immer in kg angegeben, daher kein Verwechseln mit "CO2-Loescher 5kg".)
+  if(k === 'Feuerlöscher'){
+    var t = String((x && x.typ) || '');
+    if(/\d\s*g(\b|$)/i.test(t) && !/\d\s*kg/i.test(t)) return 'zisch';
+    if(/soda|zisch|blubber/i.test(t)) return 'zisch';
+  }
   return k;
 }
 function gruppenTitel(gr, anzahl){
@@ -222,7 +232,6 @@ function ladeAlleGeraete(g){
     if(alle.length === 0) alle.push(g);
     alle.sort(function(a,b){ return (a.standort || '').localeCompare(b.standort || ''); });
     zeigeGeraeteliste(alle, g.kundenname, gruppe);
-    baueDruckbereich(alle, g.kundenname, gruppe);
   }).catch(function(err){ console.error('Geräteliste-Fehler', err); });
 }
 
@@ -236,14 +245,31 @@ function zeigeGeraeteliste(alle, kundenname, gruppe){
     html += '<span class="badge ' + st.cls + '" style="margin-top:0;">' + escapeHtml(st.label) + '</span>';
     html += '</div>';
   });
-  html += '<button class="btn-druck" id="druckBtn">Prüfbericht als PDF speichern</button>';
+  html += '<button class="btn-druck" id="druckBtn">Gesamtbericht: ' + escapeHtml(berichtTitel(gruppe)) + ' (' + alle.length + ')</button>';
   html += '<div class="meta">Öffnet die Druckansicht Ihres Geräts/Browsers &ndash; dort "Als PDF sichern" bzw. "In Dateien sichern" wählen.</div>';
   html += '</div>';
   document.getElementById('alleGeraeteBereich').innerHTML = html;
-  document.getElementById('druckBtn').onclick = function(){ window.print(); };
+  druckKnopf('druckBtn', function(){ baueDruckbereich(alle, kundenname, gruppe, false); });
 }
 
-function baueDruckbereich(alle, kundenname, gruppe){
+function druckKnopf(knopfId, vorbereiten){
+  var b = document.getElementById(knopfId);
+  if(!b) return;
+  b.onclick = function(){
+    var alt = b.textContent;
+    b.disabled = true;
+    b.textContent = 'Bericht wird vorbereitet ...';
+    b.style.opacity = '0.6';
+    // kurz warten, damit der Hinweis sichtbar wird, dann Druckansicht oeffnen
+    setTimeout(function(){
+      try{ vorbereiten(); }catch(e){ console.error(e); }
+      try{ window.print(); }catch(e){}
+      setTimeout(function(){ b.disabled = false; b.textContent = alt; b.style.opacity = ''; }, 1500);
+    }, 60);
+  };
+}
+
+function baueDruckbereich(alle, kundenname, gruppe, einzeln){
   var mitIR = (gruppe === 'Feuerlöscher');
   var heute = new Date();
   var heuteStr = fmtDate(heute.toISOString());
@@ -251,8 +277,13 @@ function baueDruckbereich(alle, kundenname, gruppe){
   html += '<div style="padding:0; font-family:-apple-system,Arial,sans-serif;"><div class="kopfblock">';
   html += '<h1 style="font-size:18px; color:#c23f12; margin-bottom:2px;">Wolfgang Janiba Brandschutztechnik GmbH</h1>';
   html += '<div style="font-size:12px; color:#555; margin-bottom:16px;">Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at</div>';
-  html += '<h2 style="font-size:15px; margin-bottom:2px;">Prüfbericht &ndash; ' + escapeHtml(berichtTitel(gruppe)) + '</h2>';
-  html += '<div style="font-size:12px; color:#555; margin-bottom:10px;">Kunde: ' + escapeHtml(kundenname || '') + ' &middot; Anzahl: ' + alle.length + ' &middot; Stand: ' + heuteStr + '</div></div>';
+  if(einzeln){
+    html += '<h2 style="font-size:15px; margin-bottom:2px;">Prüfbericht &ndash; Einzelgerät</h2>';
+    html += '<div style="font-size:12px; color:#555; margin-bottom:10px;">Kunde: ' + escapeHtml(kundenname || '') + ' &middot; Stand: ' + heuteStr + '</div></div>';
+  } else {
+    html += '<h2 style="font-size:15px; margin-bottom:2px;">Prüfbericht &ndash; ' + escapeHtml(berichtTitel(gruppe)) + ' (Gesamt)</h2>';
+    html += '<div style="font-size:12px; color:#555; margin-bottom:10px;">Kunde: ' + escapeHtml(kundenname || '') + ' &middot; Anzahl: ' + alle.length + ' &middot; Stand: ' + heuteStr + '</div></div>';
+  }
   html += '<table><colgroup>';
   if(mitIR) html += '<col style="width:24%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:14%"><col style="width:18%">';
   else html += '<col style="width:30%"><col style="width:24%"><col style="width:14%"><col style="width:14%"><col style="width:18%">';
