@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-07 14:50';
-var APP_VERSION_TEXT = '07.11. 14:50';
+var APP_VERSION = '2026-11-07 15:30';
+var APP_VERSION_TEXT = '07.11. 15:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -362,7 +362,11 @@ try {
   #printArea.kompakt .ausstattung h3{font-size:17px !important; margin:14px 0 6px 0 !important;}
   #printArea.kompakt .ausstattung .ir-legende{font-size:11px;}
   .ausstattung .ir-pill, .ausstattung .ir-legende span{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
-  .bio-hinweis{white-space:normal; overflow-wrap:break-word;}
+  .bio-hinweis{white-space:normal; overflow-wrap:break-word; display:block; line-height:1.2; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  .bio-hinweis.bio-spaeter{margin-top:2px; font-size:0.8em; font-weight:700; color:#9a6a00;}
+  .bio-hinweis.bio-jetzt{margin-top:6px; font-size:0.85em; font-weight:800; color:#fff; background:#b3261e; border-radius:8px; padding:6px 10px; letter-spacing:.01em;}
+  #printArea .bio-hinweis.bio-spaeter{margin-top:0; font-size:0.78em; line-height:1.15;}
+  #printArea .bio-hinweis.bio-jetzt{margin-top:1px; font-size:0.78em; line-height:1.2; padding:1px 6px; border-radius:4px;}
   .geraet-badges .badge{white-space:normal; text-align:center; max-width:100%;}
   #printArea .bio-hinweis{white-space:nowrap;}
   #printArea.kompakt .ausstattung .pb-kundenbox{font-size:13px;}
@@ -3840,21 +3844,40 @@ function bioStufe(g){
   return 1;
 }
 function bioUmstellungNoetig(g){ return bioStufe(g) >= 2; }
+// Ist die Umstellung JETZT faellig? (Innenrevision in diesem Jahr oder ueberfaellig, Geraet zu alt, oder Frist erreicht)
+function bioJetzt(g){
+  var st = bioStufe(g);
+  if(st === 3) return true;
+  if(st !== 2) return false;
+  var bj = (g && g.baujahr) ? baujahrStatus(parseInt(g.baujahr, 10), g.letzteInnenrevision, g) : null;
+  if(!bj) return true;
+  if(bj.cls === 'warn') return true;
+  if(bj.faelligJahr && bj.faelligJahr <= new Date().getFullYear()) return true;
+  return false;
+}
+function bioNaechstesJahr(g){
+  var bj = (g && g.baujahr) ? baujahrStatus(parseInt(g.baujahr, 10), g.letzteInnenrevision, g) : null;
+  if(bj && bj.faelligJahr && bj.faelligJahr <= BIO_FRIST_JAHR) return bj.faelligJahr;
+  return null;
+}
 function bioHinweisHtml(g){
   var st = bioStufe(g);
   if(!st) return '';
-  var farbe = '#8a6d00', text = 'Fluorfrei bis spätestens 31.12.' + BIO_FRIST_JAHR, gewicht = '600';
-  if(st === 2){ farbe = '#1e6b3a'; text = '&rarr; Bei Innenrevision auf fluorfrei umstellen'; gewicht = '700'; }
-  if(st === 3){ farbe = '#b3261e'; text = '&rarr; Frist ' + BIO_FRIST_JAHR + ': fluorfrei Pflicht'; gewicht = '800'; }
-  return '<div class="bio-hinweis" style="display:block; margin-top:0; line-height:1.15; font-size:0.78em; font-weight:' + gewicht + '; color:' + farbe + '; -webkit-print-color-adjust:exact; print-color-adjust:exact;">' + text + '</div>';
+  if(bioJetzt(g)){
+    var grund = (st === 3) ? 'Frist ' + BIO_FRIST_JAHR + ' erreicht' : 'Innenrevision fällig';
+    return '<div class="bio-hinweis bio-jetzt">&#9888; JETZT UMSTELLEN &ndash; fluorhaltig, ' + grund + '</div>';
+  }
+  var jahr = bioNaechstesJahr(g);
+  var text = 'Fluorhaltig &ndash; ' + (jahr ? 'bei Innenrevision ' + jahr + ' umstellen' : 'bis 31.12.' + BIO_FRIST_JAHR + ' umstellen');
+  return '<div class="bio-hinweis bio-spaeter">' + text + '</div>';
 }
 function bioZusammenfassungHtml(liste){
   var n = 0, jetztN = 0;
-  (liste || []).forEach(function(g){ var st = bioStufe(g); if(st){ n++; if(st >= 2) jetztN++; } });
+  (liste || []).forEach(function(g){ var st = bioStufe(g); if(st){ n++; if(bioJetzt(g)) jetztN++; } });
   if(!n) return '';
   var h = '<div class="bio-zusammenfassung" style="margin-top:8px; border:1.5px solid #1e6b3a; border-radius:6px; padding:5px 12px; font-size:11.5px; background:#eef7f0; page-break-inside:avoid; break-inside:avoid; -webkit-print-color-adjust:exact; print-color-adjust:exact;">';
-  h += '<b style="color:#1e6b3a;">Umstellung auf fluorfreie Löschmittel:</b> ' + n + ' fluorhaltige' + (n === 1 ? 'r' : '') + ' Schaum-/Fettbrandlöscher ' + (n === 1 ? 'muss' : 'müssen') + ' bis spätestens 31.12.' + BIO_FRIST_JAHR + ' umgestellt werden (EU-Verordnung 2025/1988; Nachfüllen mit PFAS-Schaum seit 23.10.2026 nicht mehr erlaubt)';
-  if(jetztN) h += ', davon <b>' + jetztN + '</b> bei der nächsten Innenrevision';
+  h += '<b style="color:#1e6b3a;">Fluorfrei-Umstellung:</b> ' + n + ' fluorhaltige' + (n === 1 ? 'r' : '') + ' Schaum-/Fettbrandlöscher ' + (n === 1 ? 'muss' : 'müssen') + ' bis spätestens 31.12.' + BIO_FRIST_JAHR + ' umgestellt werden (EU-VO 2025/1988)';
+  if(jetztN) h += ', davon <b style="color:#b3261e;">' + jetztN + ' jetzt</b> (Innenrevision fällig)';
   h += '.</div>';
   return h;
 }
@@ -4094,7 +4117,68 @@ function heuteLokalKurz(){
   var d = new Date();
   return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
 }
+
+// ---------- Rueckfrage bei fluorhaltigem Loescher, der JETZT umzustellen ist ----------
+var bioFrageLaeuft = false;
+function bioUmstellungFragen(g, weiter){
+  var html = '<div class="modal-head"><h3>Fluorhaltiger Löscher</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="background:#b3261e; color:#fff; border-radius:8px; padding:10px 12px; font-weight:700; margin-bottom:12px;">&#9888; Nr. ' + geraeteNummerWert(g) + ' &middot; ' + escapeHtml(g.typ || '') + '<br><span style="font-weight:500;">ist fluorhaltig und muss jetzt auf fluorfrei umgestellt werden.</span></div>';
+  html += '<div style="font-size:15px; margin-bottom:12px;">Wurde der Löscher getauscht bzw. umgestellt?</div>';
+  html += '<button class="btn block" id="bioJa" style="background:var(--ok);">Ja &ndash; neue Daten eintragen</button>';
+  html += '<button class="btn block secondary" id="bioNein" style="margin-top:10px;">Nein &ndash; nur geprüft (Umstellung bleibt offen)</button>';
+  html += '<div id="bioFormular" style="display:none; margin-top:14px;">';
+  html += '<label>Neuer Typ (fluorfrei)</label><input id="fTyp" type="text" autocomplete="off" placeholder="z.B. SD 6 E eintippen und auswählen">';
+  html += '<label style="margin-top:8px;">Neue Seriennummer <span style="color:#c23f12;">*</span></label><input id="bioSn" type="text" autocomplete="off" placeholder="vom Typenschild (oder &bdquo;keine&ldquo;)">';
+  html += '<label style="margin-top:8px;">Baujahr</label><input id="bioBj" type="number" inputmode="numeric" value="' + new Date().getFullYear() + '">';
+  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input type="checkbox" id="fFluorfrei" checked style="width:20px; height:20px;"> Löschmittel fluorfrei</label>';
+  html += '<div id="bioFehler" style="color:#c23f12; font-size:14px; min-height:18px; margin-top:6px;"></div>';
+  html += '<button class="btn block" id="bioSpeichern" style="margin-top:6px;">Speichern &amp; als geprüft eintragen</button>';
+  html += '<div class="meta" style="margin-top:6px;">Typ, Seriennummer und Baujahr des alten Löschers werden beim Gerät als Verlauf gespeichert.</div>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('bioNein').onclick = function(){ closeModal(); weiter(); };
+  document.getElementById('bioJa').onclick = function(){
+    document.getElementById('bioFormular').style.display = 'block';
+    document.getElementById('bioJa').style.display = 'none';
+    document.getElementById('bioNein').style.display = 'none';
+    try{ bindTypVorschlaege(); }catch(e){}
+    var t = document.getElementById('fTyp'); if(t) t.focus();
+  };
+  document.getElementById('bioSpeichern').onclick = function(){
+    var typ = document.getElementById('fTyp').value.trim();
+    var sn = document.getElementById('bioSn').value.trim();
+    var bj = parseInt(document.getElementById('bioBj').value, 10);
+    var ff = document.getElementById('fFluorfrei').checked;
+    var fe = document.getElementById('bioFehler');
+    if(!typ){ fe.textContent = 'Bitte den neuen Typ eintragen.'; return; }
+    if(!sn){ fe.textContent = 'Bitte die neue Seriennummer eintragen (gibt es keine: \'keine\').'; return; }
+    var probe = { typ: typ, kategorie: g.kategorie, fluorfrei: ff };
+    if(istSdAltschaum(probe)){ fe.textContent = 'Dieser Typ gilt noch als fluorhaltig. Bitte fluorfreien Typ wählen oder Haken bei \'fluorfrei\' setzen.'; return; }
+    g.umstellungen = g.umstellungen || [];
+    g.umstellungen.push({ datum: new Date().toISOString(), alterTyp: g.typ || '', alteSeriennummer: g.seriennummer || '', altesBaujahr: g.baujahr || null, von: state.mitarbeiterName || (state.rolle === 'chef' ? 'Chef' : '') });
+    g.typ = typ;
+    g.seriennummer = sn;
+    g.baujahr = (bj && !isNaN(bj)) ? bj : null;
+    g.fluorfrei = ff;
+    g.letzteInnenrevision = null;
+    dbPut('geraete', g, function(){
+      try{ syncOeffentlichesGeraet(g); }catch(e){}
+      closeModal();
+      toast('Umstellung gespeichert');
+      weiter();
+    });
+  };
+}
+
 function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
+  if(ergebnis === 'in_ordnung' && !bioFrageLaeuft){
+    var gBio = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    if(gBio && bioJetzt(gBio)){
+      bioUmstellungFragen(gBio, function(){ bioFrageLaeuft = true; try{ schnellErgebnisSetzen(geraetId, ergebnis, datumOverride); } finally { bioFrageLaeuft = false; } });
+      return;
+    }
+  }
   var vorherige = letzteErledigungInnerhalb24h(geraetId);
   if(vorherige){
     customConfirm('Dieses Gerät wurde bereits am ' + fmtDate(vorherige.erledigtAm) + ' um ' + fmtZeit(vorherige.erledigtAm) + ' Uhr geprüft (Ergebnis: ' + escapeHtml(vorherige.ergebnis || '') + '). Trotzdem nochmal speichern?', function(){
@@ -4194,6 +4278,13 @@ function checkAbgefuellt(geraetId){
 }
 
 function checkAbschliessen(geraetId, ergebnis){
+  if(ergebnis === 'in_ordnung' && !bioFrageLaeuft){
+    var gBio = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    if(gBio && bioJetzt(gBio)){
+      bioUmstellungFragen(gBio, function(){ bioFrageLaeuft = true; try{ checkAbschliessen(geraetId, ergebnis); } finally { bioFrageLaeuft = false; } });
+      return;
+    }
+  }
   state.vorgewaehltesErgebnis = null;
   var vorherige = letzteErledigungInnerhalb24h(geraetId);
   if(vorherige){
