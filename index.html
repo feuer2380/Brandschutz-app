@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-07 15:30';
-var APP_VERSION_TEXT = '07.11. 15:30';
+var APP_VERSION = '2026-11-07 16:15';
+var APP_VERSION_TEXT = '07.11. 16:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -366,6 +366,9 @@ try {
   .bio-hinweis.bio-spaeter{margin-top:2px; font-size:0.8em; font-weight:700; color:#9a6a00;}
   .bio-hinweis.bio-jetzt{margin-top:6px; font-size:0.85em; font-weight:800; color:#fff; background:#b3261e; border-radius:8px; padding:6px 10px; letter-spacing:.01em;}
   #printArea .bio-hinweis.bio-spaeter{margin-top:0; font-size:0.78em; line-height:1.15;}
+  .bio-hinweis.bio-jetzt[data-bioumstellen]{cursor:pointer;}
+  .bio-tipp{font-weight:600; font-size:0.92em; opacity:.95;}
+  #printArea .bio-tipp{display:none;}
   #printArea .bio-hinweis.bio-jetzt{margin-top:1px; font-size:0.78em; line-height:1.2; padding:1px 6px; border-radius:4px;}
   .geraet-badges .badge{white-space:normal; text-align:center; max-width:100%;}
   #printArea .bio-hinweis{white-space:nowrap;}
@@ -3865,7 +3868,7 @@ function bioHinweisHtml(g){
   if(!st) return '';
   if(bioJetzt(g)){
     var grund = (st === 3) ? 'Frist ' + BIO_FRIST_JAHR + ' erreicht' : 'Innenrevision fällig';
-    return '<div class="bio-hinweis bio-jetzt">&#9888; JETZT UMSTELLEN &ndash; fluorhaltig, ' + grund + '</div>';
+    return '<div class="bio-hinweis bio-jetzt" data-bioumstellen="' + escapeHtml(g.id || '') + '">&#9888; JETZT UMSTELLEN &ndash; fluorhaltig, ' + grund + '<span class="bio-tipp"><br>&rarr; hier antippen: neuen Löscher eintragen</span></div>';
   }
   var jahr = bioNaechstesJahr(g);
   var text = 'Fluorhaltig &ndash; ' + (jahr ? 'bei Innenrevision ' + jahr + ' umstellen' : 'bis 31.12.' + BIO_FRIST_JAHR + ' umstellen');
@@ -4119,11 +4122,19 @@ function heuteLokalKurz(){
 }
 
 // ---------- Rueckfrage bei fluorhaltigem Loescher, der JETZT umzustellen ist ----------
+document.addEventListener('click', function(ev){
+  var el = ev.target && ev.target.closest ? ev.target.closest('[data-bioumstellen]') : null;
+  if(!el || (el.closest && el.closest('#printArea'))) return;
+  ev.preventDefault(); ev.stopPropagation();
+  var g = state.geraete.filter(function(x){ return x.id === el.getAttribute('data-bioumstellen'); })[0];
+  if(!g) return;
+  bioUmstellungFragen(g, function(){ render(); }, true);
+}, true);
 var bioFrageLaeuft = false;
-function bioUmstellungFragen(g, weiter){
+function bioUmstellungFragen(g, weiter, direkt){
   var html = '<div class="modal-head"><h3>Fluorhaltiger Löscher</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div style="background:#b3261e; color:#fff; border-radius:8px; padding:10px 12px; font-weight:700; margin-bottom:12px;">&#9888; Nr. ' + geraeteNummerWert(g) + ' &middot; ' + escapeHtml(g.typ || '') + '<br><span style="font-weight:500;">ist fluorhaltig und muss jetzt auf fluorfrei umgestellt werden.</span></div>';
-  html += '<div style="font-size:15px; margin-bottom:12px;">Wurde der Löscher getauscht bzw. umgestellt?</div>';
+  html += '<div id="bioFrage" style="font-size:15px; margin-bottom:12px;">Wurde der Löscher getauscht bzw. umgestellt?</div>';
   html += '<button class="btn block" id="bioJa" style="background:var(--ok);">Ja &ndash; neue Daten eintragen</button>';
   html += '<button class="btn block secondary" id="bioNein" style="margin-top:10px;">Nein &ndash; nur geprüft (Umstellung bleibt offen)</button>';
   html += '<div id="bioFormular" style="display:none; margin-top:14px;">';
@@ -4132,7 +4143,7 @@ function bioUmstellungFragen(g, weiter){
   html += '<label style="margin-top:8px;">Baujahr</label><input id="bioBj" type="number" inputmode="numeric" value="' + new Date().getFullYear() + '">';
   html += '<label style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input type="checkbox" id="fFluorfrei" checked style="width:20px; height:20px;"> Löschmittel fluorfrei</label>';
   html += '<div id="bioFehler" style="color:#c23f12; font-size:14px; min-height:18px; margin-top:6px;"></div>';
-  html += '<button class="btn block" id="bioSpeichern" style="margin-top:6px;">Speichern &amp; als geprüft eintragen</button>';
+  html += '<button class="btn block" id="bioSpeichern" style="margin-top:6px;">' + (direkt ? 'Neuen Löscher speichern' : 'Speichern &amp; als geprüft eintragen') + '</button>';
   html += '<div class="meta" style="margin-top:6px;">Typ, Seriennummer und Baujahr des alten Löschers werden beim Gerät als Verlauf gespeichert.</div>';
   html += '</div>';
   openModal(html);
@@ -4145,6 +4156,11 @@ function bioUmstellungFragen(g, weiter){
     try{ bindTypVorschlaege(); }catch(e){}
     var t = document.getElementById('fTyp'); if(t) t.focus();
   };
+  if(direkt){
+    // gleich das Formular fuer den neuen Loescher zeigen
+    document.getElementById('bioFrage').style.display = 'none';
+    document.getElementById('bioJa').onclick();
+  }
   document.getElementById('bioSpeichern').onclick = function(){
     var typ = document.getElementById('fTyp').value.trim();
     var sn = document.getElementById('bioSn').value.trim();
@@ -4156,7 +4172,7 @@ function bioUmstellungFragen(g, weiter){
     var probe = { typ: typ, kategorie: g.kategorie, fluorfrei: ff };
     if(istSdAltschaum(probe)){ fe.textContent = 'Dieser Typ gilt noch als fluorhaltig. Bitte fluorfreien Typ wählen oder Haken bei \'fluorfrei\' setzen.'; return; }
     g.umstellungen = g.umstellungen || [];
-    g.umstellungen.push({ datum: new Date().toISOString(), alterTyp: g.typ || '', alteSeriennummer: g.seriennummer || '', altesBaujahr: g.baujahr || null, von: state.mitarbeiterName || (state.rolle === 'chef' ? 'Chef' : '') });
+    g.umstellungen.push({ datum: new Date().toISOString(), grund: 'Fluorhaltig – Umstellung auf fluorfrei', alterTyp: g.typ || '', alteSeriennummer: g.seriennummer || '', altesBaujahr: g.baujahr || null, von: state.mitarbeiterName || (state.rolle === 'chef' ? 'Chef' : '') });
     g.typ = typ;
     g.seriennummer = sn;
     g.baujahr = (bj && !isNaN(bj)) ? bj : null;
@@ -4171,7 +4187,132 @@ function bioUmstellungFragen(g, weiter){
   };
 }
 
+// ---------- Ausscheiden: Grund festhalten + Rueckblick je Kunde ----------
+var AUSSCHEIDE_GRUENDE = [
+  'Zu alt (20 Jahre)',
+  'Fluorhaltig – Umstellung auf fluorfrei',
+  'Gebrechen / beschädigt / undicht',
+  'Löschmittel nicht mehr verfügbar',
+  'Prüfung nicht bestanden',
+  'Vom Kunden entfernt / nicht mehr benötigt',
+  'Sonstiges'
+];
+var ausscheideInfo = null;      // vom Auswahlfenster gesetzt, beim Ausscheiden uebernommen
+var ausscheideFrageLaeuft = false;
+function ausscheidenVermerken(g, notizFallback){
+  var info = ausscheideInfo || {};
+  g.ausscheideGrund = info.grund || g.ausscheideGrund || '';
+  g.ausscheideNotiz = info.notiz || g.ausscheideNotiz || (notizFallback || '');
+  g.ausgeschiedenVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
+  ausscheideInfo = null;
+}
+function ausscheideGrundVorschlag(g){
+  var bj = parseInt(g && g.baujahr, 10);
+  if(bj && new Date().getFullYear() - bj >= 20) return AUSSCHEIDE_GRUENDE[0];
+  if(typeof bioStufe === 'function' && bioStufe(g) > 0) return AUSSCHEIDE_GRUENDE[1];
+  return '';
+}
+function ausscheideGrundFragen(g, weiter){
+  var vorschlag = ausscheideGrundVorschlag(g);
+  var html = '<div class="modal-head"><h3>Warum ausscheiden?</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Nr. ' + geraeteNummerWert(g) + ' &middot; ' + escapeHtml(g.typ || '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div>';
+  AUSSCHEIDE_GRUENDE.forEach(function(gr, i){
+    html += '<button type="button" class="btn block ' + (gr === vorschlag ? '' : 'secondary') + ' grundBtn" data-i="' + i + '" style="margin-top:8px; text-align:left; justify-content:flex-start;">' + escapeHtml(gr) + (gr === vorschlag ? ' &nbsp;<span style="font-size:12px; opacity:.85;">(vorgeschlagen)</span>' : '') + '</button>';
+  });
+  html += '<label style="margin-top:12px;">Bemerkung (optional)</label><input id="ausscheideNotiz" type="text" placeholder="z.B. Behälter korrodiert, Ventil defekt">';
+  html += '<div class="meta" style="margin-top:6px;">Grund und Datum bleiben beim Kunden unter &bdquo;Ausgeschiedene Geräte&ldquo; als Nachweis gespeichert.</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('.grundBtn').forEach(function(b){
+    b.onclick = function(){
+      ausscheideInfo = { grund: AUSSCHEIDE_GRUENDE[parseInt(b.getAttribute('data-i'), 10)], notiz: document.getElementById('ausscheideNotiz').value.trim() };
+      closeModal();
+      weiter();
+    };
+  });
+}
+
+// Liste aller ausgeschiedenen + getauschten Geraete eines Kunden (fuer Anzeige und Ausdruck)
+function rueckblickEintraege(kundeId, abJahr){
+  var e = [];
+  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId; });
+  geraete.forEach(function(g){
+    if(g.ausgeschieden && g.ausgeschiedenAm){
+      // Ersatzgeraet suchen: gleicher Kunde, gleiche Kategorie, gleiche Nr. oder gleicher Standort, danach angelegt
+      var ers = geraete.filter(function(x){
+        if(x.id === g.id || x.ausgeschieden) return false;
+        if((x.kategorie || 'Feuerlöscher') !== (g.kategorie || 'Feuerlöscher')) return false;
+        var gleich = (x.nr && g.nr && String(x.nr) === String(g.nr)) || (x.standort && g.standort && x.standort === g.standort);
+        if(!gleich) return false;
+        var t = x.erstelltAm ? new Date(x.erstelltAm) : null;
+        return t && t >= new Date(new Date(g.ausgeschiedenAm).getTime() - 86400000);
+      })[0];
+      e.push({ datum: g.ausgeschiedenAm, nr: geraeteNummerWert(g), typ: g.typ || '', sn: g.seriennummer || '', bj: g.baujahr || '', standort: g.standort || '',
+        grund: g.ausscheideGrund || '', notiz: g.ausscheideNotiz || '', von: g.ausgeschiedenVon || '', art: 'Ausgeschieden',
+        ersatz: ers ? (ers.typ || '') + (ers.seriennummer ? ', SN ' + ers.seriennummer : '') : '' });
+    }
+    (g.umstellungen || []).forEach(function(u, i){
+      var naechste = (g.umstellungen[i + 1]);
+      var neu = naechste ? (naechste.alterTyp + (naechste.alteSeriennummer ? ', SN ' + naechste.alteSeriennummer : '')) : ((g.typ || '') + (g.seriennummer ? ', SN ' + g.seriennummer : ''));
+      e.push({ datum: u.datum, nr: geraeteNummerWert(g), typ: u.alterTyp || '', sn: u.alteSeriennummer || '', bj: u.altesBaujahr || '', standort: g.standort || '',
+        grund: u.grund || 'Fluorhaltig – Umstellung auf fluorfrei', notiz: '', von: u.von || '', art: 'Getauscht', ersatz: neu });
+    });
+  });
+  if(abJahr) e = e.filter(function(x){ return new Date(x.datum).getFullYear() >= abJahr; });
+  e.sort(function(a, b){ return new Date(b.datum) - new Date(a.datum); });
+  return e;
+}
+function rueckblickDruckHtml(kundeId, abJahr){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0] || {};
+  var liste = rueckblickEintraege(kundeId, abJahr);
+  var html = '<div class="bericht-brief ausstattung">';
+  html += '<div class="pb-kopfzeile" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #c23f12; padding-bottom:6px; margin-bottom:8px;"><div><div style="font-family:Georgia,serif; font-size:20px; font-weight:700;">Nachweis ausgeschiedene / getauschte Geräte</div><div class="meta">' + (abJahr ? 'Zeitraum ab ' + abJahr : 'Gesamter Zeitraum') + ' &middot; Stand: ' + fmtDate(new Date().toISOString()) + '</div></div>' + (typeof LOGO_DATA !== 'undefined' ? '<img src="' + LOGO_DATA + '" style="height:42px;">' : '') + '</div>';
+  html += '<div class="pb-kundenbox" style="margin-bottom:10px;"><div class="knr">' + (k.kundennummer ? 'KUNDE NR. ' + escapeHtml(k.kundennummer) : '') + '</div><b>' + escapeHtml(k.name || '') + '</b><br>' + escapeHtml(k.adresse || '') + '</div>';
+  if(!liste.length){
+    html += '<div class="meta">Im gewählten Zeitraum wurden keine Geräte ausgeschieden oder getauscht.</div>';
+  } else {
+    html += '<table class="pb-tabelle"><thead><tr><th>Datum</th><th>Nr.</th><th>Gerät (alt)</th><th>Serien-Nr.</th><th>Bj.</th><th>Standort</th><th>Grund</th><th>Ersetzt durch</th><th>Von</th></tr></thead><tbody>';
+    liste.forEach(function(x){
+      html += '<tr><td>' + fmtDate(x.datum) + '</td><td>' + escapeHtml(String(x.nr)) + '</td><td>' + escapeHtml(x.typ) + '<div class="meta" style="font-size:0.8em;">' + x.art + '</div></td><td>' + escapeHtml(x.sn || '-') + '</td><td>' + escapeHtml(String(x.bj || '-')) + '</td><td>' + escapeHtml(x.standort || '-') + '</td><td>' + escapeHtml(x.grund || '-') + (x.notiz ? '<div class="meta" style="font-size:0.8em;">' + escapeHtml(x.notiz) + '</div>' : '') + '</td><td>' + escapeHtml(x.ersatz || '-') + '</td><td>' + escapeHtml(x.von || '-') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    html += '<div class="meta" style="margin-top:6px;">' + liste.length + ' Einträge.</div>';
+  }
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf &middot; Tel 0676/305 83 98 &middot; info@loeschtechnik.at &middot; www.brandschutztechnik-janiba.at</div>';
+  html += '</div>';
+  return html;
+}
+function modalRueckblick(kundeId, abJahr){
+  var jetzt = new Date().getFullYear();
+  if(abJahr === undefined) abJahr = jetzt - 4;
+  var liste = rueckblickEintraege(kundeId, abJahr);
+  var html = '<div class="modal-head"><h3>Ausgeschiedene / getauschte Geräte</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">';
+  [[jetzt, 'Dieses Jahr'], [jetzt - 2, 'Letzte 2 Jahre'], [jetzt - 4, 'Letzte 4 Jahre'], [0, 'Alle']].forEach(function(z){
+    html += '<button type="button" class="btn small ' + (z[0] === abJahr ? '' : 'secondary') + ' rbZeit" data-ab="' + z[0] + '">' + z[1] + '</button>';
+  });
+  html += '</div>';
+  if(!liste.length) html += '<div class="empty">Keine ausgeschiedenen oder getauschten Geräte in diesem Zeitraum</div>';
+  liste.forEach(function(x){
+    html += '<div class="card" style="margin-bottom:8px;">';
+    html += '<div class="row" style="align-items:flex-start;"><div style="flex:1; min-width:0;"><b>Nr. ' + escapeHtml(String(x.nr)) + ' &middot; ' + escapeHtml(x.typ) + '</b><div class="meta">' + (x.sn ? 'SN ' + escapeHtml(x.sn) + ' &middot; ' : '') + (x.bj ? 'Bj. ' + escapeHtml(String(x.bj)) + ' &middot; ' : '') + escapeHtml(x.standort || '') + '</div></div><span class="badge ' + (x.art === 'Getauscht' ? 'blau' : 'warn') + '">' + x.art + ' ' + fmtDate(x.datum) + '</span></div>';
+    html += '<div style="margin-top:6px; font-size:14px;"><b>Grund:</b> ' + escapeHtml(x.grund || 'nicht angegeben') + (x.notiz ? ' &ndash; ' + escapeHtml(x.notiz) : '') + '</div>';
+    if(x.ersatz) html += '<div class="meta" style="margin-top:2px;">Ersetzt durch: ' + escapeHtml(x.ersatz) + '</div>';
+    if(x.von) html += '<div class="meta">Von: ' + escapeHtml(x.von) + '</div>';
+    html += '</div>';
+  });
+  html += '<button class="btn block" id="rbDruck" style="margin-top:10px;">Nachweis drucken / als PDF teilen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('.rbZeit').forEach(function(b){ b.onclick = function(){ modalRueckblick(kundeId, parseInt(b.getAttribute('data-ab'), 10)); }; });
+  document.getElementById('rbDruck').onclick = function(){ bsvDruckenOderTeilen(rueckblickDruckHtml(kundeId, abJahr), 'Nachweis_ausgeschiedene_Geraete.pdf'); };
+}
+
 function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
+  if(ergebnis === 'ausscheiden' && !ausscheideFrageLaeuft){
+    var gA = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    if(gA){ ausscheideGrundFragen(gA, function(){ ausscheideFrageLaeuft = true; try{ schnellErgebnisSetzen(geraetId, ergebnis, datumOverride); } finally { ausscheideFrageLaeuft = false; } }); return; }
+  }
   if(ergebnis === 'in_ordnung' && !bioFrageLaeuft){
     var gBio = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
     if(gBio && bioJetzt(gBio)){
@@ -4213,6 +4354,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
       var externeIdFuerErsatz = g.externeId;
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
+      ausscheidenVermerken(g);
       dbPut('geraete', g, function(){
         var kid = g.kundeId;
         var ersatzHtml = '';
@@ -4278,6 +4420,10 @@ function checkAbgefuellt(geraetId){
 }
 
 function checkAbschliessen(geraetId, ergebnis){
+  if(ergebnis === 'ausscheiden' && !ausscheideFrageLaeuft){
+    var gA = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    if(gA){ ausscheideGrundFragen(gA, function(){ ausscheideFrageLaeuft = true; try{ checkAbschliessen(geraetId, ergebnis); } finally { ausscheideFrageLaeuft = false; } }); return; }
+  }
   if(ergebnis === 'in_ordnung' && !bioFrageLaeuft){
     var gBio = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
     if(gBio && bioJetzt(gBio)){
@@ -4363,6 +4509,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
       var externeIdFuerErsatz2 = g.externeId;
       g.ausgeschieden = true;
       g.ausgeschiedenAm = jetztIso;
+      ausscheidenVermerken(g);
       dbPut('geraete', g, function(){
         var kid = g.kundeId;
         var ersatzHtml = '';
@@ -4883,6 +5030,8 @@ function renderKundeDetail(kundeId){
   html += '<button class="btn block secondary" style="margin-top:10px;" id="tagesberichtBtn">Tagesbericht</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="fuellhistorieKundeBtn">Füllhistorie (Perchtl Zisch / CO2-Flaschen)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="ausstattungBtn">Ausstattungsliste (was ist wo im Gebäude)</button>';
+  var rbAnzahl = rueckblickEintraege(kundeId, 0).length;
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="rueckblickBtn">Ausgeschiedene / getauschte Geräte' + (rbAnzahl ? ' (' + rbAnzahl + ')' : '') + '</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
   return html;
@@ -7333,9 +7482,10 @@ function modalGeraetBearbeiten(geraetId){
   };
   if(!g.ausgeschieden){
     document.getElementById('fAusscheiden').onclick = function(){
-      customConfirm('Gerät als ausgeschieden markieren? Es erscheint dann in der Liste der ausgeschiedenen Feuerlöscher (Reiter Berichte) und nicht mehr in der aktiven Geräteliste.', function(){
+      ausscheideGrundFragen(g, function(){
         g.ausgeschieden = true;
         g.ausgeschiedenAm = new Date().toISOString();
+        ausscheidenVermerken(g);
         dbPut('geraete', g, function(){
           loadAll(function(){ render(); closeModal(); toast('Gerät ausgeschieden'); });
         });
@@ -8067,6 +8217,7 @@ function modalErledigt(pruefungId){
       if(gZu && ergebnis === 'ausscheiden'){
         gZu.ausgeschieden = true;
         gZu.ausgeschiedenAm = jetztIso;
+        ausscheidenVermerken(gZu, p.bemerkung || '');
         dbPut('geraete', gZu, function(){
           loadAll(function(){ render(); closeModal(); toast('Gerät ausgeschieden'); modalBerichtAnsicht(p.id); });
         });
@@ -12799,6 +12950,7 @@ function modalSammelbericht(kundeId){
         if(ergebnis === 'ausscheiden'){
           g.ausgeschieden = true;
           g.ausgeschiedenAm = jetztIso;
+          ausscheidenVermerken(g, notiz || '');
           dbPut('geraete', g, function(){ weiter(null); });
         } else if(ergebnis === 'in_ordnung'){
           var pruefdatumWert = pruefdatumWertVorab || jetztIso.substring(0,10);
@@ -14801,6 +14953,8 @@ function bindDynamic(){
 
   var ausstattungBtn = document.getElementById('ausstattungBtn');
   if(ausstattungBtn) ausstattungBtn.onclick = function(){ modalGeraeteuebersicht(state.activeKundeId); };
+  var rueckblickBtn = document.getElementById('rueckblickBtn');
+  if(rueckblickBtn) rueckblickBtn.onclick = function(){ modalRueckblick(state.activeKundeId); };
 
   var qrBtn = document.getElementById('qrKundeBtn');
   if(qrBtn) qrBtn.onclick = function(){ modalQrKunde(state.activeKundeId); };
