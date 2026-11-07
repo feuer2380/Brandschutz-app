@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-07 16:30';
-var APP_VERSION_TEXT = '07.11. 16:30';
+var APP_VERSION = '2026-11-07 21:30';
+var APP_VERSION_TEXT = '07.11. 21:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -755,6 +755,9 @@ function baueOeffentlichesGeraet(g, k){
     innenrevisionNoetig: !!bj,
     innenrevisionLabel: bj ? bj.label : null,
     letzteInnenrevision: g.letzteInnenrevision || null,
+    fluorStufe: (typeof bioStufe === 'function') ? bioStufe(g) : 0,
+    fluorJetzt: (typeof bioJetzt === 'function') ? bioJetzt(g) : false,
+    fluorJahr: (typeof bioNaechstesJahr === 'function') ? bioNaechstesJahr(g) : null,
     aktualisiertAm: new Date().toISOString()
   };
 }
@@ -829,7 +832,7 @@ function syncOeffentlichFuerKunde(k){
 
 // Einmalige Umstellung: alle freigegebenen Kunden in die geschuetzte Ablage uebertragen
 // (laeuft einmal, sobald der Chef angemeldet ist)
-var PORTAL_UMSTELLUNG_KEY = 'bsvPortalUmstellung1';
+var PORTAL_UMSTELLUNG_KEY = 'bsvPortalUmstellung2';
 var portalUmstellungTimer = setInterval(function(){
   try{
     if(localStorage.getItem(PORTAL_UMSTELLUNG_KEY) === '1'){ clearInterval(portalUmstellungTimer); return; }
@@ -840,7 +843,7 @@ var portalUmstellungTimer = setInterval(function(){
   var liste = (state.kunden || []).filter(function(k){ return k && k.freigabe; });
   liste.forEach(function(k){ syncOeffentlichFuerKunde(k); });
   try{ localStorage.setItem(PORTAL_UMSTELLUNG_KEY, '1'); }catch(e){}
-  if(liste.length) toast('Kundenportal: ' + liste.length + ' Kunden auf geschützten Zugang umgestellt');
+  if(liste.length) toast('Kundenportal: ' + liste.length + ' Kunden aktualisiert');
 }, 5000);
 
 // Suchfelder: beim Antippen wird der alte Text markiert, die neue Eingabe ersetzt ihn
@@ -3822,6 +3825,105 @@ function istSdAltschaum(g){
   if(istFluorfrei(g)) return false;
   return true;
 }
+
+// ---------- Gesamtliste Fluor-Umstellung (alle Kunden) ----------
+function fluorGesamtDaten(){
+  var jetztJahr = new Date().getFullYear();
+  var proKunde = {}, proTyp = {}, proJahr = {}, gesamt = 0, jetzt = 0;
+  state.geraete.forEach(function(g){
+    if(g.ausgeschieden) return;
+    var st = bioStufe(g);
+    if(!st) return;
+    var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+    if(!k || k.geloescht || k.papierkorb) return;
+    var istJetzt = bioJetzt(g);
+    var jahr = istJetzt ? jetztJahr : (bioNaechstesJahr(g) || BIO_FRIST_JAHR);
+    gesamt++; if(istJetzt) jetzt++;
+    if(!proKunde[k.id]) proKunde[k.id] = { k: k, geraete: [], jetzt: 0 };
+    proKunde[k.id].geraete.push({ g: g, jahr: jahr, jetzt: istJetzt });
+    if(istJetzt) proKunde[k.id].jetzt++;
+    var t = (g.typ || 'ohne Typ').trim();
+    proTyp[t] = (proTyp[t] || 0) + 1;
+    proJahr[jahr] = (proJahr[jahr] || 0) + 1;
+  });
+  var kunden = Object.keys(proKunde).map(function(id){ return proKunde[id]; });
+  kunden.forEach(function(e){ e.geraete.sort(function(a, b){ return a.jahr - b.jahr || String(geraeteNummerWert(a.g)).localeCompare(String(geraeteNummerWert(b.g)), 'de', { numeric: true }); }); });
+  kunden.sort(function(a, b){ return b.jetzt - a.jetzt || b.geraete.length - a.geraete.length || (a.k.name || '').localeCompare(b.k.name || ''); });
+  return { kunden: kunden, proTyp: proTyp, proJahr: proJahr, gesamt: gesamt, jetzt: jetzt };
+}
+function fluorFilter(d, filter){
+  if(!filter || filter === 'alle') return d.kunden;
+  return d.kunden.map(function(e){
+    var gs = e.geraete.filter(function(x){ return filter === 'jetzt' ? x.jetzt : String(x.jahr) === String(filter); });
+    return { k: e.k, geraete: gs, jetzt: gs.filter(function(x){ return x.jetzt; }).length };
+  }).filter(function(e){ return e.geraete.length; });
+}
+function fluorGesamtDruckHtml(filter){
+  var d = fluorGesamtDaten();
+  var liste = fluorFilter(d, filter);
+  var titel = filter === 'jetzt' ? 'jetzt fällig' : (filter && filter !== 'alle' ? 'fällig ' + filter : 'alle bis 31.12.' + BIO_FRIST_JAHR);
+  var anz = 0; liste.forEach(function(e){ anz += e.geraete.length; });
+  var html = '<div class="bericht-brief ausstattung">';
+  html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #c23f12; padding-bottom:6px; margin-bottom:8px;"><div><div style="font-family:Georgia,serif; font-size:20px; font-weight:700;">Fluorfrei-Umstellung &ndash; Gesamtliste</div><div class="meta">' + escapeHtml(titel) + ' &middot; ' + anz + ' Löscher bei ' + liste.length + ' Kunden &middot; Stand: ' + fmtDate(new Date().toISOString()) + '</div></div>' + (typeof LOGO_DATA !== 'undefined' ? '<img src="' + LOGO_DATA + '" style="height:42px;">' : '') + '</div>';
+  // Materialbedarf je Typ (nur gefilterte)
+  var typen = {};
+  liste.forEach(function(e){ e.geraete.forEach(function(x){ var t = (x.g.typ || 'ohne Typ').trim(); typen[t] = (typen[t] || 0) + 1; }); });
+  html += '<div style="margin-bottom:8px; font-size:12px;"><b>Nach Typ:</b> ' + Object.keys(typen).sort(function(a, b){ return typen[b] - typen[a]; }).map(function(t){ return escapeHtml(t) + ' <b>' + typen[t] + '&times;</b>'; }).join(' &middot; ') + '</div>';
+  html += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Nr.</th><th>Typ</th><th>Standort</th><th>Bj.</th><th>Umstellen</th></tr></thead><tbody>';
+  liste.forEach(function(e){
+    e.geraete.forEach(function(x, i){
+      html += '<tr>' + (i === 0 ? '<td rowspan="' + e.geraete.length + '" style="vertical-align:top;"><b>' + escapeHtml(e.k.name || '') + '</b>' + (e.k.adresse ? '<div class="meta" style="font-size:0.8em;">' + escapeHtml(e.k.adresse) + '</div>' : '') + '</td>' : '') +
+        '<td>' + escapeHtml(String(geraeteNummerWert(x.g))) + '</td><td>' + escapeHtml(x.g.typ || '') + '</td><td>' + escapeHtml(x.g.standort || '-') + '</td><td>' + escapeHtml(String(x.g.baujahr || '-')) + '</td><td>' + (x.jetzt ? '<b style="color:#b3261e;">jetzt</b>' : String(x.jahr)) + '</td></tr>';
+    });
+  });
+  html += '</tbody></table>';
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; intern &middot; Grundlage: EU-VO 2025/1988 (Verwendung PFAS-haltiger Schaumlöscher bis 31.12.' + BIO_FRIST_JAHR + ')</div>';
+  html += '</div>';
+  return html;
+}
+function modalFluorGesamt(filter){
+  filter = filter || 'alle';
+  var d = fluorGesamtDaten();
+  var jetztJahr = new Date().getFullYear();
+  var liste = fluorFilter(d, filter);
+  var html = '<div class="modal-head"><h3>Fluorfrei-Umstellung</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="display:flex; gap:8px; margin-bottom:10px;">';
+  html += '<div class="card" style="flex:1; text-align:center; margin:0; padding:10px;"><div style="font-size:26px; font-weight:800;">' + d.gesamt + '</div><div class="meta">fluorhaltige Löscher</div></div>';
+  html += '<div class="card" style="flex:1; text-align:center; margin:0; padding:10px; border:2px solid #b3261e;"><div style="font-size:26px; font-weight:800; color:#b3261e;">' + d.jetzt + '</div><div class="meta">jetzt umstellen</div></div>';
+  html += '<div class="card" style="flex:1; text-align:center; margin:0; padding:10px;"><div style="font-size:26px; font-weight:800;">' + d.kunden.length + '</div><div class="meta">Kunden</div></div>';
+  html += '</div>';
+  // Filter
+  html += '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">';
+  var knoepfe = [['alle', 'Alle'], ['jetzt', 'Jetzt (' + d.jetzt + ')']];
+  for(var j = jetztJahr + 1; j <= BIO_FRIST_JAHR; j++){ if(d.proJahr[j]) knoepfe.push([String(j), j + ' (' + d.proJahr[j] + ')']); }
+  knoepfe.forEach(function(kn){ html += '<button type="button" class="btn small ' + (kn[0] === String(filter) ? '' : 'secondary') + ' flFilter" data-f="' + kn[0] + '">' + kn[1] + '</button>'; });
+  html += '</div>';
+  // Nach Typ (Material)
+  var typen = {};
+  liste.forEach(function(e){ e.geraete.forEach(function(x){ var t = (x.g.typ || 'ohne Typ').trim(); typen[t] = (typen[t] || 0) + 1; }); });
+  var tk = Object.keys(typen).sort(function(a, b){ return typen[b] - typen[a]; });
+  if(tk.length){
+    html += '<div class="card" style="padding:10px 12px;"><div class="section-subtitle" style="margin:0 0 4px 0; font-weight:700;">Nach Typ (Material)</div>';
+    tk.forEach(function(t){ html += '<div style="display:flex; justify-content:space-between; gap:8px; font-size:14px; padding:2px 0;"><span>' + escapeHtml(t) + '</span><b>' + typen[t] + '&times;</b></div>'; });
+    html += '</div>';
+  }
+  if(!liste.length) html += '<div class="empty">Keine fluorhaltigen Löscher in dieser Auswahl</div>';
+  liste.forEach(function(e){
+    html += '<div class="card flKunde" data-kid="' + e.k.id + '" style="cursor:pointer;">';
+    html += '<div class="row" style="align-items:flex-start;"><div style="flex:1; min-width:0;"><b>' + escapeHtml(e.k.name || '') + '</b>' + (e.k.adresse ? '<div class="meta">' + escapeHtml(e.k.adresse) + '</div>' : '') + '</div><div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end;">' + (e.jetzt ? '<span class="badge warn">' + e.jetzt + ' jetzt</span>' : '') + '<span class="badge">' + e.geraete.length + ' gesamt</span></div></div>';
+    e.geraete.forEach(function(x){
+      html += '<div style="display:flex; justify-content:space-between; gap:8px; font-size:13.5px; padding:3px 0; border-top:1px solid #eee; margin-top:3px;"><span style="min-width:0;">Nr. ' + escapeHtml(String(geraeteNummerWert(x.g))) + ' &middot; ' + escapeHtml(x.g.typ || '') + (x.g.standort ? ' &middot; ' + escapeHtml(x.g.standort) : '') + '</span><span style="white-space:nowrap; font-weight:700; color:' + (x.jetzt ? '#b3261e' : '#9a6a00') + ';">' + (x.jetzt ? 'jetzt' : x.jahr) + '</span></div>';
+    });
+    html += '</div>';
+  });
+  html += '<button class="btn block" id="flDruck" style="margin-top:10px;">Liste drucken / als PDF teilen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('.flFilter').forEach(function(b){ b.onclick = function(){ modalFluorGesamt(b.getAttribute('data-f')); }; });
+  document.querySelectorAll('.flKunde').forEach(function(c){ c.onclick = function(){ closeModal(); state.activeKundeId = c.getAttribute('data-kid'); state.tab = 'kundeDetail'; render(); window.scrollTo(0, 0); }; });
+  document.getElementById('flDruck').onclick = function(){ bsvDruckenOderTeilen(fluorGesamtDruckHtml(filter), 'Fluorfrei_Umstellung_Gesamtliste.pdf'); };
+}
+
 function modalFluorfreiListe(){
   var liste = fluorfreiListe();
   var html = '<div class="modal-head"><h3>Fluorfreie Löscher</h3><button class="close" id="mClose">&times;</button></div>';
@@ -11675,7 +11777,8 @@ function modalMehrMenu(){
   if(darfInfoVerwalten()){
     var letzte = '';
     try{ letzte = localStorage.getItem('bsvLetzteSicherung') || ''; }catch(e){}
-    html += '<button type="button" class="btn block secondary" id="mehrFluor" style="margin-top:16px;">Fluorfreie Löscher (Liste)</button>';
+    html += '<button type="button" class="btn block secondary" id="mehrFluorGesamt" style="margin-top:16px;">Fluorfrei-Umstellung: Gesamtliste</button>';
+    html += '<button type="button" class="btn block secondary" id="mehrFluor" style="margin-top:10px;">Fluorfreie Löscher (Liste)</button>';
     html += '<button type="button" class="btn block" id="mehrSichern" style="margin-top:10px;">Alles sichern (Datei herunterladen)</button>';
     html += '<div class="meta" style="margin-top:4px; text-align:center;">' + (letzte ? 'Letzte Sicherung auf diesem Gerät: ' + escapeHtml(letzte) : 'Auf diesem Gerät noch keine Sicherung gemacht') + '</div>';
   }
@@ -11685,6 +11788,7 @@ function modalMehrMenu(){
   document.getElementById('mehrGeraetAbmelden').onclick = function(){ closeModal(); geraetAbmelden(); };
   if(document.getElementById('mehrSichern')) document.getElementById('mehrSichern').onclick = function(){ closeModal(); datensicherungErstellen(); };
   if(document.getElementById('mehrFluor')) document.getElementById('mehrFluor').onclick = function(){ closeModal(); modalFluorfreiListe(); };
+  if(document.getElementById('mehrFluorGesamt')) document.getElementById('mehrFluorGesamt').onclick = function(){ closeModal(); modalFluorGesamt('alle'); };
   document.getElementById('mehrQuer').onchange = function(){ bsvQuerformatSetzen(this.checked); toast(this.checked ? 'Querformat ein' : 'Hochformat'); };
   document.querySelectorAll('[data-mehrtab]').forEach(function(b){
     b.onclick = function(){

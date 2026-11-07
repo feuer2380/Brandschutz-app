@@ -169,6 +169,24 @@ function zeigeFehler(text){
   document.getElementById('inhalt').innerHTML = '<div class="zustand">' + escapeHtml(text) + '</div>';
 }
 
+// Hinweis fluorhaltiges Loeschmittel (PFAS), Frist 31.12.2030 (EU-VO 2025/1988)
+function fluorHinweisVoll(g){
+  if(!g || !g.fluorStufe) return '';
+  var jetzt = !!g.fluorJetzt;
+  var h = '<div style="margin-top:12px; border-radius:10px; padding:11px 13px; font-size:13px; line-height:1.45; ' + (jetzt ? 'background:#fbe2db; border:1.5px solid #b3261e; color:#5a1208;' : 'background:#fdf1d8; border:1.5px solid #d39a00; color:#4a3500;') + '">';
+  h += '<b>' + (jetzt ? '&#9888; Umstellung jetzt empfohlen' : 'Hinweis: fluorhaltiges Löschmittel') + '</b><br>';
+  h += 'Dieses Gerät enthält ein fluorhaltiges Löschmittel (PFAS). Laut EU-Verordnung 2025/1988 darf es nur noch bis <b>31.12.2030</b> verwendet werden. ';
+  if(jetzt) h += 'Da die Innenrevision ansteht, empfehlen wir die Umstellung auf ein fluorfreies Gerät bei der nächsten Wartung.';
+  else if(g.fluorJahr) h += 'Wir empfehlen die Umstellung auf ein fluorfreies Gerät bei der Innenrevision ' + escapeHtml(String(g.fluorJahr)) + '.';
+  else h += 'Wir empfehlen eine rechtzeitige Umstellung auf ein fluorfreies Gerät.';
+  h += '<br>Wir beraten Sie gerne: <a href="tel:06763058398" style="color:inherit; font-weight:700;">0676/305 83 98</a></div>';
+  return h;
+}
+function fluorHinweisKurz(x){
+  if(!x || !x.fluorStufe) return '';
+  return '<div class="gl-meta" style="color:' + (x.fluorJetzt ? '#b3261e' : '#9a6a00') + '; font-weight:700;">' + (x.fluorJetzt ? 'fluorhaltig &ndash; Umstellung jetzt empfohlen' : 'fluorhaltig &ndash; Umstellung bis 2030') + '</div>';
+}
+
 function render(g, schluessel){
   var st = statusBadge(g.naechstePruefung);
   var html = '<div class="card">';
@@ -186,6 +204,7 @@ function render(g, schluessel){
     }
   }
   html += '</div>';
+  html += fluorHinweisVoll(g);
   html += '<button class="btn-druck" id="einzelDruckBtn">Prüfbericht für dieses Gerät</button>';
   html += '<div class="meta">Diese Ansicht wird automatisch aktualisiert, sobald bei Ihnen eine Prüfung durchgeführt wurde.</div>';
   html += '</div>';
@@ -251,7 +270,7 @@ function zeigeGeraeteliste(alle, kundenname, gruppe){
   alle.forEach(function(x){
     var st = statusBadge(x.naechstePruefung);
     html += '<div class="geraeteliste-zeile">';
-    html += '<div><div class="gl-name">' + escapeHtml(x.typ || x.kategorie || 'Gerät') + '</div><div class="gl-meta">' + escapeHtml(x.standort || '') + '</div></div>';
+    html += '<div><div class="gl-name">' + escapeHtml(x.typ || x.kategorie || 'Gerät') + '</div><div class="gl-meta">' + escapeHtml(x.standort || '') + '</div>' + fluorHinweisKurz(x) + '</div>';
     html += '<span class="badge ' + st.cls + '" style="margin-top:0;">' + escapeHtml(st.label) + '</span>';
     html += '</div>';
   });
@@ -349,11 +368,13 @@ function erzeugePruefberichtPdf(alle, kundenname, gruppe, einzeln){
 
   var y = kopfZeichnen(45);
   doc.setFontSize(8.5);
+  var fluorAnzahl = 0;
   for(var r = 0; r < alle.length; r++){
     var g = alle[r];
     var st = statusBadge(g.naechstePruefung);
     var ir = g.innenrevisionNoetig ? String(g.innenrevisionLabel || '').replace(/^Innenrevision:\s*/, '') : '-';
-    var werte = [g.typ || g.kategorie || '', g.standort || '', fmtDate(g.letztePruefung), fmtDate(g.naechstePruefung)];
+    var werte = [(g.typ || g.kategorie || '') + (g.fluorStufe ? (g.fluorJetzt ? ' (fluorhaltig - jetzt umstellen)' : ' (fluorhaltig - bis 2030 umstellen)') : ''), g.standort || '', fmtDate(g.letztePruefung), fmtDate(g.naechstePruefung)];
+    if(g.fluorStufe) fluorAnzahl++;
     if(mitIR) werte.push(ir);
     werte.push(st.label);
     doc.setFont('helvetica', 'normal');
@@ -380,6 +401,13 @@ function erzeugePruefberichtPdf(alle, kundenname, gruppe, einzeln){
     y += h;
   }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(130, 130, 130);
+  if(fluorAnzahl){
+    var fl = doc.splitTextToSize(fluorAnzahl + (fluorAnzahl === 1 ? ' Gerät enthält' : ' Geräte enthalten') + ' fluorhaltiges Löschmittel (PFAS). Laut EU-Verordnung 2025/1988 dürfen diese nur noch bis 31.12.2030 verwendet werden. Wir beraten Sie gerne zur Umstellung auf fluorfreie Geräte: Tel 0676/305 83 98.', breite);
+    if(y + 12 > unten){ doc.addPage(); y = 15; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(163, 48, 13);
+    doc.text(fl, links, y + 6);
+    y += fl.length * 3.8 + 3;
+  }
   var hinweis = doc.splitTextToSize('Automatisch erstellter Prüfbericht aus dem Kundenportal von Wolfgang Janiba Brandschutztechnik GmbH, ersetzt keine offiziellen Prüfprotokolle.', breite);
   if(y + 10 > unten){ doc.addPage(); y = 15; }
   doc.text(hinweis, links, y + 6);
