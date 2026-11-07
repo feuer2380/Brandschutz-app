@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-07 12:30';
-var APP_VERSION_TEXT = '07.11. 12:30';
+var APP_VERSION = '2026-11-07 12:45';
+var APP_VERSION_TEXT = '07.11. 12:45';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -356,7 +356,7 @@ try {
   #printArea.kompakt .pb-tabelle td{padding:3px 6px;}
   #printArea.kompakt .pb-tabelle td span[style*="inline-block"]{width:11px !important; height:11px !important;}
   /* Ausstattungsliste: Schrift beim Ausdruck eine Spur groesser */
-  #printArea.kompakt .ausstattung .pb-tabelle{font-size:13.5px;}
+  #printArea.kompakt .ausstattung .pb-tabelle{font-size:14px;}
   #printArea.kompakt .ausstattung .pb-tabelle th{font-size:10.5px; padding:7px 6px;}
   #printArea.kompakt .ausstattung .pb-tabelle td{padding:6px 6px;}
   #printArea.kompakt .ausstattung h3{font-size:17px !important; margin:14px 0 6px 0 !important;}
@@ -401,6 +401,9 @@ try {
   .pos-notiz{padding:6px 10px; border-top:1px solid var(--line); font-size:12px; background:#fbf8f3;}
 
   #printArea{ display:none; }
+  /* iOS vergroessert sonst Text in breiten Bereichen automatisch (Text-Autosizing) -> ungleiche Schrift im PDF */
+  html{ -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  #printArea, #printArea *{ -webkit-text-size-adjust:100% !important; text-size-adjust:100% !important; }
 
   @media print{
     body > *:not(#printArea){ display:none !important; }
@@ -5246,29 +5249,34 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
   }
 
   if(fehlListe.length){
-    html += '<div class="ausst-fehlt" style="margin-top:14px; border:1.5px solid #c23f12; border-radius:6px; padding:8px 12px; page-break-inside:avoid; break-inside:avoid;">';
+    html += '<div class="ausst-fehlt" style="margin-top:8px; border:1.5px solid #c23f12; border-radius:6px; padding:6px 12px; page-break-inside:avoid; break-inside:avoid;">';
     html += '<div style="font-weight:700; color:#c23f12; margin-bottom:4px;">Fehlende Angaben &ndash; bitte nachtragen (' + fehlListe.length + ' Ger&auml;t' + (fehlListe.length === 1 ? '' : 'e') + ')</div>';
-    html += '<div style="margin-bottom:6px;">Gibt es am Ger&auml;t keine Angabe (z.B. keine Seriennummer), bitte &bdquo;keine&ldquo; eintragen.</div>';
+    html += '<div style="margin-bottom:3px;">Gibt es am Ger&auml;t keine Angabe (z.B. keine Seriennummer), bitte &bdquo;keine&ldquo; eintragen.</div>';
     var mehrKat = fehlListe.some(function(f){ return f.kat !== fehlListe[0].kat; });
+    html += '<div style="display:flex; flex-wrap:wrap; gap:2px 18px; border-top:1px solid #eee2d3; padding-top:3px;">';
     fehlListe.forEach(function(f){
-      html += '<div style="padding:2px 0; border-top:1px solid #eee2d3;">' + (mehrKat ? escapeHtml(f.kat) + ' ' : '') + 'Nr. ' + f.nr + (f.typ ? ' (' + escapeHtml(f.typ) + ')' : '') + ': <b>' + f.fehlt.join(', ') + '</b></div>';
+      html += '<span>' + (mehrKat ? escapeHtml(f.kat) + ' ' : '') + 'Nr. ' + f.nr + (f.typ ? ' (' + escapeHtml(f.typ) + ')' : '') + ': <b>' + f.fehlt.join(', ') + '</b></span>';
     });
+    html += '</div>';
     html += '</div>';
   }
 
   // Leere Zeilen zum handschriftlichen Eintragen vor Ort (neue oder getauschte Geraete)
   if(true){
-    html += '<div class="ausst-neu" style="margin-top:14px; page-break-inside:avoid; break-inside:avoid;">';
-    html += '<h3 style="margin:0 0 4px 0; font-size:15px;">Neue / getauschte Ger&auml;te &ndash; vor Ort eintragen</h3>';
-    html += '<div style="font-size:11.5px; color:#555; margin-bottom:6px;">Bei Tausch: unter &bdquo;Ersetzt Nr.&ldquo; die Nummer des ausgeschiedenen Ger&auml;ts eintragen. Neue Ger&auml;te ohne Tausch: Feld leer lassen.</div>';
-    html += '<table class="pb-tabelle ausst-neu-tabelle"><thead><tr><th style="width:8%;">Ersetzt Nr.</th><th style="width:8%;">Neue Nr.</th><th style="width:22%;">Typ</th><th style="width:16%;">Standort</th><th style="width:14%;">Serien-Nr.</th><th style="width:8%;">Baujahr</th><th style="width:24%;">Bemerkung (z.B. Grund Ausscheiden)</th></tr></thead><tbody>';
-    for(var nz = 0; nz < 5; nz++){
-      html += '<tr style="height:30px; background:#fff;">';
+    html += '<div class="ausst-neu" style="margin-top:10px;">';
+    html += '<div style="display:flex; align-items:flex-end; gap:14px; page-break-after:avoid; break-after:avoid; font-size:11px;">';
+    html += '<div style="flex:2.2;"><span style="font-weight:700; font-size:13px;">Neue / getauschte Ger&auml;te &ndash; vor Ort eintragen</span><br><span style="font-size:10px; color:#555;">Bei Tausch unter &bdquo;Ersetzt&ldquo; die Nr. des alten Ger&auml;ts eintragen</span></div>';
+    html += '<div style="flex:1; border-bottom:1px solid #333; padding-top:8px;">Datum / Techniker:</div>';
+    html += '<div style="flex:1; border-bottom:1px solid #333; padding-top:8px;">In App &uuml;bernommen:</div>';
+    html += '</div>';
+    html += '<table class="pb-tabelle ausst-neu-tabelle" style="margin-top:4px;"><thead><tr><th style="width:7%;">Ersetzt</th><th style="width:7%;">Neue Nr.</th><th style="width:22%;">Typ</th><th style="width:16%;">Standort</th><th style="width:14%;">Serien-Nr.</th><th style="width:8%;">Baujahr</th><th style="width:26%;">Bemerkung / Grund</th></tr></thead><tbody>';
+    var leerZeilen = geraete.length <= 8 ? 2 : (geraete.length <= 15 ? 3 : 5);
+    for(var nz = 0; nz < leerZeilen; nz++){
+      html += '<tr style="height:23px; background:#fff; page-break-inside:avoid; break-inside:avoid;">';
       for(var nzs = 0; nzs < 7; nzs++){ html += '<td style="border:1px solid #999; background:#fff;">&nbsp;</td>'; }
       html += '</tr>';
     }
     html += '</tbody></table>';
-    html += '<div style="display:flex; gap:24px; font-size:12px; margin-top:8px;"><div style="flex:1; border-bottom:1px solid #333; padding-bottom:16px;">Datum / Techniker:</div><div style="flex:1; border-bottom:1px solid #333; padding-bottom:16px;">In App &uuml;bernommen (Datum/Kürzel):</div></div>';
     html += '</div>';
   }
 
