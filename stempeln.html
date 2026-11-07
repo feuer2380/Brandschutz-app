@@ -8,6 +8,7 @@
 <title>Stempeln</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{--ink:#1a1410;--paper:#faf6f0;--ember:#e8541f;--amber:#d98a00;--red:#b02a2a;--line:#e4dcd0;--muted:#8a7f6f;--ok:#2f7a4f;--card:#fff;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -170,11 +171,24 @@ function ortAus(w){
   if(w.indexOf('k:') === 0) return {ort:'Kunde', kundeId:w.substring(2)};
   return {ort:null, kundeId:null};
 }
+function mitTs(o){
+  var k = {}; for(var p in o){ if(Object.prototype.hasOwnProperty.call(o, p)) k[p] = o[p]; }
+  k._ts = firebase.firestore.FieldValue.serverTimestamp();
+  return k;
+}
 function speichern(z, cb){
-  db.collection('zeiten').doc(z.id).set(z).then(function(){
-    if(!zeiten.some(function(x){ return x.id === z.id; })) zeiten.push(z);
-    cb && cb();
-  }).catch(function(e){ toast('Speichern fehlgeschlagen: ' + (e && e.message ? e.message : e)); render(); });
+  // lokal sofort uebernehmen, Server bekommt es (auch bei schwachem Netz) nachgesendet
+  if(!zeiten.some(function(x){ return x.id === z.id; })) zeiten.push(z);
+  var fertig = false;
+  var weiter = function(){ if(fertig) return; fertig = true; cb && cb(); };
+  var timer = setTimeout(weiter, 3000);
+  db.collection('zeiten').doc(z.id).set(mitTs(z)).then(function(){ clearTimeout(timer); weiter(); })
+    .catch(function(e){ clearTimeout(timer); zeiten = zeiten.filter(function(x){ return x.id !== z.id; }); toast('Speichern fehlgeschlagen: ' + (e && e.message ? e.message : e)); render(); });
+}
+function loeschen(id, cb){
+  db.collection('loeschungen').doc('zeiten__' + id).set({ id: 'zeiten__' + id, store: 'zeiten', docId: id, _ts: firebase.firestore.FieldValue.serverTimestamp() }).catch(function(){});
+  db.collection('zeiten').doc(id).delete().then(function(){ cb && cb(); }).catch(function(e){ toast('Löschen fehlgeschlagen'); });
+  zeiten = zeiten.filter(function(z){ return z.id !== id; });
 }
 function stempeln(name, typ, ortWert){
   var o = ortAus(ortWert);
@@ -183,7 +197,7 @@ function stempeln(name, typ, ortWert){
 }
 
 function renderLogin(){
-  $('app').innerHTML = '<div class="card"><h2>PIN eingeben</h2><div class="meta">Version 04.11. 16:30 &middot; Stempeln</div>' +
+  $('app').innerHTML = '<div class="card"><h2>PIN eingeben</h2><div class="meta">Version 07.11. 12:00 &middot; Stempeln</div>' +
     '<input type="password" id="pin" inputmode="numeric" placeholder="PIN" autocomplete="off">' +
     '<button class="btn" id="ok">Anmelden</button></div>';
   $('ok').onclick = function(){
@@ -278,7 +292,7 @@ function render(){
     document.querySelectorAll('[data-del]').forEach(function(c){ c.onclick = function(){
       if(!confirm('Stempel wirklich löschen?')) return;
       var id = c.getAttribute('data-del');
-      db.collection('zeiten').doc(id).delete().then(function(){ zeiten = zeiten.filter(function(z){ return z.id !== id; }); render(); }).catch(function(e){ toast('Löschen fehlgeschlagen'); });
+      loeschen(id); render();
     }; });
     var s = $('nSave'); if(s) s.onclick = nachtragen;
   }
@@ -302,12 +316,109 @@ function nachtragen(){
   neu.forEach(function(z){ speichern(z, function(){ fertig++; if(fertig === neu.length){ var d = new Date(neu[0].zeit); mJahr = d.getFullYear(); mMonat = d.getMonth(); toast(fertig + ' Eintrag/Einträge gespeichert'); render(); } }); });
 }
 
+// ---------- Anmeldung (einmalig pro Geraet, Firmen-Konto) ----------
+function renderGeraeteLogin(fertig){
+  $('app').innerHTML = '<div class="card"><h2>Gerät freischalten</h2>' +
+    '<div class="meta">Einmalig pro Gerät mit dem Firmen-Konto. Danach geht es wie gewohnt mit dem PIN weiter.</div>' +
+    '<label>Firmen-E-Mail</label><input type="text" id="glE" autocomplete="username" autocapitalize="off" autocorrect="off" inputmode="email">' +
+    '<label>Passwort</label><input type="password" id="glP" autocomplete="current-password">' +
+    '<div id="glF" style="color:#b02a2a;font-size:14px;min-height:20px;margin-top:8px;"></div>' +
+    '<button class="btn" id="glB">Gerät freischalten</button></div>';
+  var los = function(){
+    var em = $('glE').value.trim(), pw = $('glP').value, fe = $('glF'), b = $('glB');
+    if(!em || !pw){ fe.textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
+    b.disabled = true; b.textContent = 'Bitte warten ...'; fe.textContent = '';
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){
+      return firebase.auth().signInWithEmailAndPassword(em, pw);
+    }).then(function(){ fertig(); }).catch(function(err){
+      b.disabled = false; b.textContent = 'Gerät freischalten';
+      var c = err && err.code ? err.code : '';
+      if(c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-login-credentials') fe.textContent = 'E-Mail oder Passwort falsch.';
+      else if(c === 'auth/network-request-failed') fe.textContent = 'Keine Internetverbindung.';
+      else if(c === 'auth/too-many-requests') fe.textContent = 'Zu viele Versuche. Bitte ein paar Minuten warten.';
+      else fe.textContent = 'Anmeldung fehlgeschlagen: ' + (err && err.message ? err.message : 'Unbekannt');
+    });
+  };
+  $('glB').onclick = los;
+  $('glP').onkeydown = function(e){ if(e.key === 'Enter') los(); };
+}
+
+// ---------- Sparsames Laden: Handy-Speicher + nur Aenderungen vom Server ----------
+function standLesen(n){ try{ return parseInt(localStorage.getItem('stSync_' + n) || '0', 10) || 0; }catch(e){ return 0; } }
+function standSetzen(n, ms){ try{ if(ms > standLesen(n)) localStorage.setItem('stSync_' + n, String(ms)); }catch(e){} }
+function tsMs(t){ return t && typeof t.toMillis === 'function' ? t.toMillis() : 0; }
+var neuZeichnen = null;
+function spaeterRendern(){ if(neuZeichnen) return; neuZeichnen = setTimeout(function(){ neuZeichnen = null; if(me) render(); }, 150); }
+// liste(): aktuelle Liste holen, setze(arr): Liste ersetzen
+function sammlungSync(name, liste, setze){
+  var listenerStarten = function(){
+    var ab = new Date(Math.max(0, standLesen(name) - 5 * 60000));
+    db.collection(name).where('_ts', '>', ab).onSnapshot(function(snap){
+      var a = liste().slice(), maxT = 0, geaendert = false;
+      snap.docChanges().forEach(function(ch){
+        var d = ch.doc.data({ serverTimestamps: 'estimate' }); if(!d.id) d.id = ch.doc.id;
+        if(!ch.doc.metadata.hasPendingWrites){ var t = tsMs(ch.doc.get('_ts')); if(t > maxT) maxT = t; }
+        a = a.filter(function(x){ return x.id !== d.id; });
+        if(ch.type !== 'removed') a.push(d);
+        geaendert = true;
+      });
+      if(maxT) standSetzen(name, maxT);
+      if(geaendert){ setze(a); geladen = true; spaeterRendern(); }
+    }, function(e){ toast(name + ' laden fehlgeschlagen: ' + (e && e.message ? e.message : e)); });
+  };
+  var vonServerAlles = function(){
+    var start = Date.now();
+    db.collection(name).get().then(function(snap){
+      var a = []; snap.forEach(function(d){ a.push(d.data()); });
+      setze(a); geladen = true; spaeterRendern();
+      try{ localStorage.setItem('stSync_' + name, String(start - 10 * 60000)); }catch(e){}
+      listenerStarten();
+    }).catch(function(e){ toast(name + ' laden fehlgeschlagen: ' + (e && e.message ? e.message : e)); });
+  };
+  if(standLesen(name) === 0){ vonServerAlles(); return; }
+  db.collection(name).get({ source: 'cache' }).then(function(snap){
+    var a = []; snap.forEach(function(d){ a.push(d.data()); });
+    if(!a.length){ vonServerAlles(); return; }
+    setze(a); geladen = true; spaeterRendern();
+    listenerStarten();
+  }).catch(function(){ vonServerAlles(); });
+}
+function loeschungenSync(){
+  var name = 'loeschungen';
+  var ab = new Date(Math.max(0, (standLesen(name) || Date.now()) - 5 * 60000));
+  if(!standLesen(name)) standSetzen(name, Date.now() - 10 * 60000);
+  db.collection(name).where('_ts', '>', ab).onSnapshot(function(snap){
+    var maxT = 0, geaendert = false;
+    snap.docChanges().forEach(function(ch){
+      var v = ch.doc.data(); var t = tsMs(ch.doc.get('_ts')); if(t > maxT) maxT = t;
+      if(ch.type === 'removed' || !v || !v.docId) return;
+      if(v.store === 'zeiten' && zeiten.some(function(z){ return z.id === v.docId; })){
+        zeiten = zeiten.filter(function(z){ return z.id !== v.docId; }); geaendert = true;
+        db.collection('zeiten').doc(v.docId).get({ source: 'server' }).catch(function(){});
+      }
+    });
+    if(maxT) standSetzen(name, maxT);
+    if(geaendert) spaeterRendern();
+  }, function(){});
+}
+
+function datenStarten(){
+  sammlungSync('zeiten', function(){ return zeiten; }, function(a){ zeiten = a; });
+  sammlungSync('kunden', function(){ return kunden; }, function(a){ kunden = a; });
+  loeschungenSync();
+  render();
+}
+
 try {
   firebase.initializeApp(FIREBASE_CONFIG);
   db = firebase.firestore();
-  db.collection('zeiten').onSnapshot(function(snap){ var a = []; snap.forEach(function(d){ a.push(d.data()); }); zeiten = a; geladen = true; if(me) render(); }, function(e){ toast('Zeiten laden fehlgeschlagen: ' + (e && e.message ? e.message : e)); });
-  db.collection('kunden').onSnapshot(function(snap){ var a = []; snap.forEach(function(d){ a.push(d.data()); }); kunden = a; });
-  render();
+  try{ db.enablePersistence({ synchronizeTabs: true }).catch(function(){}); }catch(e){}
+  var erledigt = false;
+  firebase.auth().onAuthStateChanged(function(user){
+    if(erledigt) return;
+    if(user){ erledigt = true; datenStarten(); }
+    else renderGeraeteLogin(function(){ erledigt = true; datenStarten(); });
+  });
 } catch(e){ $('app').innerHTML = '<div class="card">Fehler beim Start: ' + esc(e.message) + '</div>'; }
 </script>
 </body>
