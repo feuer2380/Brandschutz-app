@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-07 21:30';
-var APP_VERSION_TEXT = '07.11. 21:30';
+var APP_VERSION = '2026-11-07 22:15';
+var APP_VERSION_TEXT = '07.11. 22:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -8040,44 +8040,129 @@ function typVorschlaege(eingabe){
   return erg.slice(0, 10);
 }
 
+// Tipp erkennen (nicht beim Wischen/Scrollen ausloesen)
+function tippHandler(el, fn){
+  var sx = 0, sy = 0, bewegt = false, touch = false;
+  el.addEventListener('touchstart', function(e){ touch = true; bewegt = false; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  el.addEventListener('touchmove', function(e){ if(Math.abs(e.touches[0].clientX - sx) > 8 || Math.abs(e.touches[0].clientY - sy) > 8) bewegt = true; }, { passive: true });
+  el.addEventListener('touchend', function(e){ if(!bewegt){ e.preventDefault(); fn(); } });
+  el.addEventListener('click', function(e){ if(touch) return; fn(); });
+}
+function vorschlagBadge(f){
+  if(f === 1) return '<span style="font-size:11px; font-weight:700; color:#1e6b3a; background:#e4f2e8; border-radius:10px; padding:2px 8px; white-space:nowrap;">fluorfrei</span>';
+  if(f === 0) return '<span style="font-size:11px; font-weight:700; color:#b3261e; background:#fbe2db; border-radius:10px; padding:2px 8px; white-space:nowrap;">fluorhaltig</span>';
+  return '';
+}
+function typUebernehmen(name, f){
+  var inp = document.getElementById('fTyp');
+  if(inp) inp.value = name;
+  var ff = document.getElementById('fFluorfrei');
+  if(ff && f === 1) ff.checked = true;
+  if(ff && f === 0) ff.checked = false;
+  var box = document.getElementById('typVorschlagBox');
+  if(box){ box.style.display = 'none'; box.innerHTML = ''; }
+}
+// Grosse Auswahl ueber den ganzen Bildschirm (mit Suche), unabhaengig vom offenen Fenster
+function typAuswahlOeffnen(){
+  var alt = document.getElementById('typAuswahlOverlay'); if(alt) alt.remove();
+  var inp = document.getElementById('fTyp');
+  var ov = document.createElement('div');
+  ov.id = 'typAuswahlOverlay';
+  ov.style.cssText = 'position:fixed; left:0; right:0; top:0; bottom:0; z-index:100000; background:#faf6f0; color:#1a1410; display:flex; flex-direction:column; padding-top:env(safe-area-inset-top);';
+  ov.innerHTML = '<div style="padding:12px 14px 8px 14px; border-bottom:1px solid #e5ddd2; background:#fff;">' +
+    '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><b style="font-size:18px;">Löscher auswählen</b><button type="button" id="taZu" class="btn small secondary">Schließen</button></div>' +
+    '<input id="taSuche" type="text" autocomplete="off" placeholder="Suchen, z.B. SD 6, Jockel, Fettbrand" style="width:100%; font-size:16px;"></div>' +
+    '<div id="taListe" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 0 30px 0;"></div>';
+  document.body.appendChild(ov);
+  var such = document.getElementById('taSuche');
+  such.value = inp ? inp.value : '';
+  var zeichnen = function(){
+    var q = typNorm(such.value);
+    var alle = [];
+    var gesehen = {};
+    LOESCHER_KATALOG.forEach(function(x){ var k = typNorm(x.n); if(!gesehen[k]){ gesehen[k] = 1; alle.push({ n: x.n, f: x.f }); } });
+    typListeAutocomplete().forEach(function(t){ var k = typNorm(t); if(gesehen[k]) return; gesehen[k] = 1; var tmp = { typ: t, kategorie: 'Feuerlöscher' }; alle.push({ n: t, f: istSdAltschaum(tmp) ? 0 : (istFluorfrei(tmp) ? 1 : null) }); });
+    var treffer = alle.filter(function(x){ return !q || typNorm(x.n).indexOf(q) > -1; });
+    // nach Hersteller gruppieren (erstes Wort)
+    var gruppen = {}, reihenfolge = [];
+    treffer.forEach(function(x){ var h = (x.n.split(' ')[0] || 'Sonstige'); if(!gruppen[h]){ gruppen[h] = []; reihenfolge.push(h); } gruppen[h].push(x); });
+    reihenfolge.sort(function(a, b){ return a.localeCompare(b); });
+    var h = '';
+    if(such.value.trim()){
+      h += '<div class="taEintrag" data-eigen="1" style="padding:14px; background:#fff; border-bottom:1px solid #eee; font-size:16px;"><b>&bdquo;' + escapeHtml(such.value.trim()) + '&ldquo;</b> als eigenen Typ übernehmen</div>';
+    }
+    var idx = 0, liste = [];
+    reihenfolge.forEach(function(gr){
+      h += '<div style="padding:10px 14px 4px 14px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#8a7d70;">' + escapeHtml(gr) + '</div>';
+      gruppen[gr].sort(function(a, b){ return a.n.localeCompare(b.n, 'de', { numeric: true }); }).forEach(function(x){
+        liste.push(x);
+        h += '<div class="taEintrag" data-i="' + idx + '" style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:13px 14px; background:#fff; border-bottom:1px solid #eee; font-size:15.5px;"><span>' + escapeHtml(x.n) + '</span>' + vorschlagBadge(x.f) + '</div>';
+        idx++;
+      });
+    });
+    if(!treffer.length && !such.value.trim()) h += '<div class="empty">Keine Einträge</div>';
+    var ziel = document.getElementById('taListe');
+    ziel.innerHTML = h;
+    ziel.querySelectorAll('.taEintrag').forEach(function(el){
+      tippHandler(el, function(){
+        if(el.getAttribute('data-eigen')){ typUebernehmen(such.value.trim(), null); }
+        else { var x = liste[parseInt(el.getAttribute('data-i'), 10)]; typUebernehmen(x.n, x.f); }
+        ov.remove();
+      });
+    });
+  };
+  such.addEventListener('input', zeichnen);
+  document.getElementById('taZu').onclick = function(){ ov.remove(); };
+  zeichnen();
+  setTimeout(function(){ try{ such.focus(); }catch(e){} }, 50);
+}
+
 function bindTypVorschlaege(){
   var inp = document.getElementById('fTyp');
   if(!inp || inp.getAttribute('data-vorschlag')) return;
   inp.setAttribute('data-vorschlag', '1');
   inp.removeAttribute('list'); // eigene Liste statt iOS-Datalist
+  // Feld + Knopf "Liste" nebeneinander
+  var reihe = document.createElement('div');
+  reihe.style.cssText = 'display:flex; gap:8px; align-items:stretch;';
+  inp.parentNode.insertBefore(reihe, inp);
+  reihe.appendChild(inp);
+  inp.style.flex = '1';
+  inp.style.minWidth = '0';
+  var knopf = document.createElement('button');
+  knopf.type = 'button';
+  knopf.className = 'btn secondary';
+  knopf.textContent = 'Liste';
+  knopf.style.cssText = 'flex:0 0 auto; padding:0 14px; margin:0;';
+  reihe.appendChild(knopf);
+  knopf.onclick = function(){ typAuswahlOeffnen(); };
+  // kleine Schnell-Vorschlaege beim Tippen (max. 5), Auswahl nur bei echtem Tipp
   var box = document.createElement('div');
   box.id = 'typVorschlagBox';
-  box.style.cssText = 'display:none; border:1px solid var(--line, #ddd); border-radius:8px; margin-top:4px; max-height:260px; overflow-y:auto; background:#fff; color:#1a1410;';
-  inp.parentNode.insertBefore(box, inp.nextSibling);
+  box.style.cssText = 'display:none; border:1px solid #ddd; border-radius:8px; margin-top:4px; background:#fff; color:#1a1410; overflow:hidden;';
+  reihe.parentNode.insertBefore(box, reihe.nextSibling);
   var zeigen = function(){
-    var liste = typVorschlaege(inp.value);
+    var liste = typVorschlaege(inp.value).slice(0, 5);
     if(!liste.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
     var h = '';
     liste.forEach(function(x, i){
-      var badge = '';
-      if(x.f === 1) badge = '<span style="font-size:11px; font-weight:700; color:#1e6b3a; background:#e4f2e8; border-radius:10px; padding:1px 7px; white-space:nowrap;">fluorfrei</span>';
-      else if(x.f === 0) badge = '<span style="font-size:11px; font-weight:700; color:#b3261e; background:#fbe2db; border-radius:10px; padding:1px 7px; white-space:nowrap;">fluorhaltig</span>';
-      h += '<div class="typVorschlag" data-i="' + i + '" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 10px; border-top:' + (i ? '1px solid #eee' : 'none') + '; font-size:15px; cursor:pointer;"><span>' + escapeHtml(x.n) + '</span>' + badge + '</div>';
+      h += '<div class="typVorschlag" data-i="' + i + '" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:11px 10px; border-top:' + (i ? '1px solid #eee' : 'none') + '; font-size:15px;"><span>' + escapeHtml(x.n) + '</span>' + vorschlagBadge(x.f) + '</div>';
     });
+    h += '<div class="typVorschlagMehr" style="padding:9px 10px; border-top:1px solid #eee; font-size:13px; color:#8a7d70; text-align:center;">Alle anzeigen &hellip;</div>';
     box.innerHTML = h;
     box.style.display = 'block';
     box.querySelectorAll('.typVorschlag').forEach(function(el){
-      var waehlen = function(ev){
-        if(ev) ev.preventDefault();
-        var x = liste[parseInt(el.getAttribute('data-i'), 10)];
-        inp.value = x.n;
-        var ff = document.getElementById('fFluorfrei');
-        if(ff && x.f === 1) ff.checked = true;
-        if(ff && x.f === 0) ff.checked = false;
-        box.style.display = 'none';
-      };
-      el.addEventListener('mousedown', waehlen);
-      el.addEventListener('touchstart', waehlen, { passive: false });
+      var waehlen = function(){ var x = liste[parseInt(el.getAttribute('data-i'), 10)]; typUebernehmen(x.n, x.f); };
+      el.addEventListener('mousedown', function(e){ e.preventDefault(); });
+      tippHandler(el, waehlen);
     });
+    var mehr = box.querySelector('.typVorschlagMehr');
+    mehr.addEventListener('mousedown', function(e){ e.preventDefault(); });
+    tippHandler(mehr, function(){ box.style.display = 'none'; typAuswahlOeffnen(); });
   };
   inp.addEventListener('input', zeigen);
-  inp.addEventListener('focus', zeigen);
-  inp.addEventListener('blur', function(){ setTimeout(function(){ box.style.display = 'none'; }, 200); });
+  inp.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ box.style.display = 'none'; } });
+  inp.addEventListener('blur', function(){ setTimeout(function(){ box.style.display = 'none'; }, 350); });
 }
 
 function bindTypChips(){
