@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-06 22:45';
-var APP_VERSION_TEXT = '06.11. 22:45';
+var APP_VERSION = '2026-11-07 12:30';
+var APP_VERSION_TEXT = '07.11. 12:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -356,9 +356,12 @@ try {
   #printArea.kompakt .pb-tabelle td{padding:3px 6px;}
   #printArea.kompakt .pb-tabelle td span[style*="inline-block"]{width:11px !important; height:11px !important;}
   /* Ausstattungsliste: Schrift beim Ausdruck eine Spur groesser */
-  #printArea.kompakt .ausstattung .pb-tabelle{font-size:11.5px;}
-  #printArea.kompakt .ausstattung .pb-tabelle th{font-size:9.5px; padding:6px 6px;}
-  #printArea.kompakt .ausstattung .pb-tabelle td{padding:4px 6px;}
+  #printArea.kompakt .ausstattung .pb-tabelle{font-size:13.5px;}
+  #printArea.kompakt .ausstattung .pb-tabelle th{font-size:10.5px; padding:7px 6px;}
+  #printArea.kompakt .ausstattung .pb-tabelle td{padding:6px 6px;}
+  #printArea.kompakt .ausstattung h3{font-size:17px !important; margin:14px 0 6px 0 !important;}
+  #printArea.kompakt .ausstattung .ir-legende{font-size:11px;}
+  .ausstattung .ir-pill, .ausstattung .ir-legende span{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
   #printArea.kompakt .ausstattung .pb-kundenbox{font-size:13px;}
   #printArea.kompakt .ausstattung .pb-kundenbox .knr{font-size:10px;}
   #printArea.kompakt .ausstattung .bericht-fuss{font-size:10px;}
@@ -5165,6 +5168,10 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
     var t = String(v === null || v === undefined ? '' : v).trim().toLowerCase();
     return t === '' || t === '-' || t === '?' || t.indexOf('nachtragen') === 0;
   };
+  var ausstZelle = function(v){
+    if(ausstLeer(v)) return '<span style="color:#c23f12; font-weight:800; border-bottom:2px solid #c23f12;">nachtragen</span>';
+    return escapeHtml(String(v));
+  };
   var html = '';
   html += '<div class="bericht-brief ausstattung">';
   html += '<div class="pb-kopfzeile">';
@@ -5197,7 +5204,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null;
-        var statusSpalte = (!istPZ && !istBegehung && zeigtInnenrevision) ? ('<td>' + (bjStatus ? escapeHtml(bjStatus.label) : '-') + '</td>') : '';
+        var statusSpalte = (!istPZ && !istBegehung && zeigtInnenrevision) ? ('<td>' + (bjStatus ? irPillHtml(g, bjStatus) : '-') + '</td>') : '';
         var mittelspalten;
         if(istPZ){
           var zeitspanneText = '-';
@@ -5209,22 +5216,22 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
         } else if(istBegehung){
           mittelspalten = '<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>';
         } else if(zeigtInnenrevision){
-          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>' + statusSpalte;
+          mittelspalten = '<td>' + ausstZelle(g.baujahr) + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>' + statusSpalte;
         } else if(istRauchmelder){
           var ablaufjahrDruck = rauchmelderAblaufjahr(g);
-          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (ablaufjahrDruck || '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
+          mittelspalten = '<td>' + ausstZelle(g.baujahr) + '</td><td>' + (ablaufjahrDruck || '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
         } else if(istRWA){
           var akkuStatusDruck = akkutauschStatus(g);
-          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letzterAkkutausch ? fmtDate(g.letzterAkkutausch) : '-') + '</td><td>' + (akkuStatusDruck ? fmtDate(akkuStatusDruck.naechstesDatum) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
+          mittelspalten = '<td>' + ausstZelle(g.baujahr) + '</td><td>' + (g.letzterAkkutausch ? fmtDate(g.letzterAkkutausch) : '-') + '</td><td>' + (akkuStatusDruck ? fmtDate(akkuStatusDruck.naechstesDatum) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
         } else {
-          mittelspalten = '<td>' + (g.baujahr ? escapeHtml(String(g.baujahr)) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
+          mittelspalten = '<td>' + ausstZelle(g.baujahr) + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>';
         }
         var zeilenStil = '';
         if(bjStatus && bjStatus.cls === 'warn') zeilenStil = ' style="background:#fbdcd2; color:#8a2a10;"';
-        else if(bjStatus && bjStatus.cls === 'soon') zeilenStil = ' style="background:#fde8c8; color:#8a5a10;"';
-        html += '<tr' + zeilenStil + '><td class="pb-pos">' + geraeteNummerWert(g) + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + escapeHtml(g.standort||'-') + '</td>' + (istBegehung ? '' : ('<td>' + escapeHtml(g.seriennummer||'-') + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
+        html += '<tr' + zeilenStil + '><td class="pb-pos">' + geraeteNummerWert(g) + '</td><td>' + escapeHtml(g.typ || '-') + '</td><td>' + (istPZ || istBegehung ? escapeHtml(g.standort||'-') : ausstZelle(g.standort)) + '</td>' + (istBegehung ? '' : ('<td>' + (istPZ ? escapeHtml(g.seriennummer||'-') : ausstZelle(g.seriennummer)) + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
       });
       html += '</tbody></table>';
+      if(zeigtInnenrevision) html += irLegendeHtml();
       // fehlende Angaben in dieser Kategorie sammeln (Liste unten)
       if(!istPZ && !istBegehung){
         gruppen[kat].forEach(function(g){
@@ -5246,6 +5253,22 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
     fehlListe.forEach(function(f){
       html += '<div style="padding:2px 0; border-top:1px solid #eee2d3;">' + (mehrKat ? escapeHtml(f.kat) + ' ' : '') + 'Nr. ' + f.nr + (f.typ ? ' (' + escapeHtml(f.typ) + ')' : '') + ': <b>' + f.fehlt.join(', ') + '</b></div>';
     });
+    html += '</div>';
+  }
+
+  // Leere Zeilen zum handschriftlichen Eintragen vor Ort (neue oder getauschte Geraete)
+  if(true){
+    html += '<div class="ausst-neu" style="margin-top:14px; page-break-inside:avoid; break-inside:avoid;">';
+    html += '<h3 style="margin:0 0 4px 0; font-size:15px;">Neue / getauschte Ger&auml;te &ndash; vor Ort eintragen</h3>';
+    html += '<div style="font-size:11.5px; color:#555; margin-bottom:6px;">Bei Tausch: unter &bdquo;Ersetzt Nr.&ldquo; die Nummer des ausgeschiedenen Ger&auml;ts eintragen. Neue Ger&auml;te ohne Tausch: Feld leer lassen.</div>';
+    html += '<table class="pb-tabelle ausst-neu-tabelle"><thead><tr><th style="width:8%;">Ersetzt Nr.</th><th style="width:8%;">Neue Nr.</th><th style="width:22%;">Typ</th><th style="width:16%;">Standort</th><th style="width:14%;">Serien-Nr.</th><th style="width:8%;">Baujahr</th><th style="width:24%;">Bemerkung (z.B. Grund Ausscheiden)</th></tr></thead><tbody>';
+    for(var nz = 0; nz < 5; nz++){
+      html += '<tr style="height:30px; background:#fff;">';
+      for(var nzs = 0; nzs < 7; nzs++){ html += '<td style="border:1px solid #999; background:#fff;">&nbsp;</td>'; }
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    html += '<div style="display:flex; gap:24px; font-size:12px; margin-top:8px;"><div style="flex:1; border-bottom:1px solid #333; padding-bottom:16px;">Datum / Techniker:</div><div style="flex:1; border-bottom:1px solid #333; padding-bottom:16px;">In App &uuml;bernommen (Datum/Kürzel):</div></div>';
     html += '</div>';
   }
 
@@ -7255,6 +7278,41 @@ function kategorieFarbe(kat){
     'Sonstiges': '#7f8c8d'
   };
   return farben[kat] || '#1d5fa8';
+}
+
+// Farben fuer die Innenrevision: 6 Jahre gelb, 12 Jahre blau, 18 Jahre violett, Ausscheiden rot
+var IR_FARBEN = {
+  6:  { bg: '#ffd93d', rand: '#c9a400', text: '#3d3000', name: '6 Jahre' },
+  12: { bg: '#74b4ff', rand: '#2f72c9', text: '#06244d', name: '12 Jahre' },
+  18: { bg: '#c3a3ff', rand: '#7d55cc', text: '#2b1059', name: '18 Jahre' },
+  20: { bg: '#ff7b7b', rand: '#c62828', text: '#4a0000', name: 'Ausscheiden (20 Jahre)' }
+};
+function irStufe(g, bj){
+  if(!bj || !g || !g.baujahr) return null;
+  if(!bj.faelligJahr) return 20; // naechster Schritt ist das Ausscheiden
+  var abst = bj.faelligJahr - parseInt(g.baujahr, 10);
+  if(abst <= 8) return 6;
+  if(abst <= 14) return 12;
+  return 18;
+}
+function irPillHtml(g, bj){
+  var st = irStufe(g, bj);
+  if(!st) return '-';
+  var f = IR_FARBEN[st];
+  var faellig = (bj.cls === 'soon' || bj.cls === 'warn');
+  var text;
+  if(st === 20) text = bj.label;
+  else text = f.name + ': ' + bj.faelligJahr + (faellig ? ' – fällig' : '');
+  return '<span class="ir-pill" style="display:inline-flex; padding:3px 9px; line-height:1.25; border-radius:10px; background:' + f.bg + '; color:' + f.text + '; border:1.5px solid ' + (faellig ? '#b3261e' : f.rand) + '; font-weight:' + (faellig ? '800' : '600') + '; white-space:normal;">' + escapeHtml(text) + '</span>';
+}
+function irLegendeHtml(){
+  var h = '<div class="ir-legende" style="font-size:12px; margin:-2px 0 10px 0; color:#555;">Innenrevision: ';
+  [6, 12, 18, 20].forEach(function(st){
+    var f = IR_FARBEN[st];
+    h += '<span style="display:inline-block; padding:1px 8px; margin:0 4px 2px 0; border-radius:10px; background:' + f.bg + '; color:' + f.text + '; border:1px solid ' + f.rand + ';">' + f.name + '</span>';
+  });
+  h += ' &middot; rot umrandet = jetzt fällig</div>';
+  return h;
 }
 
 function baujahrStatus(baujahr, letzteInnenrevision, g){
