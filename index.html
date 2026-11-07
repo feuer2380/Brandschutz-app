@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-07 13:20';
-var APP_VERSION_TEXT = '07.11. 13:20';
+var APP_VERSION = '2026-11-07 14:40';
+var APP_VERSION_TEXT = '07.11. 14:40';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -358,7 +358,7 @@ try {
   /* Ausstattungsliste: Schrift beim Ausdruck eine Spur groesser */
   #printArea.kompakt .ausstattung .pb-tabelle{font-size:13.5px;}
   #printArea.kompakt .ausstattung .pb-tabelle th{font-size:10px; padding:6px 5px; white-space:nowrap; letter-spacing:.02em;}
-  #printArea.kompakt .ausstattung .pb-tabelle td{padding:4px 6px;}
+  #printArea.kompakt .ausstattung .pb-tabelle td{padding:3px 6px; line-height:1.3;}
   #printArea.kompakt .ausstattung h3{font-size:17px !important; margin:14px 0 6px 0 !important;}
   #printArea.kompakt .ausstattung .ir-legende{font-size:11px;}
   .ausstattung .ir-pill, .ausstattung .ir-legende span{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
@@ -489,7 +489,7 @@ var FIREBASE_CONFIG = {
   appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
 };
 var db = null;
-var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben', 'zeit_unterschriften', 'fahrzeuge', 'fahrten', 'termine', 'schnellfuellungen', 'infodokumente'];
+var SYNC_STORES = ['kunden', 'geraete', 'pruefungen', 'sammelberichte', 'begehungsberichte', 'dokumente', 'portal_zugriffe', 'lagerartikel', 'brandschutzplaene', 'tagesberichte', 'zeiten', 'aufgaben', 'zeit_unterschriften', 'fahrzeuge', 'fahrten', 'termine', 'schnellfuellungen', 'infodokumente', 'einstellungen'];
 var ALLE_KATEGORIEN = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
 var realtimeUnsubscribers = [];
 var syncStatus = 'verbinde';
@@ -1056,6 +1056,7 @@ var state = {
   fahrten: [],
   schnellfuellungen: [],
   infodokumente: [],
+  einstellungen: [],
   termine: [],
   fbFahrzeug: null,
   fbMonat: null,
@@ -1069,7 +1070,7 @@ var state = {
   statFilter: 'tag'
 };
 
-var LADE_STORES = ['kunden','geraete','pruefungen','sammelberichte','begehungsberichte','dokumente','portal_zugriffe','lagerartikel','brandschutzplaene','tagesberichte','zeiten','aufgaben','zeit_unterschriften','fahrzeuge','fahrten','termine','schnellfuellungen','infodokumente'];
+var LADE_STORES = ['kunden','geraete','pruefungen','sammelberichte','begehungsberichte','dokumente','portal_zugriffe','lagerartikel','brandschutzplaene','tagesberichte','zeiten','aufgaben','zeit_unterschriften','fahrzeuge','fahrten','termine','schnellfuellungen','infodokumente','einstellungen'];
 // Alle Bereiche GLEICHZEITIG laden (frueher nacheinander = sehr langsam).
 // Laeuft die Live-Verbindung schon, kommen die Daten aus dem Handy-Speicher (sofort, enthaelt auch eigene Aenderungen).
 // Beim Start: zuerst Handy-Speicher (schnell), nur beim allerersten Mal vom Server.
@@ -3757,15 +3758,75 @@ function mengeAusTyp(typ, kategorie){
   return { wert: null, einheit: 'Liter' };
 }
 
-// Gloria SD6 / SD9 (nicht SD6E): Umstellung auf fluorfreien Bio-Schaum, Frist 2030
+// Fluorhaltige Loescher: alle Schaum- und Fettbrandloescher, AUSSER fluorfreie Modelle
+// (Liste unter Mehr > Fluorfreie Loescher, oder Haekchen "fluorfrei" am Geraet). Frist 2030.
 // Stufe 0 = betrifft nicht, 1 = juenger als 6 Jahre (normal pruefen, bis 2030 umstellen),
 // 2 = ab 6 Jahren (bei Innenrevision umstellen), 3 = Frist erreicht (ab 2030)
 var BIO_FRIST_JAHR = 2030;
+// Quellen: GLORIA "Zukunft ohne PFAS - Fakten & Produkte 2026" (Liste fluorfreier Modelle), Bavaria "PureNature"-Reihe
+var FLUORFREI_STANDARD = [
+  'fluorfrei', 'PFAS-frei', 'ohne PFAS', 'Bio',
+  'SD 6 E', 'SD 9 E', 'SD 6 P', 'SD 9 P', 'SD 6 F', 'SD 9 F', 'SDB 6', 'SDB 9',
+  'SKA+', 'SKE 6', 'SKE 9', 'SB 6 PRO', 'SB 9 PRO', 'SBF 6', 'SBF 9',
+  'FA 3', 'FA 6', 'FDA 2', 'FDA 3', 'FDA 6',
+  'PureNature', 'Pure Nature',
+  'GREEN', 'FluorineFree', 'Fluorine Free', 'Blauer Engel'
+];
+// neue Standard-Eintraege auch in eine schon gespeicherte Liste uebernehmen
+var FLUORFREI_STANDARD_VERSION = 3;
+function fluorfreiListe(){
+  var e = (state.einstellungen || []).filter(function(x){ return x && x.id === 'fluor'; })[0];
+  if(e && e.fluorfreiTypen && e.fluorfreiTypen.length){
+    if((e.standardVersion || 1) >= FLUORFREI_STANDARD_VERSION) return e.fluorfreiTypen;
+    var zus = e.fluorfreiTypen.slice();
+    FLUORFREI_STANDARD.forEach(function(x){ if(zus.map(typNorm).indexOf(typNorm(x)) < 0) zus.push(x); });
+    return zus;
+  }
+  return FLUORFREI_STANDARD;
+}
+function typNorm(t){ return String(t || '').toLowerCase().replace(/[\s\-_.]+/g, ''); }
+function istFluorfrei(g){
+  if(g && g.fluorfrei) return true;
+  var t = typNorm(g && g.typ);
+  var liste = fluorfreiListe();
+  for(var i = 0; i < liste.length; i++){
+    var m = typNorm(liste[i]);
+    if(m && t.indexOf(m) > -1) return true;
+  }
+  return false;
+}
 function istSdAltschaum(g){
-  var t = String((g && g.typ) || '');
-  if(!/(^|[^a-z0-9])sd\s*-?\s*(6|9)(?![a-z0-9])(?!\s*-?\s*e(?![a-z]))/i.test(t)) return false;
-  if(/bio|fluorfrei|fluor-frei|pfas/i.test(t)) return false;
+  if(!g) return false;
+  var kat = (g.kategorie || 'Feuerlöscher').trim();
+  if(kat !== 'Feuerlöscher') return false;
+  var t = String(g.typ || '');
+  if(/pulver|kohlendioxid|co2/i.test(t)) return false;
+  var schaumOderFett = /schaum|fettbrand/i.test(t) || /(^|[^a-z0-9])(sd|fb|fp)\s*-?\s*\d/i.test(t);
+  if(!schaumOderFett) return false;
+  if(istFluorfrei(g)) return false;
   return true;
+}
+function modalFluorfreiListe(){
+  var liste = fluorfreiListe();
+  var html = '<div class="modal-head"><h3>Fluorfreie Löscher</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;">Alle Schaum- und Fettbrandlöscher gelten als <b>fluorhaltig</b> und bekommen den Hinweis &bdquo;bis ' + BIO_FRIST_JAHR + ' umstellen&ldquo; &ndash; außer ihr Typ enthält eines dieser Wörter. Ein Eintrag pro Zeile, z.B. <i>SD6E</i>. Groß/klein und Leerzeichen sind egal.</div>';
+  html += '<textarea id="flListe" rows="8" style="width:100%; font-size:16px;">' + escapeHtml(liste.join('\n')) + '</textarea>';
+  html += '<div class="meta" style="margin-top:6px;">Einzelne Geräte kann man auch direkt beim Gerät mit dem Häkchen &bdquo;Löschmittel fluorfrei&ldquo; ausnehmen.</div>';
+  var betroffen = state.geraete.filter(function(g){ return bioStufe(g) > 0; }).length;
+  html += '<div class="meta" style="margin-top:6px;">Derzeit betroffen: <b>' + betroffen + '</b> Geräte</div>';
+  html += '<button class="btn block" id="flSpeichern" style="margin-top:12px;">Speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('flSpeichern').onclick = function(){
+    var zeilen = document.getElementById('flListe').value.split(/\n/).map(function(z){ return z.trim(); }).filter(function(z){ return z; });
+    var obj = { id: 'fluor', fluorfreiTypen: zeilen, standardVersion: FLUORFREI_STANDARD_VERSION, geaendertAm: new Date().toISOString() };
+    dbPut('einstellungen', obj, function(){
+      state.einstellungen = (state.einstellungen || []).filter(function(x){ return x.id !== 'fluor'; }).concat([obj]);
+      toast('Liste gespeichert');
+      closeModal();
+      render();
+    });
+  };
 }
 function bioStufe(g){
   if(!istSdAltschaum(g) || (g && g.ausgeschieden)) return 0;
@@ -3779,17 +3840,17 @@ function bioUmstellungNoetig(g){ return bioStufe(g) >= 2; }
 function bioHinweisHtml(g){
   var st = bioStufe(g);
   if(!st) return '';
-  var farbe = '#8a6d00', text = 'Bio-Schaum bis spätestens ' + BIO_FRIST_JAHR, gewicht = '600';
-  if(st === 2){ farbe = '#1e6b3a'; text = '&rarr; Bei Innenrevision auf Bio-Schaum umstellen'; gewicht = '700'; }
-  if(st === 3){ farbe = '#b3261e'; text = '&rarr; Frist ' + BIO_FRIST_JAHR + ': Bio-Schaum Pflicht'; gewicht = '800'; }
-  return '<div class="bio-hinweis" style="display:block; margin-top:2px; font-size:0.8em; font-weight:' + gewicht + '; color:' + farbe + '; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact;">' + text + '</div>';
+  var farbe = '#8a6d00', text = 'Fluorfrei bis spätestens 31.12.' + BIO_FRIST_JAHR, gewicht = '600';
+  if(st === 2){ farbe = '#1e6b3a'; text = '&rarr; Bei Innenrevision auf fluorfrei umstellen'; gewicht = '700'; }
+  if(st === 3){ farbe = '#b3261e'; text = '&rarr; Frist ' + BIO_FRIST_JAHR + ': fluorfrei Pflicht'; gewicht = '800'; }
+  return '<div class="bio-hinweis" style="display:block; margin-top:0; line-height:1.15; font-size:0.78em; font-weight:' + gewicht + '; color:' + farbe + '; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact;">' + text + '</div>';
 }
 function bioZusammenfassungHtml(liste){
   var n = 0, jetztN = 0;
   (liste || []).forEach(function(g){ var st = bioStufe(g); if(st){ n++; if(st >= 2) jetztN++; } });
   if(!n) return '';
   var h = '<div class="bio-zusammenfassung" style="margin-top:8px; border:1.5px solid #1e6b3a; border-radius:6px; padding:5px 12px; font-size:11.5px; background:#eef7f0; page-break-inside:avoid; break-inside:avoid; -webkit-print-color-adjust:exact; print-color-adjust:exact;">';
-  h += '<b style="color:#1e6b3a;">Umstellung auf fluorfreien Bio-Schaum:</b> ' + n + ' Schaumlöscher SD6/SD9 ' + (n === 1 ? 'muss' : 'müssen') + ' bis spätestens ' + BIO_FRIST_JAHR + ' umgestellt werden';
+  h += '<b style="color:#1e6b3a;">Umstellung auf fluorfreie Löschmittel:</b> ' + n + ' fluorhaltige' + (n === 1 ? 'r' : '') + ' Schaum-/Fettbrandlöscher ' + (n === 1 ? 'muss' : 'müssen') + ' bis spätestens 31.12.' + BIO_FRIST_JAHR + ' umgestellt werden (EU-Verordnung 2025/1988; Nachfüllen mit PFAS-Schaum seit 23.10.2026 nicht mehr erlaubt)';
   if(jetztN) h += ', davon <b>' + jetztN + '</b> bei der nächsten Innenrevision';
   h += '.</div>';
   return h;
@@ -7008,6 +7069,7 @@ function modalGeraetBearbeiten(geraetId){
   html += '</div>';
   html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
+  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:8px;"><input type="checkbox" id="fFluorfrei" style="width:20px; height:20px;"' + (g.fluorfrei ? ' checked' : '') + '> Löschmittel fluorfrei (Bio-Schaum)</label>';
   html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><div class="row" style="gap:8px;"><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269" style="flex:1;"><button type="button" class="btn secondary" id="fExterneIdScanBtn" style="flex:0 0 auto; padding:0 14px;">&#128247;</button></div>';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '" list="standortDatalist" autocomplete="off">';
@@ -7089,6 +7151,7 @@ function modalGeraetBearbeiten(geraetId){
       }
     }
     g.seriennummer = document.getElementById('fSeriennr').value.trim();
+    var ffEl = document.getElementById('fFluorfrei'); if(ffEl) g.fluorfrei = !!ffEl.checked;
     g.externeId = neueExterneId;
     g.standort = document.getElementById('fStandort').value.trim();
     if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) && g.fuellungen && g.fuellungen.length > 0){
@@ -7202,6 +7265,7 @@ function modalGeraetBearbeiten(geraetId){
   if(fExterneIdScanBtn) fExterneIdScanBtn.onclick = function(){ modalCodeScannen('fExterneId'); };
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
+  try { bindTypVorschlaege(); } catch(err){ console.error('Typ-Vorschlaege Fehler', err); }
   try { bindKategorieToggle(); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
 
   try {
@@ -7350,7 +7414,7 @@ function irPillHtml(g, bj){
   var text;
   if(st === 20) text = bj.label;
   else text = f.name + ': ' + bj.faelligJahr + (faellig ? ' – fällig' : '');
-  return '<span class="ir-pill" style="display:inline-flex; padding:3px 9px; line-height:1.25; border-radius:10px; background:' + f.bg + '; color:' + f.text + '; border:1.5px solid ' + (faellig ? '#b3261e' : f.rand) + '; font-weight:' + (faellig ? '800' : '600') + '; white-space:nowrap;">' + escapeHtml(text) + '</span>';
+  return '<span class="ir-pill" style="display:inline-flex; padding:1px 8px; line-height:1.25; border-radius:10px; background:' + f.bg + '; color:' + f.text + '; border:1.5px solid ' + (faellig ? '#b3261e' : f.rand) + '; font-weight:' + (faellig ? '800' : '600') + '; white-space:nowrap;">' + escapeHtml(text) + '</span>';
 }
 function irLegendeHtml(){
   var h = '<div class="ir-legende" style="font-size:12px; margin:-2px 0 10px 0; color:#555;">Innenrevision: ';
@@ -7575,6 +7639,94 @@ function bindKategorieToggle(kundeIdFuerReserve){
   }
 }
 
+
+// ---------- Loescher-Katalog fuer die Typ-Auswahl ----------
+// f = 1 fluorfrei, f = 0 fluorhaltig (umstellen), f = null nicht betroffen (Pulver/CO2/Wasser)
+// Quellen: Herstellerangaben/Haendler (Gloria PFAS-Broschuere 2026, Bavaria PureNature, Jockel GREEN, Neuruppin FluorineFree, Minimax)
+var LOESCHER_KATALOG = (function(){
+  var k = [];
+  var add = function(name, f){ k.push({ n: name, f: f }); };
+  ['SD 6 E', 'SD 9 E', 'SD 6 P', 'SD 9 P', 'SD 6 F', 'SD 9 F', 'SDB 6', 'SDB 9',
+   'SKA+ 6 PRO', 'SKA+ 9 PRO', 'SKA+ 6 STAR', 'SKA+ 9 STAR', 'SKA+ 6 EASY', 'SKA+ 9 EASY',
+   'SKE 6 PRO', 'SKE 9 PRO', 'SKE 6 STAR', 'SKE 9 STAR', 'SKE 6 EASY', 'SKE 9 EASY',
+   'SB 6 PRO', 'SB 9 PRO', 'SBF 6 PRO', 'SBF 9 PRO'].forEach(function(m){ add('Gloria Schaumlöscher ' + m + ' (fluorfrei)', 1); });
+  ['FA 3 EASY', 'FA 6 EASY', 'FA 6 PRO', 'FA 6 STAR', 'FDA 2', 'FDA 3', 'FDA 6'].forEach(function(m){ add('Gloria Fettbrandlöscher ' + m + ' (fluorfrei)', 1); });
+  ['SD 6', 'SD 9'].forEach(function(m){ add('Gloria Schaumlöscher ' + m, 0); });
+  add('Gloria Fettbrandlöscher FB 3 EASY', 0);
+  ['Colt PureNature SF 6', 'Colt PureNature SK 9', 'Magnum PureNature SK 6', 'Magnum PureNature SK 9', 'Magnum PureNature SF 6',
+   'Fash PureNature S 6', 'Fash PureNature S 9', 'Graffit PureNature SK 6', 'Graffit PureNature SF 6'].forEach(function(m){ add('Bavaria Schaumlöscher ' + m + ' (fluorfrei)', 1); });
+  ['S6LJM34 GREEN', 'S6LJFM GREEN (frostsicher)', 'S6JX34 GREEN', 'SK6JX34 GREEN', 'S6JXF34 GREEN (frostsicher)',
+   'S9LJM GREEN', 'S9JX GREEN', 'SK9JX GREEN', 'S2JFM8 GREEN'].forEach(function(m){ add('Jockel Schaumlöscher ' + m + ' (fluorfrei)', 1); });
+  ['WX 6 nG', 'WX 9 nG', 'Tube/Kartusche Blauer Engel', 'Premix frostsicher'].forEach(function(m){ add('Minimax Schaumlöscher ' + m + ' (fluorfrei)', 1); });
+  ['FluorineFree 06 FCP', 'FluorineFree 06 FS', 'FluorineFree 02 FSP'].forEach(function(m){ add('Neuruppin Schaumlöscher ' + m + ' (fluorfrei)', 1); });
+  return k;
+})();
+
+function typVorschlaege(eingabe){
+  var q = typNorm(eingabe);
+  if(q.length < 2) return [];
+  var gesehen = {}, erg = [];
+  var nimm = function(name, f){
+    var key = typNorm(name);
+    if(gesehen[key]) return;
+    if(key.indexOf(q) < 0) return;
+    gesehen[key] = true;
+    erg.push({ n: name, f: f });
+  };
+  LOESCHER_KATALOG.forEach(function(x){ nimm(x.n, x.f); });
+  typListeAutocomplete().forEach(function(t){
+    var tmp = { typ: t, kategorie: 'Feuerlöscher' };
+    nimm(t, istSdAltschaum(tmp) ? 0 : (istFluorfrei(tmp) ? 1 : null));
+  });
+  // passende Treffer am Anfang zuerst
+  erg.sort(function(a, b){
+    var ia = typNorm(a.n).indexOf(q), ib = typNorm(b.n).indexOf(q);
+    if(ia !== ib) return ia - ib;
+    return a.n.localeCompare(b.n);
+  });
+  return erg.slice(0, 10);
+}
+
+function bindTypVorschlaege(){
+  var inp = document.getElementById('fTyp');
+  if(!inp || inp.getAttribute('data-vorschlag')) return;
+  inp.setAttribute('data-vorschlag', '1');
+  inp.removeAttribute('list'); // eigene Liste statt iOS-Datalist
+  var box = document.createElement('div');
+  box.id = 'typVorschlagBox';
+  box.style.cssText = 'display:none; border:1px solid var(--line, #ddd); border-radius:8px; margin-top:4px; max-height:260px; overflow-y:auto; background:#fff; color:#1a1410;';
+  inp.parentNode.insertBefore(box, inp.nextSibling);
+  var zeigen = function(){
+    var liste = typVorschlaege(inp.value);
+    if(!liste.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+    var h = '';
+    liste.forEach(function(x, i){
+      var badge = '';
+      if(x.f === 1) badge = '<span style="font-size:11px; font-weight:700; color:#1e6b3a; background:#e4f2e8; border-radius:10px; padding:1px 7px; white-space:nowrap;">fluorfrei</span>';
+      else if(x.f === 0) badge = '<span style="font-size:11px; font-weight:700; color:#b3261e; background:#fbe2db; border-radius:10px; padding:1px 7px; white-space:nowrap;">fluorhaltig</span>';
+      h += '<div class="typVorschlag" data-i="' + i + '" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 10px; border-top:' + (i ? '1px solid #eee' : 'none') + '; font-size:15px; cursor:pointer;"><span>' + escapeHtml(x.n) + '</span>' + badge + '</div>';
+    });
+    box.innerHTML = h;
+    box.style.display = 'block';
+    box.querySelectorAll('.typVorschlag').forEach(function(el){
+      var waehlen = function(ev){
+        if(ev) ev.preventDefault();
+        var x = liste[parseInt(el.getAttribute('data-i'), 10)];
+        inp.value = x.n;
+        var ff = document.getElementById('fFluorfrei');
+        if(ff && x.f === 1) ff.checked = true;
+        if(ff && x.f === 0) ff.checked = false;
+        box.style.display = 'none';
+      };
+      el.addEventListener('mousedown', waehlen);
+      el.addEventListener('touchstart', waehlen, { passive: false });
+    });
+  };
+  inp.addEventListener('input', zeigen);
+  inp.addEventListener('focus', zeigen);
+  inp.addEventListener('blur', function(){ setTimeout(function(){ box.style.display = 'none'; }, 200); });
+}
+
 function bindTypChips(){
   document.querySelectorAll('.typChip').forEach(function(c){
     c.onclick = function(){
@@ -7640,6 +7792,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
   html += '</div>';
   html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
+  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:8px;"><input type="checkbox" id="fFluorfrei" style="width:20px; height:20px;"> Löschmittel fluorfrei (Bio-Schaum)</label>';
   html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><div class="row" style="gap:8px;"><input id="fExterneId" type="text" value="' + escapeHtml(vorgabe.externeId || '') + '" placeholder="z.B. 2269" style="flex:1;"><button type="button" class="btn secondary" id="fExterneIdScanBtn" style="flex:0 0 auto; padding:0 14px;">&#128247;</button></div>';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + escapeHtml(vorgabe.standort || (letzte && letzte.standort ? letzte.standort : '')) + '" list="standortDatalist" autocomplete="off">';
@@ -7678,6 +7831,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
       intervallMonate: parseInt(document.getElementById('fIntervall').value, 10),
       erstelltAm: new Date().toISOString(),
       seriennummer: document.getElementById('fSeriennr').value.trim(),
+      fluorfrei: !!(document.getElementById('fFluorfrei') && document.getElementById('fFluorfrei').checked),
       externeId: neueExterneId,
       standort: document.getElementById('fStandort').value.trim(),
       letztePruefung: document.getElementById('fLetztePruefung').value || null,
@@ -7726,6 +7880,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
   };
 
   try { bindTypChips(); } catch(err){ console.error('bindTypChips Fehler', err); }
+  try { bindTypVorschlaege(); } catch(err){ console.error('Typ-Vorschlaege Fehler', err); }
   try { bindKategorieToggle(kundeId); } catch(err){ console.error('bindKategorieToggle Fehler', err); }
   try { bindEinfuegenAltesSystem(kundeId); } catch(err){ console.error('bindEinfuegenAltesSystem Fehler', err); }
   var fExterneIdScanBtnNeu = document.getElementById('fExterneIdScanBtn');
@@ -11268,7 +11423,8 @@ function modalMehrMenu(){
   if(darfInfoVerwalten()){
     var letzte = '';
     try{ letzte = localStorage.getItem('bsvLetzteSicherung') || ''; }catch(e){}
-    html += '<button type="button" class="btn block" id="mehrSichern" style="margin-top:16px;">Alles sichern (Datei herunterladen)</button>';
+    html += '<button type="button" class="btn block secondary" id="mehrFluor" style="margin-top:16px;">Fluorfreie Löscher (Liste)</button>';
+    html += '<button type="button" class="btn block" id="mehrSichern" style="margin-top:10px;">Alles sichern (Datei herunterladen)</button>';
     html += '<div class="meta" style="margin-top:4px; text-align:center;">' + (letzte ? 'Letzte Sicherung auf diesem Gerät: ' + escapeHtml(letzte) : 'Auf diesem Gerät noch keine Sicherung gemacht') + '</div>';
   }
   html += '<button type="button" class="btn block secondary" id="mehrGeraetAbmelden" style="margin-top:16px; color:#c23f12;">Gerät abmelden (Firmen-Konto)</button>';
@@ -11276,6 +11432,7 @@ function modalMehrMenu(){
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mehrGeraetAbmelden').onclick = function(){ closeModal(); geraetAbmelden(); };
   if(document.getElementById('mehrSichern')) document.getElementById('mehrSichern').onclick = function(){ closeModal(); datensicherungErstellen(); };
+  if(document.getElementById('mehrFluor')) document.getElementById('mehrFluor').onclick = function(){ closeModal(); modalFluorfreiListe(); };
   document.getElementById('mehrQuer').onchange = function(){ bsvQuerformatSetzen(this.checked); toast(this.checked ? 'Querformat ein' : 'Hochformat'); };
   document.querySelectorAll('[data-mehrtab]').forEach(function(b){
     b.onclick = function(){
