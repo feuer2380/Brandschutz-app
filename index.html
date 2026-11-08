@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-08 13:45';
-var APP_VERSION_TEXT = '08.11. 13:45';
+var APP_VERSION = '2026-11-08 14:30';
+var APP_VERSION_TEXT = '08.11. 14:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -3861,6 +3861,8 @@ function ausblickHtml(){
   var akt = abAktiveGeraete();
   var monatNamen = ['Jän', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
+  html += monatsFortschrittHtml(state.abMonat || 0);
+
   // 1) Pruefungen pro Monat
   var prueflich = akt.filter(function(g){ return !istFuellKategorie((g.kategorie || 'Feuerlöscher').trim()) && g.naechstePruefung; });
   var monate = [], ueber = { n: 0, k: {} };
@@ -3958,6 +3960,7 @@ function ausblickHtml(){
     html += '<div class="meta" style="margin-top:6px; color:#8a7d70;">' + fehlend.length + ' Geräte unvollständig &ndash; antippen für die Liste nach Kunden.</div>';
   }
   html += '</div>';
+  html += vergesseneKundenHtml();
   return html;
 }
 function modalFehlendeAngaben(){
@@ -3985,6 +3988,195 @@ document.addEventListener('click', function(ev){
   if(!t) return;
   if(t.closest('.abFluor')){ modalFluorGesamt('alle'); return; }
   if(t.closest('.abFehlt')){ modalFehlendeAngaben(); return; }
+});
+
+
+// ---------- Statistik: Monatsfortschritt ----------
+function abKundeOk(){ var m = {}; state.kunden.forEach(function(k){ if(!k.geloescht) m[k.id] = k; }); return m; }
+function monatsFortschrittHtml(versatz){
+  var kOk = abKundeOk();
+  var gMap = {}; state.geraete.forEach(function(g){ gMap[g.id] = g; });
+  var heute = new Date();
+  var mStart = new Date(heute.getFullYear(), heute.getMonth() + versatz, 1);
+  var mEnde = new Date(mStart.getFullYear(), mStart.getMonth() + 1, 1);
+  var monatNamen = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  var imMonat = function(iso){ if(!iso) return false; var d = new Date(iso); return d >= mStart && d < mEnde; };
+  var soll = 0, erl = 0, nachgeholt = 0, proMa = {}, offenProMa = {};
+  state.pruefungen.forEach(function(p){
+    if(!kOk[p.kundeId]) return;
+    var g = gMap[p.geraetId];
+    if(g && istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())) return;
+    var faelligHier = imMonat(p.datum);
+    if(faelligHier){
+      soll++;
+      if(p.erledigt) erl++;
+      else { var wer = (g && g.zustaendig) ? g.zustaendig : 'nicht zugeteilt'; offenProMa[wer] = (offenProMa[wer] || 0) + 1; }
+    }
+    if(p.erledigt && imMonat(p.erledigtAm)){
+      var von = p.erledigtVon || 'unbekannt';
+      proMa[von] = (proMa[von] || 0) + 1;
+      if(!faelligHier && p.datum && new Date(p.datum) < mStart) nachgeholt++;
+    }
+  });
+  var pr = soll ? Math.round(erl / soll * 100) : 0;
+  var html = '<div class="section-title" style="margin-top:4px;">Monatsfortschritt</div>';
+  html += '<div class="card">';
+  html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">';
+  html += '<button type="button" class="btn small secondary abMonatBtn" data-v="' + (versatz - 1) + '">&lsaquo;</button>';
+  html += '<b style="color:#2a2622; font-size:16px;">' + monatNamen[mStart.getMonth()] + ' ' + mStart.getFullYear() + '</b>';
+  html += '<button type="button" class="btn small secondary abMonatBtn" data-v="' + (versatz + 1) + '">&rsaquo;</button></div>';
+  html += '<div style="font-size:15px; color:#2a2622; margin-bottom:6px;"><b style="font-size:24px; color:' + (pr >= 100 ? '#2e7d4f' : '#c23f12') + ';">' + erl + '</b> von <b>' + soll + '</b> fälligen Prüfungen erledigt</div>';
+  html += '<div style="height:16px; background:#efe6da; border-radius:8px; overflow:hidden;"><div style="width:' + Math.min(pr, 100) + '%; height:100%; background:' + (pr >= 100 ? '#2e7d4f' : '#c23f12') + ';"></div></div>';
+  html += '<div style="display:flex; justify-content:space-between; font-size:12px; color:#8a7d70; margin-top:4px;"><span>' + pr + ' %</span><span>' + (soll - erl) + ' offen</span></div>';
+  if(nachgeholt) html += '<div class="meta" style="margin-top:6px; color:#6b6258;">Zusätzlich ' + nachgeholt + ' überfällige Prüfungen aus Vormonaten erledigt.</div>';
+  var maNamen = Object.keys(proMa).sort(function(a, b){ return proMa[b] - proMa[a]; });
+  if(maNamen.length){
+    var maxMa = proMa[maNamen[0]];
+    html += '<div style="font-weight:700; color:#2a2622; margin-top:12px; font-size:13.5px;">Erledigt von</div>';
+    maNamen.forEach(function(n){ html += abBalken(escapeHtml(n), proMa[n], maxMa, '#2e7d4f'); });
+  }
+  var offNamen = Object.keys(offenProMa).sort(function(a, b){ return offenProMa[b] - offenProMa[a]; });
+  if(offNamen.length){
+    var maxO = offenProMa[offNamen[0]];
+    html += '<div style="font-weight:700; color:#2a2622; margin-top:12px; font-size:13.5px;">Noch offen &ndash; zugeteilt an</div>';
+    offNamen.forEach(function(n){ html += abBalken(escapeHtml(n), offenProMa[n], maxO, n === 'nicht zugeteilt' ? '#9a8f84' : '#d39a00'); });
+  }
+  html += '</div>';
+  return html;
+}
+
+// ---------- Statistik: vergessene Kunden ----------
+function vergesseneKundenDaten(){
+  var kOk = abKundeOk();
+  var info = {};
+  state.geraete.forEach(function(g){
+    if(g.ausgeschieden || !kOk[g.kundeId]) return;
+    if(istFuellKategorie((g.kategorie || 'Feuerlöscher').trim())) return;
+    var i = info[g.kundeId] || (info[g.kundeId] = { n: 0, letzte: null, ohneTermin: 0 });
+    i.n++;
+    if(g.letztePruefung && (!i.letzte || g.letztePruefung > i.letzte)) i.letzte = g.letztePruefung;
+    if(!g.naechstePruefung) i.ohneTermin++;
+  });
+  state.pruefungen.forEach(function(p){
+    var i = info[p.kundeId];
+    if(i && p.erledigt && p.erledigtAm && (!i.letzte || p.erledigtAm.substring(0, 10) > i.letzte)) i.letzte = p.erledigtAm.substring(0, 10);
+  });
+  var grenze = new Date(); grenze.setFullYear(grenze.getFullYear() - 2);
+  var liste = [];
+  Object.keys(info).forEach(function(kid){
+    var i = info[kid];
+    var alt = !i.letzte || new Date(i.letzte) < grenze;
+    if(alt || i.ohneTermin) liste.push({ k: kOk[kid], n: i.n, letzte: i.letzte, ohneTermin: i.ohneTermin, alt: alt });
+  });
+  liste.sort(function(a, b){ return (a.letzte || '0') < (b.letzte || '0') ? -1 : 1; });
+  return liste;
+}
+function vergesseneKundenHtml(){
+  var liste = vergesseneKundenDaten();
+  var html = '<div class="section-title" style="margin-top:14px;">Vergessene Kunden</div>';
+  html += '<div class="card">';
+  if(!liste.length){
+    html += '<div style="color:#2e7d4f; font-weight:700;">Keine &ndash; alle Kunden wurden in den letzten 2 Jahren geprüft und haben einen Termin.</div>';
+  } else {
+    html += '<div class="meta" style="margin-bottom:6px; color:#6b6258;">Seit über 2 Jahren keine Prüfung oder Geräte ohne nächsten Termin. Antippen öffnet den Kunden.</div>';
+    liste.slice(0, 30).forEach(function(x){
+      html += '<div class="vkKunde" data-kid="' + escapeHtml(x.k.id) + '" style="cursor:pointer; display:flex; justify-content:space-between; gap:8px; padding:7px 0; border-top:1px solid #eee; font-size:14px; color:#2a2622;">';
+      html += '<span style="min-width:0;"><b>' + escapeHtml(x.k.name || '') + '</b><br><span style="font-size:12px; color:#8a7d70;">' + x.n + ' Geräte' + (x.ohneTermin ? ' &middot; <span style="color:#c23f12;">' + x.ohneTermin + ' ohne Termin</span>' : '') + '</span></span>';
+      html += '<span style="white-space:nowrap; font-size:12.5px; color:' + (x.alt ? '#b3261e' : '#8a7d70') + '; font-weight:700; text-align:right;">' + (x.letzte ? 'zuletzt<br>' + fmtDate(x.letzte) : 'nie geprüft') + '</span></div>';
+    });
+    if(liste.length > 30) html += '<div class="meta">&hellip; und ' + (liste.length - 30) + ' weitere</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// ---------- Statistik: Material-Bestellliste ----------
+function materialDaten(){
+  var kOk = abKundeOk();
+  var jahr = new Date().getFullYear();
+  var res = {};
+  for(var y = jahr; y <= jahr + 4; y++) res[y] = { neu: {}, ir: {}, nNeu: 0, nIr: 0 };
+  var add = function(y, art, typ){
+    if(!res[y]) return;
+    res[y][art][typ] = (res[y][art][typ] || 0) + 1;
+    if(art === 'neu') res[y].nNeu++; else res[y].nIr++;
+  };
+  state.geraete.forEach(function(g){
+    if(g.ausgeschieden || !kOk[g.kundeId]) return;
+    if((g.kategorie || 'Feuerlöscher').trim() !== 'Feuerlöscher') return;
+    var typ = (g.typ || 'ohne Typ').trim();
+    var bj = parseInt(g.baujahr, 10);
+    var ausJ = (bj && !isNaN(bj)) ? Math.max(bj + 20, jahr) : null;
+    var fluorJ = null;
+    if(bioStufe(g) > 0) fluorJ = bioJetzt(g) ? jahr : (bioNaechstesJahr(g) || BIO_FRIST_JAHR);
+    // Tausch: das fruehere Ereignis zaehlt (Ausscheiden oder Fluor-Umstellung)
+    var tauschJ = null, grund = '';
+    if(ausJ && (!fluorJ || ausJ <= fluorJ)){ tauschJ = ausJ; grund = ''; }
+    else if(fluorJ){ tauschJ = fluorJ; grund = ' &rarr; fluorfreier Ersatz'; }
+    if(tauschJ) add(tauschJ, 'neu', escapeHtml(typ) + grund);
+    // Innenrevision (nur wenn vor dem Tausch)
+    if(istInnenrevisionspflichtig(g) && bj && !isNaN(bj)){
+      var st = baujahrStatus(bj, g.letzteInnenrevision, g);
+      if(st && st.faelligJahr){
+        var irJ = Math.max(st.faelligJahr, jahr);
+        if(!tauschJ || irJ < tauschJ) add(irJ, 'ir', escapeHtml(typ));
+      }
+    }
+  });
+  return res;
+}
+function materialHtml(){
+  var jahr = new Date().getFullYear();
+  var wahl = parseInt(state.materialJahr || jahr, 10);
+  var d = materialDaten();
+  var html = '<div class="filter-bar segmented" style="margin-bottom:12px;">';
+  Object.keys(d).forEach(function(y){ html += '<button class="filter-btn' + (String(y) === String(wahl) ? ' active' : '') + ' matJahr" data-j="' + y + '">' + y + ' (' + (d[y].nNeu + d[y].nIr) + ')</button>'; });
+  html += '</div>';
+  var e = d[wahl] || { neu: {}, ir: {}, nNeu: 0, nIr: 0 };
+  html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">';
+  html += '<div class="card" style="margin:0; text-align:center; padding:12px 6px;"><div style="font-size:30px; font-weight:800; color:#2e7d4f;">' + e.nNeu + '</div><div style="font-size:12px; color:#6b6258;">Neugeräte (Tausch)</div></div>';
+  html += '<div class="card" style="margin:0; text-align:center; padding:12px 6px;"><div style="font-size:30px; font-weight:800; color:#d39a00;">' + e.nIr + '</div><div style="font-size:12px; color:#6b6258;">Innenrevisionen</div></div>';
+  html += '</div>';
+  var liste = function(obj, titel, farbe, hinweis){
+    var keys = Object.keys(obj).sort(function(a, b){ return obj[b] - obj[a] || a.localeCompare(b); });
+    var h = '<div class="section-title" style="margin-top:6px;">' + titel + '</div><div class="card">';
+    if(!keys.length) h += '<div style="color:#6b6258;">Nichts geplant.</div>';
+    keys.forEach(function(k){ h += '<div style="display:flex; gap:10px; padding:5px 0; border-top:1px solid #eee; font-size:14px; color:#2a2622;"><b style="min-width:36px; text-align:right; color:' + farbe + ';">' + obj[k] + '&times;</b><span style="min-width:0;">' + k + '</span></div>'; });
+    if(hinweis) h += '<div class="meta" style="margin-top:6px; color:#8a7d70;">' + hinweis + '</div>';
+    h += '</div>';
+    return h;
+  };
+  html += liste(e.neu, 'Neugeräte bestellen ' + wahl, '#2e7d4f', 'Ersatz für Löscher, die ' + wahl + ' 20 Jahre alt werden oder auf fluorfrei umgestellt werden müssen (das frühere zählt).');
+  html += liste(e.ir, 'Innenrevisionen ' + wahl + ' (Löschmittel/Ersatzteile)', '#d39a00', 'Fällige Innenrevisionen nach Typ &ndash; für Löschmittel, Dichtungen und Treibmittel.');
+  html += '<button class="btn block" id="matDruck" style="margin-top:10px;">Bestellliste drucken / als PDF teilen</button>';
+  return html;
+}
+function materialDruckHtml(wahl){
+  var d = materialDaten()[wahl] || { neu: {}, ir: {}, nNeu: 0, nIr: 0 };
+  var tab = function(obj){
+    var keys = Object.keys(obj).sort(function(a, b){ return obj[b] - obj[a] || a.localeCompare(b); });
+    if(!keys.length) return '<div class="meta">Nichts geplant.</div>';
+    var h = '<table class="pb-tabelle"><thead><tr><th style="width:12%;">Menge</th><th>Typ</th></tr></thead><tbody>';
+    keys.forEach(function(k){ h += '<tr><td><b>' + obj[k] + '</b></td><td>' + k + '</td></tr>'; });
+    return h + '</tbody></table>';
+  };
+  var html = '<div class="bericht-brief ausstattung">';
+  html += '<div style="display:flex; justify-content:space-between; border-bottom:2px solid #c23f12; padding-bottom:6px; margin-bottom:10px;"><div><div style="font-family:Georgia,serif; font-size:20px; font-weight:700;">Material-Bestellliste ' + wahl + '</div><div class="meta">' + d.nNeu + ' Neugeräte &middot; ' + d.nIr + ' Innenrevisionen &middot; Stand: ' + fmtDate(new Date().toISOString()) + '</div></div>' + (typeof LOGO_DATA !== 'undefined' ? '<img src="' + LOGO_DATA + '" style="height:42px;">' : '') + '</div>';
+  html += '<h3 style="margin:6px 0;">Neugeräte (Tausch)</h3>' + tab(d.neu);
+  html += '<h3 style="margin:14px 0 6px 0;">Innenrevisionen (Löschmittel/Ersatzteile)</h3>' + tab(d.ir);
+  html += '<div class="bericht-fuss">Wolfgang Janiba Brandschutztechnik GmbH &middot; intern &middot; berechnet aus Baujahr, Innenrevision und Fluor-Umstellung (Frist 31.12.' + BIO_FRIST_JAHR + ')</div></div>';
+  return html;
+}
+document.addEventListener('click', function(ev){
+  var t = ev.target && ev.target.closest ? ev.target : null;
+  if(!t) return;
+  var mb = t.closest('.abMonatBtn');
+  if(mb){ state.abMonat = parseInt(mb.getAttribute('data-v'), 10) || 0; render(); return; }
+  var vk = t.closest('.vkKunde');
+  if(vk){ state.activeKundeId = vk.getAttribute('data-kid'); state.tab = 'kundeDetail'; render(); window.scrollTo(0, 0); return; }
+  var mj = t.closest('.matJahr');
+  if(mj){ state.materialJahr = mj.getAttribute('data-j'); render(); return; }
+  if(t.closest('#matDruck')){ bsvDruckenOderTeilen(materialDruckHtml(parseInt(state.materialJahr || new Date().getFullYear(), 10)), 'Material_Bestellliste.pdf'); return; }
 });
 
 // Statistik Neukauf: Kunde antippen -> Kunde oeffnen
@@ -6225,6 +6417,7 @@ function renderStatistik(){
   var subTabs = [
     {key:'pruefungen', label:'Prüfungen'},
     {key:'ausblick', label:'Ausblick'},
+    {key:'material', label:'Material'},
     {key:'bestand', label:'Gerätebestand'},
     {key:'neukauf', label:'Neukauf'},
     {key:'portal', label:'Kundenportal'},
@@ -6551,6 +6744,9 @@ function renderStatistik(){
 
   if(subTab === 'ausblick'){
     html += ausblickHtml();
+  }
+  if(subTab === 'material'){
+    html += materialHtml();
   }
 
   if(subTab === 'neukauf'){
