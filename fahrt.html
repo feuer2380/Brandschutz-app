@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Fahrt - Brandschutzverwaltung</title>
+<link rel="icon" href="data:,">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #1a1410; color: #2a2622; padding: 20px 16px; min-height: 100vh; }
+  .kopf { color: #fff; text-align: center; margin: 10px 0 18px 0; }
+  .kopf b { font-size: 18px; } .kopf div { font-size: 12px; color: #e8a23a; letter-spacing: .08em; margin-top: 2px; }
+  .card { background: #fff; border-radius: 16px; padding: 22px 18px; max-width: 460px; margin: 0 auto; text-align: center; }
+  .gross { font-size: 54px; line-height: 1; margin-bottom: 8px; }
+  h2 { margin: 6px 0 4px 0; font-size: 22px; }
+  .meta { color: #6b6258; font-size: 14px; margin-top: 6px; line-height: 1.4; }
+  label { display: block; text-align: left; font-size: 13px; color: #6b6258; margin-top: 12px; }
+  input, select { width: 100%; font-size: 17px; padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin-top: 4px; background: #fff; }
+  .btn { display: block; width: 100%; margin-top: 14px; padding: 14px; border: none; border-radius: 10px; background: #c23f12; color: #fff; font-size: 16px; font-weight: 700; }
+  .btn.zweit { background: #efe6da; color: #2a2622; }
+  .ok { color: #2e7d4f; } .warn { color: #b3261e; }
+</style>
+</head>
+<body>
+<div class="kopf"><b>Fahrtenbuch</b><div>WOLFGANG JANIBA BRANDSCHUTZTECHNIK GMBH</div></div>
+<div class="card" id="inhalt"><div class="gross">&#8987;</div><h2>Einen Moment ...</h2><div class="meta">Standort wird ermittelt</div></div>
+
+<script>
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBLcQlXeHcwN-4XXL6Wx7dcpN_bZQhK3_o",
+  authDomain: "brandschutz-janiba.firebaseapp.com",
+  projectId: "brandschutz-janiba",
+  storageBucket: "brandschutz-janiba.firebasestorage.app",
+  messagingSenderId: "466445019724",
+  appId: "1:466445019724:web:7ed71b28e85b39cf5d62e9"
+};
+var params = new URLSearchParams(window.location.search);
+var art = (params.get('a') || params.get('fahrt') || '').toLowerCase();
+var fz = params.get('fz') || '';
+var zeit = new Date();
+var db = null;
+function $(id){ return document.getElementById(id); }
+function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function zwei(n){ return (n < 10 ? '0' : '') + n; }
+function uhr(d){ return zwei(d.getHours()) + ':' + zwei(d.getMinutes()); }
+function lsGet(k){ try{ return localStorage.getItem(k) || ''; }catch(e){ return ''; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+
+// Ereignisse, die (noch) nicht gesendet werden konnten, im Handy merken und spaeter nachsenden
+function warteschlange(){ try{ return JSON.parse(localStorage.getItem('fahrtWarteschlange') || '[]'); }catch(e){ return []; } }
+function warteschlangeSetzen(l){ lsSet('fahrtWarteschlange', JSON.stringify(l)); }
+
+function zeigen(symbol, titel, text, klasse){
+  $('inhalt').innerHTML = '<div class="gross ' + (klasse || '') + '">' + symbol + '</div><h2>' + titel + '</h2><div class="meta">' + text + '</div>' +
+    '<button class="btn zweit" id="wer">Fahrer: ' + esc(lsGet('fahrtFahrer') || 'nicht gesetzt') + ' &ndash; ändern</button>';
+  $('wer').onclick = fahrerWaehlen;
+}
+function fahrerWaehlen(){
+  $('inhalt').innerHTML = '<h2>Wer fährt mit diesem Handy?</h2><div class="meta">Wird einmalig gemerkt.</div>' +
+    '<label>Name</label><input id="fName" type="text" value="' + esc(lsGet('fahrtFahrer')) + '" placeholder="z.B. Tobias Prominzer">' +
+    '<button class="btn" id="fOk">Speichern</button>';
+  $('fOk').onclick = function(){ lsSet('fahrtFahrer', $('fName').value.trim()); zeigen('&#10003;', 'Gespeichert', 'Fahrer: ' + esc(lsGet('fahrtFahrer')), 'ok'); };
+}
+
+function standort(cb){
+  if(!navigator.geolocation){ cb(null); return; }
+  var fertig = false;
+  var t = setTimeout(function(){ if(!fertig){ fertig = true; cb(null); } }, 20000);
+  navigator.geolocation.getCurrentPosition(function(p){
+    if(fertig) return; fertig = true; clearTimeout(t);
+    cb({ lat: p.coords.latitude, lon: p.coords.longitude, genau: Math.round(p.coords.accuracy || 0) });
+  }, function(){ if(fertig) return; fertig = true; clearTimeout(t); cb(null); }, { enableHighAccuracy: true, timeout: 18000, maximumAge: 30000 });
+}
+
+function senden(ereignisse, cb){
+  var i = 0, fehler = 0;
+  var naechstes = function(){
+    if(i >= ereignisse.length){ cb(fehler); return; }
+    var e = ereignisse[i++];
+    db.collection('fahrtereignisse').doc(e.id).set(e).then(naechstes).catch(function(){ fehler++; naechstes(); });
+  };
+  naechstes();
+}
+
+function loginZeigen(weiter){
+  $('inhalt').innerHTML = '<h2>Gerät freischalten</h2><div class="meta">Einmalig mit dem Firmen-Konto (wie in der Brandschutzverwaltung).</div>' +
+    '<label>Firmen-E-Mail</label><input id="lE" type="text" autocapitalize="off" autocorrect="off" inputmode="email">' +
+    '<label>Passwort</label><input id="lP" type="password">' +
+    '<div id="lF" class="meta warn"></div><button class="btn" id="lB">Freischalten</button>';
+  $('lB').onclick = function(){
+    $('lB').disabled = true; $('lB').textContent = 'Bitte warten ...';
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){
+      return firebase.auth().signInWithEmailAndPassword($('lE').value.trim(), $('lP').value);
+    }).then(weiter).catch(function(){ $('lB').disabled = false; $('lB').textContent = 'Freischalten'; $('lF').textContent = 'Anmeldung fehlgeschlagen (E-Mail/Passwort oder Internet).'; });
+  };
+}
+
+function start(){
+  if(art !== 'start' && art !== 'ende'){
+    zeigen('&#128663;', 'Fahrtenbuch-Automatik', 'Diese Seite wird automatisch vom Kurzbefehl geöffnet (beim Verbinden / Trennen mit dem Auto). Hier kannst du einstellen, wer mit diesem Handy fährt.', '');
+    initFirebase(function(){});
+    return;
+  }
+  standort(function(pos){
+    var e = {
+      id: 'fe_' + zeit.getTime() + '_' + Math.random().toString(36).slice(2, 7),
+      typ: art, zeit: zeit.toISOString(), fz: fz, fahrer: lsGet('fahrtFahrer'),
+      lat: pos ? pos.lat : null, lon: pos ? pos.lon : null, genau: pos ? pos.genau : null,
+      verarbeitet: false, erstelltAm: new Date().toISOString()
+    };
+    var liste = warteschlange(); liste.push(e); warteschlangeSetzen(liste);
+    initFirebase(function(){
+      var alle = warteschlange();
+      senden(alle, function(fehler){
+        if(!fehler) warteschlangeSetzen([]);
+        var txt = (art === 'start' ? 'Abfahrt ' : 'Ankunft ') + uhr(zeit) + (fz ? ' &middot; ' + esc(fz) : '') +
+          (pos ? '' : '<br><span class="warn">Kein Standort &ndash; bitte in Safari Ortungsdienste für diese Seite erlauben.</span>') +
+          (fehler ? '<br><span class="warn">Kein Internet &ndash; wird beim nächsten Mal nachgesendet.</span>' : '') +
+          '<br>Du kannst die Seite schließen.';
+        zeigen(art === 'start' ? '&#128663;' : '&#127937;', art === 'start' ? 'Fahrt gestartet' : 'Fahrt beendet', txt, 'ok');
+      });
+    });
+  });
+}
+function initFirebase(weiter){
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    var einmal = false;
+    firebase.auth().onAuthStateChanged(function(u){
+      if(einmal) return;
+      if(u){ einmal = true; weiter(); }
+      else loginZeigen(function(){ einmal = true; weiter(); });
+    });
+  }catch(e){ zeigen('&#9888;', 'Fehler', esc(e.message), 'warn'); }
+}
+start();
+</script>
+</body>
+</html>
