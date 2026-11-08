@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-08 15:40';
-var APP_VERSION_TEXT = '08.11. 15:40';
+var APP_VERSION = '2026-11-08 16:10';
+var APP_VERSION_TEXT = '08.11. 16:10';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -4835,7 +4835,8 @@ function rueckblickEintraege(kundeId, abJahr){
   geraete.forEach(function(g){
     if(g.ausgeschieden && g.ausgeschiedenAm){
       // Ersatzgeraet suchen: gleicher Kunde, gleiche Kategorie, gleiche Nr. oder gleicher Standort, danach angelegt
-      var ers = geraete.filter(function(x){
+      var ers = g.ersetztDurch ? geraete.filter(function(x){ return x.id === g.ersetztDurch; })[0] : null;
+      if(!ers) ers = geraete.filter(function(x){
         if(x.id === g.id || x.ausgeschieden) return false;
         if((x.kategorie || 'Feuerlöscher') !== (g.kategorie || 'Feuerlöscher')) return false;
         var gleich = (x.nr && g.nr && String(x.nr) === String(g.nr)) || (x.standort && g.standort && x.standort === g.standort);
@@ -4955,11 +4956,12 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
         var kid = g.kundeId;
         var ersatzHtml = '';
         ersatzHtml += '<div class="modal-head"><h3>Gerät ausgeschieden</h3></div>';
-        ersatzHtml += '<div style="font-size:14px; margin-bottom:16px;">Jetzt gleich ein Ersatzgerät für diesen Kunden anlegen?</div>';
-        ersatzHtml += '<button class="btn block" id="ersatzJa">Ja, Ersatzgerät anlegen</button>';
+        ersatzHtml += '<div style="font-size:14px; margin-bottom:16px;">Wird an dieser Stelle ein neues Gerät gesetzt? Nummer, Standort und QR-Code werden übernommen.</div>';
+        ersatzHtml += '<button class="btn block" id="ersatzJa">Ja, neues Gerät an gleicher Stelle</button>';
         ersatzHtml += '<button class="btn block secondary" id="ersatzNein" style="margin-top:10px;">Nein, fertig</button>';
         openModal(ersatzHtml);
-        document.getElementById('ersatzJa').onclick = function(){
+        document.getElementById('ersatzJa').onclick = function(){ modalErsatzSchnell(g, externeIdFuerErsatz, altNrFuerErsatz); };
+        if(false) document.getElementById('ersatzJa').onclick = function(){
           if(externeIdFuerErsatz){
             g.externeId = '';
             dbPut('geraete', g, function(){});
@@ -5110,11 +5112,12 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
         var kid = g.kundeId;
         var ersatzHtml = '';
         ersatzHtml += '<div class="modal-head"><h3>Gerät ausgeschieden</h3></div>';
-        ersatzHtml += '<div style="font-size:14px; margin-bottom:16px;">Jetzt gleich ein Ersatzgerät für diesen Kunden anlegen?</div>';
-        ersatzHtml += '<button class="btn block" id="ersatzJa">Ja, Ersatzgerät anlegen</button>';
+        ersatzHtml += '<div style="font-size:14px; margin-bottom:16px;">Wird an dieser Stelle ein neues Gerät gesetzt? Nummer, Standort und QR-Code werden übernommen.</div>';
+        ersatzHtml += '<button class="btn block" id="ersatzJa">Ja, neues Gerät an gleicher Stelle</button>';
         ersatzHtml += '<button class="btn block secondary" id="ersatzNein" style="margin-top:10px;">Nein, fertig</button>';
         openModal(ersatzHtml);
-        document.getElementById('ersatzJa').onclick = function(){
+        document.getElementById('ersatzJa').onclick = function(){ modalErsatzSchnell(g, externeIdFuerErsatz2, altNrFuerErsatz2); };
+        if(false) document.getElementById('ersatzJa').onclick = function(){
           if(externeIdFuerErsatz2){
             g.externeId = '';
             dbPut('geraete', g, function(){});
@@ -8697,6 +8700,69 @@ function bindTypChips(){
       document.getElementById('fTyp').value = c.getAttribute('data-val');
     };
   });
+}
+
+
+// ---------- Geraet tauschen: kurzes Formular fuer das Ersatzgeraet ----------
+function modalErsatzSchnell(alt, altExterneId, altNr){
+  var jahr = new Date().getFullYear();
+  var kat = (alt.kategorie || 'Feuerlöscher').trim();
+  var html = '<div class="modal-head"><h3>Neues Gerät an gleicher Stelle</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="card" style="background:#f3e9da; padding:10px 12px; margin-bottom:10px; font-size:13.5px;">';
+  html += '<b>Ersetzt:</b> Nr. ' + escapeHtml(String(altNr || '-')) + ' &middot; ' + escapeHtml(alt.typ || kat) + (alt.seriennummer ? ' &middot; SN ' + escapeHtml(alt.seriennummer) : '') + '<br>';
+  html += '<span style="color:#6b6258;">Übernommen: Nr. ' + escapeHtml(String(altNr || '-')) + ', Standort &bdquo;' + escapeHtml(alt.standort || '-') + '&ldquo;' + (altExterneId ? ', QR-Code' : '') + ', Prüfintervall</span></div>';
+  html += '<label>Typ des neuen Geräts</label><input id="fTyp" type="text" autocomplete="off" value="' + escapeHtml(alt.typ || '') + '" placeholder="eintippen oder Liste">';
+  html += '<label style="margin-top:8px;">Seriennummer <span style="color:#c23f12;">*</span></label><input id="esSn" type="text" autocomplete="off" placeholder="vom Typenschild (oder &bdquo;keine&ldquo;)">';
+  html += '<label style="margin-top:8px;">Baujahr</label><input id="esBj" type="number" inputmode="numeric" value="' + jahr + '">';
+  if(kat === 'Feuerlöscher') html += '<label style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input type="checkbox" id="fFluorfrei" style="width:20px; height:20px;"' + (alt.fluorfrei ? ' checked' : '') + '> Löschmittel fluorfrei</label>';
+  html += '<div id="esFehler" style="color:#c23f12; font-size:14px; min-height:18px; margin-top:6px;"></div>';
+  html += '<button class="btn block" id="esSpeichern">Neues Gerät speichern (heute geprüft)</button>';
+  html += '<button class="btn block secondary" id="esAusfuehrlich" style="margin-top:10px;">Andere Nummer / ausführliches Formular</button>';
+  openModal(html);
+  try{ bindTypVorschlaege(); }catch(e){}
+  document.getElementById('mClose').onclick = function(){ closeModal(); loadAll(function(){ render(); }); };
+  // Typ markieren, damit man gleich ueberschreiben kann
+  setTimeout(function(){ try{ var t = document.getElementById('fTyp'); t.focus(); t.select(); }catch(e){} }, 80);
+  document.getElementById('esAusfuehrlich').onclick = function(){
+    if(altExterneId){ alt.externeId = ''; dbPut('geraete', alt, function(){}); }
+    loadAll(function(){ render(); zeigeErsatzNummerWahl(alt.kundeId, alt.kategorie, altNr, alt.standort, altExterneId); });
+  };
+  document.getElementById('esSpeichern').onclick = function(){
+    var btn = document.getElementById('esSpeichern');
+    if(btn.getAttribute('data-busy')) return;
+    var typ = document.getElementById('fTyp').value.trim();
+    var sn = document.getElementById('esSn').value.trim();
+    var bj = parseInt(document.getElementById('esBj').value, 10);
+    var ffEl = document.getElementById('fFluorfrei');
+    var fe = document.getElementById('esFehler');
+    if(!typ){ fe.textContent = 'Bitte den Typ eintragen.'; return; }
+    if(!sn){ fe.textContent = 'Bitte die Seriennummer eintragen (gibt es keine: keine).'; return; }
+    btn.setAttribute('data-busy', '1'); btn.textContent = 'Speichert ...';
+    var jetztIso = new Date().toISOString();
+    var g = {
+      id: uid(), kundeId: alt.kundeId, kategorie: alt.kategorie || 'Feuerlöscher', typ: typ,
+      nr: alt.nr || (altNr ? parseInt(altNr, 10) : null), standort: alt.standort || '',
+      externeId: altExterneId || '', intervallMonate: alt.intervallMonate || 24,
+      seriennummer: sn, baujahr: (bj && !isNaN(bj)) ? bj : null, fluorfrei: !!(ffEl && ffEl.checked),
+      erstelltAm: jetztIso, ersetzt: alt.id, letztePruefung: jetztIso.substring(0, 10)
+    };
+    g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
+    var weiter = function(){
+      alt.ersetztDurch = g.id;
+      if(altExterneId) alt.externeId = '';
+      dbPut('geraete', alt, function(){
+        dbPut('geraete', g, function(){
+          try{ syncOeffentlichesGeraet(g); }catch(e){}
+          try{ syncOeffentlichesGeraet(alt); }catch(e){}
+          neuenOffenenTerminAnlegen(g, function(){
+            closeModal();
+            loadAll(function(){ render(); toast('Getauscht: Nr. ' + (g.nr || '') + ' ' + typ + ' (nächste Prüfung ' + fmtDate(g.naechstePruefung) + ')'); });
+          });
+        });
+      });
+    };
+    weiter();
+  };
 }
 
 function zeigeErsatzNummerWahl(kundeId, kategorie, alteNr, standort, externeId){
