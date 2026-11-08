@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-08 18:00';
-var APP_VERSION_TEXT = '08.11. 18:00';
+var APP_VERSION = '2026-11-08 18:45';
+var APP_VERSION_TEXT = '08.11. 18:45';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -11712,12 +11712,14 @@ function fbInboxHtml(fz){
     h += '<span style="color:#c23f12; font-weight:800;">B</span> ' + escapeHtml(f.laufend ? 'unterwegs ...' : (f.zielAdresse || (f.zielGeo ? 'Adresse wird ermittelt ...' : (f.endeUnbekannt ? 'Ende nicht gemeldet' : 'kein Standort')))) + (f.endeUnbekannt && f.zielGeo ? ' <span style="font-size:11.5px; color:#8a7d70;">(Ort der nächsten Abfahrt)</span>' : '') + '</div>';
     if(k) h += '<div style="font-size:13.5px; margin-top:6px; color:#2a2622;">&#127970; <b>' + escapeHtml(k.name) + '</b>' + (f.kundeVorschlag ? ' <span style="color:#8a7d70; font-size:12px;">(Vorschlag)</span>' : '') + '</div>';
     if(f.fahrer) h += '<div class="meta">Fahrer: ' + escapeHtml(f.fahrer) + '</div>';
+    if(f.laufend) h += '<div style="display:flex; gap:6px; margin-top:10px;"><button type="button" class="btn small secondary fbInDel" data-fid="' + escapeHtml(f.id) + '" style="flex:1;">&#128465; Löschen</button></div>';
     if(!f.laufend){
       h += '<div style="display:flex; gap:6px; margin-top:10px;">';
       h += '<button type="button" class="btn small ' + (f.privat ? '' : 'secondary') + ' fbInPrivat" data-fid="' + escapeHtml(f.id) + '" data-p="1" style="flex:1;' + (f.privat ? ' background:#7b3fa0;' : '') + '">Privat</button>';
       h += '<button type="button" class="btn small ' + (f.privat ? 'secondary' : '') + ' fbInPrivat" data-fid="' + escapeHtml(f.id) + '" data-p="0" style="flex:1;' + (f.privat ? '' : ' background:#2e7d4f;') + '">Geschäftlich</button>';
       h += '</div><div style="display:flex; gap:6px; margin-top:6px;">';
-      h += '<button type="button" class="btn small secondary" data-fbedit="' + escapeHtml(f.id) + '" style="flex:1;">Bearbeiten (Kunde, km)</button>';
+      h += '<button type="button" class="btn small secondary fbInDel" data-fid="' + escapeHtml(f.id) + '" style="flex:0 0 52px;" aria-label="Löschen">&#128465;</button>';
+      h += '<button type="button" class="btn small secondary" data-fbedit="' + escapeHtml(f.id) + '" style="flex:1;">Bearbeiten</button>';
       h += '<button type="button" class="btn small fbInOk" data-fid="' + escapeHtml(f.id) + '" style="flex:1;">&#10003; Geprüft</button></div>';
     }
     h += '</div>';
@@ -11727,6 +11729,17 @@ function fbInboxHtml(fz){
 document.addEventListener('click', function(ev){
   var t = ev.target && ev.target.closest ? ev.target : null;
   if(!t) return;
+  var dl = t.closest('.fbInDel');
+  if(dl){
+    ev.stopPropagation();
+    var fid = dl.getAttribute('data-fid');
+    customConfirm('Diese Fahrt löschen?', function(){
+      state.fahrten = (state.fahrten || []).filter(function(x){ return x.id !== fid; });
+      dbDelete('fahrten', fid, function(){ render(); toast('Fahrt gelöscht'); });
+      render();
+    });
+    return;
+  }
   var b = t.closest('.fbInPrivat'), o = t.closest('.fbInOk');
   var el = b || o;
   if(!el) return;
