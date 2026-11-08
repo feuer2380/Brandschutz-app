@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-08 18:45';
-var APP_VERSION_TEXT = '08.11. 18:45';
+var APP_VERSION = '2026-11-08 19:20';
+var APP_VERSION_TEXT = '08.11. 19:20';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -11534,7 +11534,8 @@ function fbFahrzeugZuParam(p){
     t = l.filter(function(f){ return fbKennz(f.name).indexOf(n) > -1 || n.indexOf(fbKennz(f.kennzeichen)) > -1 && fbKennz(f.kennzeichen); })[0];
     if(t) return t;
   }
-  return l.length === 1 ? l[0] : null;
+  // Kein passendes Kennzeichen (z.B. Platzhalter im Kurzbefehl): erstes Fahrzeug nehmen, damit keine Fahrt verloren geht
+  return l.length ? l[0] : null;
 }
 function fbEntfernungKm(a, b){
   if(!a || !b || a.lat == null || b.lat == null) return null;
@@ -11696,6 +11697,48 @@ var fbErsteVerarbeitung = setInterval(function(){
 }, 3000);
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible' && typeof appGestartet !== 'undefined' && appGestartet) setTimeout(fahrtEreignisseVerarbeiten, 1500); });
 
+
+// ---------- Fahrt starten / beenden per Knopf (Plan B ohne Kurzbefehl-Automation) ----------
+function fbKnopfHtml(fz){
+  var laeuft = fbFahrtenVon(fz.id).filter(function(f){ return f.laufend; }).pop();
+  var h = '<div class="card" style="padding:12px;">';
+  if(laeuft){
+    h += '<div style="font-size:13.5px; color:#2a2622; margin-bottom:8px;">&#128663; Fahrt läuft seit <b>' + escapeHtml(laeuft.abfahrt || '?') + '</b>' + (laeuft.startAdresse ? ' &middot; ab ' + escapeHtml(laeuft.startAdresse) : '') + '</div>';
+    h += '<button type="button" class="btn block fbKnopf" data-a="ende" style="background:#2e7d4f; font-size:18px; padding:16px;">&#127937; Fahrt beenden</button>';
+  } else {
+    h += '<button type="button" class="btn block fbKnopf" data-a="start" style="font-size:18px; padding:16px;">&#128663; Fahrt starten</button>';
+  }
+  h += '<div class="meta" style="margin-top:6px; text-align:center; color:#8a7d70;">Uhrzeit und Standort werden gespeichert, Adresse und km automatisch ergänzt.</div>';
+  h += '</div>';
+  return h;
+}
+function fbKnopfDruecken(art, btn){
+  var fz = fbAktuellesFahrzeug();
+  if(!fz) return;
+  if(btn){ btn.disabled = true; btn.textContent = 'Standort wird ermittelt ...'; }
+  var zeit = new Date();
+  var speichern = function(pos){
+    var e = { id: 'fe_' + zeit.getTime() + '_' + Math.random().toString(36).slice(2, 7), typ: art, zeit: zeit.toISOString(),
+      fz: fz.kennzeichen || fz.id, fahrer: (state.rolle === 'chef' ? (typeof CHEF_NAME !== 'undefined' ? CHEF_NAME : 'Chef') : (state.mitarbeiterName || '')),
+      lat: pos ? pos.coords.latitude : null, lon: pos ? pos.coords.longitude : null, genau: pos ? Math.round(pos.coords.accuracy || 0) : null,
+      verarbeitet: false, erstelltAm: new Date().toISOString(), quelle: 'app' };
+    db.collection('fahrtereignisse').doc(e.id).set(e).then(function(){
+      toast((art === 'start' ? 'Fahrt gestartet ' : 'Fahrt beendet ') + fbHHMM(e.zeit) + (pos ? '' : ' (ohne Standort)'));
+      setTimeout(fahrtEreignisseVerarbeiten, 300);
+    }).catch(function(){ toast('Speichern fehlgeschlagen - Internet?'); render(); });
+  };
+  if(!navigator.geolocation){ speichern(null); return; }
+  var fertig = false;
+  var t = setTimeout(function(){ if(!fertig){ fertig = true; speichern(null); } }, 15000);
+  navigator.geolocation.getCurrentPosition(function(p){ if(fertig) return; fertig = true; clearTimeout(t); speichern(p); },
+    function(){ if(fertig) return; fertig = true; clearTimeout(t); speichern(null); }, { enableHighAccuracy: true, timeout: 14000, maximumAge: 0 });
+}
+document.addEventListener('click', function(ev){
+  var b = ev.target && ev.target.closest ? ev.target.closest('.fbKnopf') : null;
+  if(!b || b.disabled) return;
+  fbKnopfDruecken(b.getAttribute('data-a'), b);
+});
+
 function fbInboxHtml(fz){
   var liste = fbFahrtenVon(fz.id).filter(function(f){ return f.auto && (f.zuPruefen || f.laufend); }).reverse();
   if(!liste.length) return '';
@@ -11780,6 +11823,7 @@ function renderFahrtenbuch(){
   html += '<div class="meta">Dieser Monat: <b>' + fbFmt(sm.km) + ' km</b>' + (sm.kmPrivat ? ' (dienstlich ' + fbFmt(sm.kmDienst) + ' &middot; <b style="color:#7b3fa0;">privat ' + fbFmt(sm.kmPrivat) + ' km</b>)' : '') + ' &middot; getankt: <b>' + fbFmt(sm.liter, 1) + ' l</b>' + (sm.euro ? ' &middot; <b>' + fbFmt(sm.euro, 2) + ' &euro;</b>' : '') + '</div>';
   if(fz && fz.kmGeld) html += '<div style="margin-top:8px; padding:10px 12px; border-radius:10px; background:#e5f4ea; color:#1e8449; display:flex; justify-content:space-between; align-items:center;"><span>Kilometergeld ' + aufgMonatText(mon) + '<br><span style="font-size:12px;">' + fbFmt(sm.kmDienst) + ' km dienstlich &times; ' + fbFmt(fbKmGeldSatz(fz), 2) + ' &euro;</span></span><b style="font-size:20px;">' + fbFmt(sm.kmGeld, 2) + ' &euro;</b></div>';
   html += '<div style="display:flex; gap:8px; margin-top:10px;"><button class="btn" id="fbNeu" style="flex:1;">+ Fahrt eintragen</button><button class="btn secondary" id="fbDruck" style="flex:1;">Drucken / PDF</button></div></div>';
+  html += fbKnopfHtml(fz);
   html += fbInboxHtml(fz);
   if(!liste.length){
     html += '<div class="empty">Keine Fahrten in diesem Monat</div>';
