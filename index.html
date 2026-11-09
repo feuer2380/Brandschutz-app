@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-09 14:00';
-var APP_VERSION_TEXT = '09.11. 14:00';
+var APP_VERSION = '2026-11-09 14:15';
+var APP_VERSION_TEXT = '09.11. 14:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1802,11 +1802,36 @@ function kundeAufgabeKarteHtml(k, eintraege, statusFn){
     kats[kat]++;
   });
   var zusammen = katReihe.map(function(kt){ return kats[kt] + '&times; ' + escapeHtml(kt); }).join(' &middot; ');
-  if(liste.length === 1 && k && k.objekt) zusammen += ' &middot; ' + escapeHtml(k.objekt);
+  if(k && k.objekt) zusammen += ' &middot; ' + escapeHtml(k.objekt);
+  // Verschiedene Termine beim selben Kunden: jede Pruefung mit eigenem Datum auflisten (sonst geht z.B. die Begehung unter)
+  var tageVerschieden = liste.some(function(p){ return String(p.datum).substring(0, 10) !== String(erste.datum).substring(0, 10); });
+  var detailHtml = '';
+  if(tageVerschieden){
+    var proTag = {}, tagReihe = [];
+    liste.forEach(function(p){
+      var dk = String(p.datum).substring(0, 10);
+      var g = geraetFuerPruefung(p);
+      var kat = g ? (g.kategorie || 'Feuerlöscher').trim() : (p.typ || 'Prüfung');
+      if(!proTag[dk]){ proTag[dk] = { p: p, kats: {}, reihe: [] }; tagReihe.push(dk); }
+      if(!proTag[dk].kats[kat]){ proTag[dk].kats[kat] = 0; proTag[dk].reihe.push(kat); }
+      proTag[dk].kats[kat]++;
+    });
+    detailHtml = '<div style="margin:6px 0 2px 0; font-size:14px; line-height:1.6;">';
+    tagReihe.forEach(function(dk){
+      var e = proTag[dk];
+      var sd = statusFn(e.p.datum);
+      var dd = new Date(dk + 'T12:00:00');
+      detailHtml += '<div style="display:flex; justify-content:space-between; gap:8px; border-top:1px dashed #eadfd2; padding-top:4px;"><span>' +
+        e.reihe.map(function(kt){ return (e.kats[kt] > 1 ? e.kats[kt] + '&times; ' : '') + escapeHtml(kt); }).join(', ') +
+        '</span><b style="white-space:nowrap;">' + wt[dd.getDay()] + ' ' + fmtDate(dk + 'T12:00:00').substring(0, 6) + ' <span class="badge ' + sd.cls + '" style="font-size:11px;">' + sd.label + '</span></b></div>';
+    });
+    detailHtml += '</div>';
+  }
   var h = '<div class="aufgabe ' + st.cls + ' kunde-card" data-id="' + (k ? k.id : '') + '">';
   h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
   h += '<div class="aufgabe-art">' + zusammen + '</div></div>';
   h += '<div class="aufgabe-datum"><b>' + (isNaN(dObj.getTime()) ? '' : wt[dObj.getDay()] + ' ') + kurz + '</b><span class="badge ' + st.cls + '">' + st.label + '</span></div></div>';
+  h += detailHtml;
   if(k && k.adresse) h += '<div class="aufgabe-adr">&#128205; ' + escapeHtml(k.adresse) + '</div>';
   // Offener Termin fuer diesen Kunden (naechster ab heute)? Dann auf der Karte anzeigen
   var kTermin = null;
@@ -11768,24 +11793,35 @@ var fbErsteVerarbeitung = setInterval(function(){
 }, 3000);
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible' && typeof appGestartet !== 'undefined' && appGestartet) setTimeout(fahrtEreignisseVerarbeiten, 1500); });
 
-// Reparatur: aktive Geraete mit "Naechste Pruefung", aber ohne offenen Pruef-Termin, erscheinen sonst nicht in der Uebersicht
-function fehlendeTermineErgaenzen(){
+// Reparatur: aktive Geraete mit "Naechste Pruefung" muessen genau so in der Uebersicht stehen:
+// fehlender offener Termin -> anlegen; Termin beim falschen Kunden oder mit anderem Datum -> an das Geraet angleichen
+function fehlendeTermineErgaenzen(zeigen){
   if(!istVollsicht()) return 0;
   var offenFuer = {};
-  (state.pruefungen || []).forEach(function(p){ if(!p.erledigt && p.geraetId) offenFuer[p.geraetId] = true; });
-  var neu = 0;
+  (state.pruefungen || []).forEach(function(p){ if(!p.erledigt && p.geraetId){ (offenFuer[p.geraetId] = offenFuer[p.geraetId] || []).push(p); } });
+  var angelegt = 0, korrigiert = 0;
   (state.geraete || []).forEach(function(g){
-    if(g.ausgeschieden || !g.kundeId || !g.naechstePruefung || offenFuer[g.id] || !kundeIstAktiv(g.kundeId)) return;
+    if(g.ausgeschieden || !g.kundeId || !g.naechstePruefung || !kundeIstAktiv(g.kundeId)) return;
     var datum = String(g.naechstePruefung).substring(0, 10);
-    // feste ID: auch wenn zwei Geraete gleichzeitig reparieren, entsteht nur ein Termin
-    var pNeu = { id: 'auto_' + g.id + '_' + datum, kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: datum, erledigt: false };
-    state.pruefungen.push(pNeu);
-    offenFuer[g.id] = true;
-    dbPut('pruefungen', pNeu, function(){});
-    neu++;
+    var liste = offenFuer[g.id] || [];
+    if(!liste.length){
+      // feste ID: auch wenn zwei Geraete gleichzeitig reparieren, entsteht nur ein Termin
+      var pNeu = { id: 'auto_' + g.id + '_' + datum, kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: datum, erledigt: false };
+      state.pruefungen.push(pNeu);
+      dbPut('pruefungen', pNeu, function(){});
+      angelegt++;
+      return;
+    }
+    liste.forEach(function(p){
+      var geaendert = false;
+      if(p.kundeId !== g.kundeId){ p.kundeId = g.kundeId; geaendert = true; }
+      if(String(p.datum || '').substring(0, 10) !== datum){ p.datumVorReparatur = p.datum || null; p.datum = datum; geaendert = true; }
+      if(geaendert){ dbPut('pruefungen', p, function(){}); korrigiert++; }
+    });
   });
-  if(neu){ console.log('Fehlende Pruef-Termine ergaenzt:', neu); render(); }
-  return neu;
+  if(angelegt || korrigiert){ console.log('Pruef-Termine repariert:', angelegt, 'angelegt,', korrigiert, 'korrigiert'); render(); }
+  if(zeigen || angelegt || korrigiert) toast('Termine geprüft: ' + angelegt + ' ergänzt, ' + korrigiert + ' korrigiert');
+  return angelegt + korrigiert;
 }
 var ftErsterLauf = setInterval(function(){
   if(typeof appGestartet !== 'undefined' && appGestartet && (state.geraete || []).length){ clearInterval(ftErsterLauf); setTimeout(fehlendeTermineErgaenzen, 4000); }
