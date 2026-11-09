@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-09 09:50';
-var APP_VERSION_TEXT = '09.11. 09:50';
+var APP_VERSION = '2026-11-09 11:50';
+var APP_VERSION_TEXT = '09.11. 11:50';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -11635,6 +11635,8 @@ function fahrtEreignisseVerarbeiten(){
       var alle = fbFahrtenVon(fz.id);
       var laufend = alle.filter(function(x){ return x.laufend; }).pop();
       if(e.typ === 'start'){
+        // doppelte Start-Meldung (z.B. Bluetooth UND CarPlay melden kurz hintereinander): ignorieren
+        if(laufend && laufend.startZeit && Math.abs(new Date(e.zeit) - new Date(laufend.startZeit)) < 3 * 60000 && (fbEntfernungKm(geo, laufend.startGeo) || 0) < 0.3){ fertig(laufend.id); return; }
         // kurze Unterbrechung (< 5 Min, gleicher Ort): vorige Fahrt fortsetzen statt neue anlegen
         var letzte = alle.filter(function(x){ return x.auto && !x.laufend && x.endeZeit; }).pop();
         if(letzte && !letzte.startUnbekannt && !letzte.endeUnbekannt && letzte.startGeo && !laufend &&
