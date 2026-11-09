@@ -12042,7 +12042,21 @@ function bindFahrtenbuch(){
   if(dr) dr.onclick = function(){
     var fz = fbAktuellesFahrzeug();
     if(!fz) return;
-    bsvDruckenOderTeilen(buildFahrtenbuchHtml(fz, state.fbMonat), 'Fahrtenbuch_' + (fz.kennzeichen || fz.name).replace(/[^A-Za-z0-9]+/g, '_') + '_' + state.fbMonat + '.pdf');
+    var mh = '<div class="modal-head"><h3>Fahrtenbuch drucken</h3><button class="close" id="mClose">&times;</button></div>';
+    mh += '<div class="meta" style="margin-bottom:12px;">Was soll gedruckt werden?</div>';
+    mh += '<button class="btn" id="fbDrDienst" style="width:100%; margin-bottom:8px;">Nur Dienstfahrten<br><span style="font-size:12px; font-weight:400;">f&uuml;r die Buchhaltung</span></button>';
+    mh += '<button class="btn secondary" id="fbDrPrivat" style="width:100%; margin-bottom:8px;">Nur Privatfahrten</button>';
+    mh += '<button class="btn secondary" id="fbDrAlle" style="width:100%;">Alle Fahrten</button>';
+    openModal(mh);
+    var mc = document.getElementById('mClose'); if(mc) mc.onclick = closeModal;
+    var basis = 'Fahrtenbuch_' + (fz.kennzeichen || fz.name).replace(/[^A-Za-z0-9]+/g, '_') + '_' + state.fbMonat;
+    var los = function(modus, zusatz){
+      closeModal();
+      bsvDruckenOderTeilen(buildFahrtenbuchHtml(fz, state.fbMonat, modus), basis + zusatz + '.pdf');
+    };
+    document.getElementById('fbDrDienst').onclick = function(){ los('dienst', '_Dienstfahrten'); };
+    document.getElementById('fbDrPrivat').onclick = function(){ los('privat', '_Privatfahrten'); };
+    document.getElementById('fbDrAlle').onclick = function(){ los('alle', ''); };
   };
   document.querySelectorAll('.fbKetteFix').forEach(function(el){
     el.onclick = function(ev){
@@ -12250,9 +12264,13 @@ function modalFahrt(fahrtId){
     });
   };
 }
-function buildFahrtenbuchHtml(fz, monKey){
+function buildFahrtenbuchHtml(fz, monKey, modus){
+  modus = modus || 'alle';
   var liste = fbMonatListe(fz.id, monKey, true);
+  if(modus === 'dienst') liste = liste.filter(function(f){ return !f.privat; });
+  if(modus === 'privat') liste = liste.filter(function(f){ return f.privat; });
   var sm = fbSummen(liste);
+  var titel = modus === 'dienst' ? 'FAHRTENBUCH &ndash; DIENSTFAHRTEN' : (modus === 'privat' ? 'FAHRTENBUCH &ndash; PRIVATFAHRTEN' : 'FAHRTENBUCH');
   var zelle = 'border:1px solid #333; padding:6px 5px; font-size:11px; vertical-align:top;';
   var kopf = 'border:1px solid #333; background:#eee; padding:6px 5px; font-size:11px; font-weight:700; text-align:left;';
   var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
@@ -12260,29 +12278,48 @@ function buildFahrtenbuchHtml(fz, monKey){
   h += '<table style="width:100%; border-collapse:collapse; margin-bottom:4px;"><tr>';
   h += '<td style="vertical-align:top; width:120px;"><img src="' + LOGO_DATA + '" style="width:105px;"></td>';
   h += '<td style="vertical-align:top; text-align:right; font-size:9px; color:#222; line-height:1.5;">Wolfgang Janiba<br>Brandschutztechnik GmbH<br><br>Ketzergasse 299, 2380 Perchtoldsdorf<br>www.loeschtechnik.at, 0676 / 305 83 98</td></tr></table>';
-  h += '<div style="text-align:center; font-size:16px; font-weight:700; margin:8px 0 10px;">FAHRTENBUCH</div>';
+  h += '<div style="text-align:center; font-size:16px; font-weight:700; margin:8px 0 10px;">' + titel + '</div>';
   h += '<table style="width:100%; border-collapse:collapse; margin-bottom:10px;"><tr>';
   h += '<td style="' + kopf + ' width:15%;">Fahrzeug</td><td style="' + zelle + ' width:35%;">' + escapeHtml(fz.name) + (fz.kennzeichen ? ' (' + escapeHtml(fz.kennzeichen) + ')' : '') + '</td>';
   h += '<td style="' + kopf + ' width:15%;">Monat</td><td style="' + zelle + ' width:35%;">' + aufgMonatText(monKey) + '</td></tr></table>';
   if(!liste.length){
-    h += '<div style="margin:16px 0;">Keine Fahrten in diesem Monat.</div>';
+    h += '<div style="margin:16px 0;">' + (modus === 'dienst' ? 'Keine Dienstfahrten' : (modus === 'privat' ? 'Keine Privatfahrten' : 'Keine Fahrten')) + ' in diesem Monat.</div>';
   } else {
     h += '<table style="width:100%; border-collapse:collapse; table-layout:fixed;"><colgroup><col style="width:17%"><col style="width:23%"><col style="width:30%"><col style="width:15%"><col style="width:15%"></colgroup>';
     h += '<thead><tr><th style="' + kopf + '">Datum / Zeit</th><th style="' + kopf + '">Km-Stand</th><th style="' + kopf + '">Kunde / Tätigkeit</th><th style="' + kopf + '">Fahrer</th><th style="' + kopf + '">Getankt</th></tr></thead><tbody>';
     liste.forEach(function(f){
       var d = new Date(f.datum + 'T12:00:00');
       var str = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
-      var zs = zelle + (f.privat ? ' background:#f1eaf6;' : '');
+      var zs = zelle + (f.privat && modus === 'alle' ? ' background:#f1eaf6;' : '');
       h += '<tr style="page-break-inside:avoid; break-inside:avoid;">';
       h += '<td style="' + zs + '">' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + '<br>' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') + '</td>';
       var kgD = fbKmGeld(f, fz);
       h += '<td style="' + zs + '">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + '<br><b>' + (str !== null ? fbFmt(str) + ' km' : '-') + '</b>' + (kgD ? '<br><span style="color:#1e8449;">km-Geld ' + fbFmt(kgD, 2) + ' &euro;</span>' : '') + '</td>';
-      h += '<td style="' + zs + ' word-wrap:break-word;">' + (f.privat ? '<b>PRIVATFAHRT</b>' + (fbZeileText(f) ? '<br>' : '') : '') + (fbHtmlText(fbZeileText(f)) || (f.privat ? '' : '&nbsp;')) + '</td>';
+      h += '<td style="' + zs + ' word-wrap:break-word;">' + (f.privat && modus === 'alle' ? '<b>PRIVATFAHRT</b>' + (fbZeileText(f) ? '<br>' : '') : '') + (fbHtmlText(fbZeileText(f)) || (f.privat ? '' : '&nbsp;')) + '</td>';
       h += '<td style="' + zs + '">' + (escapeHtml(f.fahrer || '') || '&nbsp;') + '</td>';
       h += '<td style="' + zs + '">' + (f.liter ? fbFmt(f.liter, 1) + ' l' : '') + (f.euro ? '<br>' + fbFmt(f.euro, 2) + ' &euro;' : '') + (!f.liter && !f.euro ? '&nbsp;' : '') + '</td></tr>';
     });
     h += '<tr><td colspan="2" style="' + kopf + '">Summe: ' + fbFmt(sm.km) + ' km</td><td colspan="3" style="' + kopf + '">Getankt: ' + fbFmt(sm.liter, 1) + ' l' + (sm.euro ? ' &middot; ' + fbFmt(sm.euro, 2) + ' &euro;' : '') + '</td></tr>';
     h += '</tbody></table>';
+    if(modus === 'dienst'){
+      h += '<table style="width:100%; border-collapse:collapse; margin-top:12px; page-break-inside:avoid;"><tr>';
+      h += '<td style="' + kopf + ' width:25%;">Dienstfahrten</td><td style="' + zelle + ' width:25%;"><b>' + liste.length + '</b></td>';
+      h += '<td style="' + kopf + ' width:25%;">Dienstlich gefahren</td><td style="' + zelle + ' width:25%;"><b>' + fbFmt(sm.km) + ' km</b></td></tr>';
+      if(fz.kmGeld){
+        h += '<tr><td style="' + kopf + '">Kilometergeld</td><td colspan="3" style="' + zelle + ' background:#e5f4ea;"><b>' + fbFmt(sm.kmGeld, 2) + ' &euro;</b> &nbsp;(' + fbFmt(sm.km) + ' km dienstlich &times; ' + fbFmt(fbKmGeldSatz(fz), 2) + ' &euro;/km amtliches Kilometergeld)</td></tr>';
+      }
+      h += '</table>';
+      h += '<table style="width:100%; border-collapse:collapse; margin-top:40px; page-break-inside:avoid;"><tr><td style="width:45%; border-top:1px solid #333; padding-top:4px; font-size:10px;">Datum</td><td style="width:10%;"></td><td style="width:45%; border-top:1px solid #333; padding-top:4px; font-size:10px;">Unterschrift</td></tr></table>';
+      h += '</div>';
+      return h;
+    }
+    if(modus === 'privat'){
+      h += '<table style="width:100%; border-collapse:collapse; margin-top:12px; page-break-inside:avoid;"><tr>';
+      h += '<td style="' + kopf + ' width:25%;">Privatfahrten</td><td style="' + zelle + ' width:25%;"><b>' + liste.length + '</b></td>';
+      h += '<td style="' + kopf + ' width:25%;">Privat gefahren</td><td style="' + zelle + ' width:25%;"><b>' + fbFmt(sm.km) + ' km</b></td></tr></table>';
+      h += '</div>';
+      return h;
+    }
     // Aufteilung dienstlich / privat
     var anteil = sm.km ? Math.round(sm.kmPrivat / sm.km * 1000) / 10 : 0;
     h += '<table style="width:100%; border-collapse:collapse; margin-top:12px; page-break-inside:avoid;"><tr>';
