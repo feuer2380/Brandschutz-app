@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-09 14:15';
-var APP_VERSION_TEXT = '09.11. 14:15';
+var APP_VERSION = '2026-11-09 21:30';
+var APP_VERSION_TEXT = '09.11. 21:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -11718,6 +11718,19 @@ function fahrtEreignisseVerarbeiten(){
       if(luft !== null){
         f2.kmGeschaetzt = Math.max(0, Math.round(luft * 1.3));
         if(f2.kmStart !== null && f2.kmStart !== undefined) f2.kmEnde = f2.kmStart + f2.kmGeschaetzt;
+        // Start nicht gemeldet: Abfahrtszeit aus Strecke schaetzen (ca. 35 km/h + 3 Min, mind. 5 Min)
+        if(f2.startUnbekannt && !f2.abfahrt){
+          var minuten = Math.max(5, Math.round((luft * 1.3) / 35 * 60) + 3);
+          var abD = new Date(new Date(e.zeit).getTime() - minuten * 60000);
+          // nicht vor dem Ende der vorigen Fahrt
+          var vorEnde = alle.filter(function(x){ return x.id !== f2.id && x.endeZeit && x.endeZeit < e.zeit; }).map(function(x){ return x.endeZeit; }).sort().pop();
+          if(vorEnde && abD.toISOString() < vorEnde) abD = new Date(new Date(vorEnde).getTime() + 60000);
+          if(fbLokalDatum(abD.toISOString()) === f2.datum){
+            f2.startZeit = abD.toISOString();
+            f2.abfahrt = fbHHMM(f2.startZeit);
+            f2.abfahrtGeschaetzt = true;
+          }
+        }
       }
       dbPut('fahrten', f2, function(){ fbKetteNachziehen(f2); fertig(f2.id); });
     };
@@ -11880,7 +11893,7 @@ function fbInboxHtml(fz){
     var k = f.kundeId ? state.kunden.filter(function(x){ return x.id === f.kundeId; })[0] : null;
     var strecke = (f.kmStart != null && f.kmEnde != null) ? f.kmEnde - f.kmStart : (f.kmGeschaetzt != null ? f.kmGeschaetzt : null);
     h += '<div class="card" style="border-left:5px solid ' + (f.laufend ? '#d39a00' : (f.privat ? '#7b3fa0' : '#2e7d4f')) + ';">';
-    h += '<div class="row" style="align-items:flex-start;"><b style="color:#2a2622;">' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + ' &middot; ' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.laufend ? 'läuft' : (f.ende || '?')) + '</b>';
+    h += '<div class="row" style="align-items:flex-start;"><b style="color:#2a2622;">' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + ' &middot; ' + (f.abfahrtGeschaetzt ? 'ca. ' : '') + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.laufend ? 'läuft' : (f.ende || '?')) + '</b>';
     h += '<span class="badge" style="white-space:nowrap;">' + (strecke !== null ? (f.kmGeschaetzt != null && !f.kmBestaetigt ? 'ca. ' : '') + fbFmt(strecke) + ' km' : '? km') + '</span></div>';
     h += '<div style="font-size:13.5px; color:#2a2622; margin-top:6px; line-height:1.5;"><span style="color:#2e7d4f; font-weight:800;">A</span> ' + escapeHtml(f.startAdresse || (f.startGeo ? 'Adresse wird ermittelt ...' : (f.startUnbekannt ? 'Start nicht erfasst' : 'kein Standort'))) + (f.startAusVorfahrt ? ' <span style="font-size:11.5px; color:#8a7d70;">(Ort der letzten Ankunft)</span>' : '') + '<br>';
     h += '<span style="color:#c23f12; font-weight:800;">B</span> ' + escapeHtml(f.laufend ? 'unterwegs ...' : (f.zielAdresse || (f.zielGeo ? 'Adresse wird ermittelt ...' : (f.endeUnbekannt ? 'Ende nicht gemeldet' : 'kein Standort')))) + (f.endeUnbekannt && f.zielGeo ? ' <span style="font-size:11.5px; color:#8a7d70;">(Ort der nächsten Abfahrt)</span>' : '') + '</div>';
@@ -11998,7 +12011,7 @@ function renderFahrtenbuch(){
       var strecke = (f.kmStart !== null && f.kmStart !== undefined && f.kmEnde !== null && f.kmEnde !== undefined) ? (f.kmEnde - f.kmStart) : null;
       html += '<div class="card" data-fbedit="' + escapeHtml(f.id) + '" style="cursor:pointer;' + (f.privat ? ' border-left:5px solid #7b3fa0;' : '') + '">';
       if(f.privat) html += '<span class="badge" style="background:#efe4f5; color:#7b3fa0; float:right; margin-left:6px;">Privat</span>';
-      html += '<div class="row"><h3>' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + (f.abfahrt || f.ende ? ' &middot; ' + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') : '') + '</h3><span class="badge blau">' + (strecke !== null ? fbFmt(strecke) + ' km' : '-') + '</span></div>';
+      html += '<div class="row"><h3>' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + (f.abfahrt || f.ende ? ' &middot; ' + (f.abfahrtGeschaetzt ? 'ca. ' : '') + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.ende || '?') : '') + '</h3><span class="badge blau">' + (strecke !== null ? fbFmt(strecke) + ' km' : '-') + '</span></div>';
       var zt = fbZeileText(f);
       if(zt) html += '<div class="meta" style="font-size:14px; color:var(--ink);">' + fbHtmlText(zt) + '</div>';
       html += '<div class="meta">' + (f.kmStart !== null && f.kmStart !== undefined ? fbFmt(f.kmStart) : '?') + ' &rarr; ' + (f.kmEnde !== null && f.kmEnde !== undefined ? fbFmt(f.kmEnde) : '?') + ' km' + (f.fahrer ? ' &middot; ' + escapeHtml(f.fahrer) : '') + '</div>';
@@ -12202,7 +12215,9 @@ function modalFahrt(fahrtId){
     if(a !== null && b !== null && b < a){ toast('Km-Stand Ende ist kleiner als Start'); return; }
     var neu = f || { id: uid(), fahrzeugId: fz.id, erstelltAm: new Date().toISOString(), erstelltVon: fahrerStd };
     neu.datum = datum;
-    neu.abfahrt = document.getElementById('ftAb').value || '';
+    var abNeu = document.getElementById('ftAb').value || '';
+    if(neu.abfahrtGeschaetzt && abNeu !== neu.abfahrt) neu.abfahrtGeschaetzt = false;
+    neu.abfahrt = abNeu;
     neu.ende = document.getElementById('ftEnde').value || '';
     neu.kmStart = a;
     neu.kmEnde = b;
