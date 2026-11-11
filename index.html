@@ -14122,7 +14122,7 @@ function modalSammelbericht(kundeId){
         function speichereNaechstenBericht(){
           if(bi >= berichteZuSpeichern.length){
             fertigMarkiert = true;
-            loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast(berichteZuSpeichern.length + ' Prüfbericht(e) erstellt'); });
+            loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast(berichteZuSpeichern.length + ' Prüfbericht(e) erstellt'); var kLs = state.kunden.filter(function(x){ return x.id === kundeId; })[0]; modalLieferschein(berichteZuSpeichern, kLs); });
             return;
           }
           dbPut('sammelberichte', berichteZuSpeichern[bi], function(){
@@ -14879,6 +14879,7 @@ function modalSammelberichtAnsicht(sbId){
   html += querSchalterHtml();
   html += '<button class="btn block" id="druckBtnSb">Drucken / Als PDF teilen</button>';
   html += '<button class="btn block secondary" id="mailBtnSb" style="margin-top:10px;">Per E-Mail senden</button>';
+  html += '<button class="btn block secondary" id="lsBtnSb" style="margin-top:10px;">Lieferschein erstellen</button>';
   html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
   html += '<button class="btn block secondary" id="sbRueckBtn" style="margin-top:16px; color:#c23f12; border-color:#e6b19d;">Versehentlich erstellt? Prüfungen zurücksetzen und Bericht löschen</button>';
   html += '</div>';
@@ -14889,6 +14890,7 @@ function modalSammelberichtAnsicht(sbId){
       sammelberichtRueckgaengig(sb, function(n){ closeModal(); render(); toast(n + ' Prüfungen zurückgesetzt'); });
     });
   };
+  document.getElementById('lsBtnSb').onclick = function(){ modalLieferschein([sb], k); };
   document.getElementById('sbNrSpeichern').onclick = function(){
     sb.berichtNr = document.getElementById('sbNrBearbeiten').value.trim();
     dbPut('sammelberichte', sb, function(){
@@ -14950,6 +14952,251 @@ function modalQrKunde(kundeId){
   } catch(e){
     document.getElementById('qrTarget').innerHTML = '<div class="meta">QR-Code konnte nicht geladen werden (offline)</div>';
   }
+}
+
+// ---------- Lieferschein (Rechnungsblock-Formular automatisch ausfuellen) ----------
+var LS_VORLAGE_URL = 'lieferschein-vorlage.pdf';
+var LS_PDFLIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+var LS_MARKEN = ['gloria', 'bavaria', 'minimax', 'total', 'jockel', 'neuruppin', 'presto', 'ansul', 'kidde', 'calanbau', 'fireman', 'rosenbauer', 'sahlberg', 'eversafe', 'gielle', 'anaf', 'brandmeister', 'feuerschutz'];
+
+function lsPdfLibLaden(cb){
+  if(window.PDFLib){ cb(null); return; }
+  var s = document.createElement('script');
+  s.src = LS_PDFLIB_URL;
+  s.onload = function(){ cb(window.PDFLib ? null : new Error('PDF-Bibliothek nicht verfuegbar')); };
+  s.onerror = function(){ cb(new Error('PDF-Bibliothek konnte nicht geladen werden (Internet?)')); };
+  document.head.appendChild(s);
+}
+
+function lsTypZerlegen(typ){
+  var t = String(typ || '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  var teile = t.split(' ');
+  if(teile.length > 1 && LS_MARKEN.indexOf(teile[0].toLowerCase()) > -1){
+    return { fabrikat: teile[0], type: teile.slice(1).join(' ') };
+  }
+  return { fabrikat: '', type: t };
+}
+
+function lsAdresseZerlegen(adr){
+  var a = String(adr || '').trim();
+  var m = a.match(/^(.*?)[,\n]\s*(\d{4,5}\s.*)$/);
+  if(m) return [m[1].trim(), m[2].trim()];
+  var m2 = a.match(/^(.*?)\s+(\d{4}\s+\S.*)$/);
+  if(m2) return [m2[1].trim(), m2[2].trim()];
+  return [a, ''];
+}
+
+function lsDatum(iso){
+  var d = new Date(iso || new Date());
+  var tt = d.getDate(); if(tt < 10) tt = '0' + tt;
+  var mm = d.getMonth() + 1; if(mm < 10) mm = '0' + mm;
+  return tt + '.' + mm + '.' + d.getFullYear();
+}
+
+// berichte: Liste von Sammelberichten (eines Kunden), k: Kunde
+function lieferscheinDaten(berichte, k){
+  var gruppen = [];
+  var index = {};
+  var plaketten = 0;
+  var feuerloescher = false;
+  var nummern = [];
+  var datum = null;
+  var sigKunde = '', sigTechniker = '';
+  for(var b = 0; b < berichte.length; b++){
+    var sb = berichte[b];
+    if(sb.berichtNr && nummern.indexOf(sb.berichtNr) === -1) nummern.push(sb.berichtNr);
+    if(!datum) datum = sb.datum;
+    if(!sigKunde && sb.unterschriftKunde) sigKunde = sb.unterschriftKunde;
+    if(!sigTechniker && sb.unterschriftTechniker) sigTechniker = sb.unterschriftTechniker;
+    var liste = sb.geraeteSnapshot || [];
+    for(var i = 0; i < liste.length; i++){
+      var g = liste[i];
+      var kat = (g.kategorie || 'Feuerlöscher').trim();
+      if(kat === 'Feuerlöscher'){
+        feuerloescher = true;
+        if(g.ergebnis === 'In Ordnung') plaketten++;
+      }
+      var z = lsTypZerlegen(g.typ);
+      if(!z.type) z.type = kat;
+      var befund = g.ergebnis || '';
+      var schluessel = (z.fabrikat + '|' + z.type + '|' + befund).toLowerCase();
+      if(index[schluessel] === undefined){
+        index[schluessel] = gruppen.length;
+        gruppen.push({ anz: 0, fabrikat: z.fabrikat, type: z.type, befund: befund });
+      }
+      gruppen[index[schluessel]].anz++;
+    }
+  }
+  var adr = lsAdresseZerlegen(k ? k.adresse : '');
+  return {
+    firma: k ? (k.name || '') : '',
+    anschrift1: adr[0],
+    anschrift2: adr[1],
+    datum: lsDatum(datum),
+    kdnr: k ? (k.kundennummer || '') : '',
+    feuerloescher: feuerloescher,
+    gruppen: gruppen,
+    plaketten: plaketten,
+    berichtNummern: nummern,
+    sigKunde: sigKunde,
+    sigTechniker: sigTechniker
+  };
+}
+
+// Liefert ein Promise mit den PDF-Bytes
+function lieferscheinPdfErzeugen(daten, vorlageBytes){
+  var PL = window.PDFLib;
+  var doc, form;
+  return PL.PDFDocument.load(vorlageBytes).then(function(d){
+    doc = d;
+    form = doc.getForm();
+    var setze = function(name, wert, maxGroesse){
+      var f;
+      try{ f = form.getTextField(name); }catch(e){ return; }
+      var w = String(wert === null || wert === undefined ? '' : wert);
+      var breite = 300;
+      try{ breite = f.acroField.getWidgets()[0].getRectangle().width; }catch(eB){}
+      var groesse = Math.floor((breite - 6) / (Math.max(w.length, 1) * 0.52));
+      if(groesse > (maxGroesse || 9)) groesse = maxGroesse || 9;
+      if(groesse < 6) groesse = 6;
+      f.setFontSize(groesse);
+      f.setText(w);
+    };
+    var seite = doc.getPage(0);
+    // Kreuz selbst zeichnen (die Kaestchen im Formular haben kein sauberes Haekchen-Bild)
+    var haken = function(name){
+      var f;
+      try{ f = form.getCheckBox(name); }catch(e){ return; }
+      var r = f.acroField.getWidgets()[0].getRectangle();
+      var d = 1.5, farbe = PL.rgb(0, 0, 0);
+      seite.drawLine({ start: { x: r.x + d, y: r.y + d }, end: { x: r.x + r.width - d, y: r.y + r.height - d }, thickness: 1.4, color: farbe });
+      seite.drawLine({ start: { x: r.x + d, y: r.y + r.height - d }, end: { x: r.x + r.width - d, y: r.y + d }, thickness: 1.4, color: farbe });
+    };
+
+    setze('Text11', daten.firma, 10);
+    setze('Anschrift 1', daten.anschrift1, 10);
+    setze('Anschrift 2', daten.anschrift2, 10);
+    setze('am', daten.datum, 10);
+    setze('Kdnr', daten.kdnr, 10);
+    haken('LIEFERSCHEIN');
+    if(daten.feuerloescher) haken('Feuerlöschgeräten nach ÖNORM F 1053');
+
+    // 5 Pruefungszeilen, danach 4 breite Zeilen im Bereich Verkauf
+    var anzFelder = ['ANZ', 'Text7', 'Text8', 'Text9', 'Text10'];
+    var breitAnz = ['Text35', 'Text36', 'Text37', 'Text38'];
+    var g = daten.gruppen;
+    var platz = 5 + 4;
+    var anzeigen = g.length <= platz ? g.length : platz - 1;
+    for(var i = 0; i < anzeigen; i++){
+      if(i < 5){
+        setze(anzFelder[i], g[i].anz);
+        setze('FABRIKATRow' + (i + 1), g[i].fabrikat);
+        setze('TYPERow' + (i + 1), g[i].type);
+        setze('BEFUNDRow' + (i + 1), g[i].befund);
+      } else {
+        setze(breitAnz[i - 5], g[i].anz);
+        setze('Row' + (i - 4), (g[i].fabrikat ? g[i].fabrikat + ' ' : '') + g[i].type + '  –  ' + g[i].befund);
+      }
+    }
+    if(g.length > anzeigen){
+      var rest = 0;
+      for(var r = anzeigen; r < g.length; r++) rest += g[r].anz;
+      setze(breitAnz[3], rest);
+      setze('Row4', 'weitere Geräte lt. Prüfbericht');
+    }
+    if(daten.plaketten > 0) setze('Text34', daten.plaketten);
+    if(daten.berichtNummern.length){
+      setze('CO2DichtungRow1', 'Lt. Prüfbericht Nr. ' + daten.berichtNummern.join(', '), daten.berichtNummern.length > 2 ? 7 : 9);
+    }
+
+    var bild = function(dataUrl, x, y, bMax, hMax){
+      if(!dataUrl || dataUrl.indexOf('data:image/png') !== 0 || dataUrl.length < 200) return Promise.resolve();
+      return doc.embedPng(dataUrl).then(function(img){
+        var f = Math.min(bMax / img.width, hMax / img.height);
+        var bw = img.width * f, bh = img.height * f;
+        seite.drawImage(img, { x: x + (bMax - bw) / 2, y: y + (hMax - bh) / 2, width: bw, height: bh });
+      }).catch(function(){});
+    };
+    return bild(daten.sigKunde, 50, 103, 240, 50).then(function(){
+      return bild(daten.sigTechniker, 380, 103, 165, 50);
+    });
+  }).then(function(){
+    return doc.save();
+  });
+}
+
+var lsVorlageCache = null;
+function lsVorlageLaden(cb){
+  if(lsVorlageCache){ cb(null, lsVorlageCache); return; }
+  fetch(LS_VORLAGE_URL).then(function(r){
+    if(!r.ok) throw new Error('Vorlage nicht gefunden (' + r.status + ')');
+    return r.arrayBuffer();
+  }).then(function(buf){ lsVorlageCache = buf; cb(null, buf); })
+    .catch(function(err){ cb(err); });
+}
+
+function modalLieferschein(berichte, k){
+  var html = '';
+  html += '<div class="modal-head"><h3>Lieferschein</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(k ? k.name : '') + '</div>';
+  html += '<div id="lsStatus" class="meta" style="margin-bottom:12px;">Lieferschein wird erstellt...</div>';
+  html += '<button class="btn block" id="lsTeilen" disabled>Lieferschein teilen / drucken</button>';
+  html += '<button class="btn block secondary" id="lsSchliessen" style="margin-top:10px;">Schließen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('lsSchliessen').onclick = closeModal;
+
+  var nr = '';
+  for(var i = 0; i < berichte.length; i++){ if(berichte[i].berichtNr){ nr = berichte[i].berichtNr; break; } }
+  var dateiname = 'Lieferschein' + (nr ? '-' + nr.replace(/[^A-Za-z0-9_-]/g, '') : '') + '.pdf';
+  var pdfBlob = null;
+
+  var fehler = function(err){
+    var st = document.getElementById('lsStatus');
+    if(st) st.innerHTML = '<span style="color:#c23f12;">Fehler: ' + escapeHtml(err && err.message ? err.message : String(err)) + '</span>';
+  };
+
+  lsPdfLibLaden(function(err){
+    if(err){ fehler(err); return; }
+    lsVorlageLaden(function(err2, vorlage){
+      if(err2){ fehler(err2); return; }
+      var daten;
+      try{ daten = lieferscheinDaten(berichte, k); }catch(e){ fehler(e); return; }
+      lieferscheinPdfErzeugen(daten, vorlage.slice(0)).then(function(bytes){
+        pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+        var anzahl = 0;
+        for(var g = 0; g < daten.gruppen.length; g++) anzahl += daten.gruppen[g].anz;
+        var st = document.getElementById('lsStatus');
+        if(st) st.textContent = 'Fertig: ' + anzahl + ' Gerät' + (anzahl === 1 ? '' : 'e') + ', Lieferschein vom ' + daten.datum + '.';
+        var btn = document.getElementById('lsTeilen');
+        if(btn) btn.disabled = false;
+      }).catch(fehler);
+    });
+  });
+
+  document.getElementById('lsTeilen').onclick = function(){
+    if(!pdfBlob) return;
+    var datei = null;
+    try{ datei = new File([pdfBlob], dateiname, { type: 'application/pdf' }); }catch(e){ datei = null; }
+    if(datei && navigator.canShare && navigator.share && navigator.canShare({ files: [datei] })){
+      navigator.share({ files: [datei], title: dateiname }).catch(function(err){
+        if(err && err.name === 'AbortError') return;
+        lsHerunterladen(pdfBlob, dateiname);
+      });
+    } else {
+      lsHerunterladen(pdfBlob, dateiname);
+    }
+  };
+}
+
+function lsHerunterladen(blob, name){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 4000);
 }
 
 // ---------- Event Bindings ----------
