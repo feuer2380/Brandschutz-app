@@ -12485,6 +12485,7 @@ function renderKalender(){
     }
   });
   if(voll) html += '<button type="button" class="btn block secondary" id="kalNeuTag" style="margin-top:10px;">+ Neuer Termin an diesem Tag</button>';
+  if(voll) html += '<div class="meta" style="text-align:center; margin-top:8px;">Tipp: Direkt auf einen Tag im Kalender tippen, um einen Termin einzutragen.</div>';
   return html;
 }
 
@@ -12672,6 +12673,53 @@ function dashTerminTagesbericht(id){
   });
 }
 
+// Beim Tippen auf einen Kalendertag: direkt ein Fenster für diesen Tag öffnen
+function kalTagAntippen(key){
+  state.kalTag = key; state.kalMonat = key.substring(0, 7);
+  var es = kalEintraegeFuerTag(key);
+  // Leerer Tag -> gleich in die Termineingabe springen
+  if(!es.length){ modalKalenderTermin(null, key); return; }
+  modalKalenderTag(key);
+}
+function modalKalenderTag(key){
+  var voll = kalVollsicht();
+  var tg = key.split('-');
+  var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  var titel = parseInt(tg[2], 10) + '. ' + monatNamen[parseInt(tg[1], 10) - 1] + ' ' + tg[0];
+  var ft = feiertagName(key);
+  var es = kalEintraegeFuerTag(key);
+  var html = '';
+  html += '<div class="modal-head"><h3>' + titel + '</h3><button class="close" id="mClose">&times;</button></div>';
+  if(ft) html += '<div class="card" style="border-left:4px solid #c23f12; background:#fbe9e3; margin-bottom:10px;"><h3 style="color:#c23f12;">Feiertag: ' + escapeHtml(ft) + '</h3></div>';
+  if(voll) html += '<button type="button" class="btn block" id="ktNeuTag" style="margin-bottom:12px;">+ Neuer Termin</button>';
+  es.forEach(function(e){
+    if(e.art === 'termin'){
+      var t = e.t;
+      var kt = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+      var tf = kalFarbe(kalEintragFarben(e)[0]);
+      html += '<div class="card"' + (voll ? ' data-ktbearb="' + t.id + '" style="cursor:pointer; border-left:6px solid ' + tf + ';"' : ' style="border-left:6px solid ' + tf + ';"') + '>';
+      html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '')) + '</div>';
+      if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
+      html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
+      if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
+      html += '</div>';
+    } else {
+      var kp = kundeFuerPruefung(e.p);
+      html += '<div class="card" style="border-left:6px solid ' + kalFarbe(e.z) + ';">';
+      html += '<div class="row"><h3>' + (kp ? escapeHtml(kp.name) : 'Unbekannt') + '</h3><span class="badge soon">' + (e.p.zeit ? escapeHtml(e.p.zeit) + ' Uhr' : 'Prüfung') + '</span></div>';
+      html += '<div class="meta">' + pruefungAnzeigeText(e.p) + '</div>';
+      html += e.z ? ('<div class="meta" style="display:flex; align-items:center; gap:6px;">' + kalPunkt(kalFarbe(e.z), true) + '<span>' + escapeHtml(zustaendigKurz(e.z)) + '</span></div>') : '<div class="meta" style="color:#c23f12;">Noch niemandem zugeteilt</div>';
+      html += '</div>';
+    }
+  });
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var bN = document.getElementById('ktNeuTag');
+  if(bN) bN.onclick = function(){ modalKalenderTermin(null, key); };
+  document.querySelectorAll('[data-ktbearb]').forEach(function(c){
+    c.onclick = function(){ modalKalenderTermin(c.getAttribute('data-ktbearb')); };
+  });
+}
 function modalKalenderTermin(terminId, datumVorgabe){
   var t = terminId ? (state.termine || []).filter(function(x){ return x.id === terminId; })[0] : null;
   var emp = t ? (t.personen || []) : [];
@@ -12838,7 +12886,7 @@ function bindKalender(){
   el = document.getElementById('kalNeu'); if(el) el.onclick = function(){ modalKalenderTermin(null, state.kalTag || kalHeuteKey()); };
   el = document.getElementById('kalPersonSel'); if(el) el.onchange = function(){ state.kalPerson = el.value; render(); };
   document.querySelectorAll('[data-kaltag]').forEach(function(b){
-    b.onclick = function(){ state.kalTag = b.getAttribute('data-kaltag'); render(); };
+    b.onclick = function(){ kalTagAntippen(b.getAttribute('data-kaltag')); };
   });
   document.querySelectorAll('[data-kaltermin]').forEach(function(c){
     c.onclick = function(){ modalKalenderTermin(c.getAttribute('data-kaltermin')); };

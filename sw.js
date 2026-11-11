@@ -5,7 +5,7 @@
 // - Datenbank-Verbindungen (Firebase) laufen NICHT ueber diesen Speicher.
 var CACHE = 'bsv-offline-v1';
 var VORLADEN = [
-  './', './index.html', './stempeln.html', './kunde.html', './lieferschein-vorlage.pdf',
+  './', './index.html', './stempeln.html', './kunde.html',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js',
