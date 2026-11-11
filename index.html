@@ -5977,7 +5977,7 @@ function renderPruefungen(){
         html += '<button type="button" class="btn small secondary erlBerichtBtn" data-pids="' + liste.map(function(p){ return p.id; }).join(',') + '" style="margin:10px 0 0 0; width:100%;">&#128196; Prüfbericht &ndash; drucken / mailen</button>';
         if(auf){
           liste.forEach(function(p){
-            html += '<div style="border-top:1px solid #eee2d3; padding-top:6px; margin-top:6px; font-size:13px; display:flex; gap:8px; align-items:flex-start;"><div style="flex:1; min-width:0;">' + pruefungAnzeigeText(p) + ' <span class="meta">&middot; ' + escapeHtml(p.ergebnis || '') + (p.erledigtVon ? ' &middot; ' + escapeHtml(p.erledigtVon) : '') + '</span>' + (p.bemerkung ? '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>' : '') + '</div><span class="erlBerichtBtn" data-pids="' + p.id + '" style="flex-shrink:0; color:#1d5fa8; text-decoration:underline; cursor:pointer;">Bericht</span></div>';
+            html += '<div style="border-top:1px solid #eee2d3; padding-top:6px; margin-top:6px; font-size:13px;">' + pruefungAnzeigeText(p) + ' <span class="meta">&middot; ' + escapeHtml(p.ergebnis || '') + (p.erledigtVon ? ' &middot; ' + escapeHtml(p.erledigtVon) : '') + '</span>' + (p.bemerkung ? '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>' : '') + '</div>';
           });
         }
         html += '</div>';
