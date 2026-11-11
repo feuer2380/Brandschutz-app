@@ -5264,7 +5264,6 @@ var CHEF_PIN_PRUEFWERT = '7b0ac164b46333502459bc71928b9ba693510030212e6ac99fa58e
 var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
   { name: 'Janiba Wolfgang sen.', pinPruefwert: 'b1b89ef39b06b58a21533ed951b596ec651fa17a89b69523f05cf6558777a9da', lagerbuch: true, vollzugriff: true, statistik: true },
-  { name: 'Prominzer Tobias', pinPruefwert: 'd6508a86e67e359c12c96a90b69e0db0bc9a80e84e3a7585261f6c3ed6591e78' },
   { name: 'Mayerhofer Tobias', pinPruefwert: '9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd', kalenderAnlegen: true },
   { name: 'Holakovsky Manuela', pinPruefwert: 'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38', aufgabenVergeben: true, vollzugriff: true, statistik: true },
   { name: 'Henke Alexander', pinPruefwert: '82e8e2870105ec7f465aa8c8e99b0e0a65c9713bb2ac845d48b9d51c1bfc723f' },
@@ -15357,8 +15356,8 @@ function modalLieferschein(berichte, k){
   html += '<div id="lsPosListe"></div>';
   html += '<button type="button" class="btn small secondary" id="lsPosAdd">+ Position hinzufügen</button></div>';
   html += '<div id="lsSummen" style="margin-top:12px; padding:10px 12px; background:#f6efe2; border-radius:10px; font-size:14px;"></div>';
-  html += '<div id="lsBezahltBox" style="margin-top:10px; display:none;"><label style="font-weight:400;">Zahlung:</label> ';
-  html += '<label style="font-weight:400; margin-left:6px;"><input type="radio" name="lsBez" value=""> offen</label>';
+  html += '<div id="lsBezahltBox" style="margin-top:10px;"><label style="font-weight:400;">Zahlung:</label> ';
+  html += '<label style="font-weight:400; margin-left:6px;"><input type="radio" name="lsBez" value="" checked> offen</label>';
   html += '<label style="font-weight:400; margin-left:10px;"><input type="radio" name="lsBez" value="ja"> bezahlt</label>';
   html += '<label style="font-weight:400; margin-left:10px;"><input type="radio" name="lsBez" value="nein"> nicht bezahlt</label></div>';
   html += '<div id="lsStatus" class="meta" style="margin:12px 0;"></div>';
@@ -15402,7 +15401,6 @@ function modalLieferschein(berichte, k){
     } else {
       box.innerHTML = '<span class="meta">Keine Preise eingetragen &ndash; reiner Lieferschein.</span>';
     }
-    document.getElementById('lsBezahltBox').style.display = netto > 0 ? 'block' : 'none';
   };
   document.querySelectorAll('.lsPreis, #lsPlak, #lsInnen, #lsArb, #lsFuell, #lsFahr').forEach(function(el){ el.oninput = summenAktualisieren; });
   document.querySelectorAll('input[name="lsModus"]').forEach(function(el){ el.onchange = summenAktualisieren; });
