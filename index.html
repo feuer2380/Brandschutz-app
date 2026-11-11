@@ -1731,6 +1731,16 @@ function renderInner(){
 }
 
 // ---------- Dashboard ----------
+// Anzeigename: Firma/Name plus Vor-/Nachname, ohne Doppelung
+function kundeAnzeigeName(k){
+  if(!k) return '';
+  var basis = (k.name || '').trim();
+  var person = ((k.vorname || '').trim() + ' ' + (k.nachname || '').trim()).trim();
+  if(!basis) return person;
+  if(!person) return basis;
+  if(basis.toLowerCase().indexOf(person.toLowerCase()) > -1) return basis;
+  return basis + ' ' + person;
+}
 function kundeFuerPruefung(p){
   if(p.geraetId){
     var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
@@ -1783,7 +1793,7 @@ function aufgabeKarteHtml(p, k, st){
   var dObj = new Date(String(p.datum).substring(0, 10) + 'T12:00:00');
   var kurz = fmtDate(p.datum).substring(0, 6);
   var h = '<div class="aufgabe ' + st.cls + ' kunde-card" data-id="' + (k ? k.id : '') + '">';
-  h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
+  h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3>';
   h += '<div class="aufgabe-art">' + pruefungAnzeigeText(p, true) + '</div></div>';
   h += '<div class="aufgabe-datum"><b>' + (isNaN(dObj.getTime()) ? '' : wt[dObj.getDay()] + ' ') + kurz + '</b><span class="badge ' + st.cls + '">' + st.label + '</span></div></div>';
   if(k && k.adresse) h += '<div class="aufgabe-adr">&#128205; ' + escapeHtml(k.adresse) + '</div>';
@@ -1834,7 +1844,7 @@ function kundeAufgabeKarteHtml(k, eintraege, statusFn){
     detailHtml += '</div>';
   }
   var h = '<div class="aufgabe ' + st.cls + ' kunde-card" data-id="' + (k ? k.id : '') + '">';
-  h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
+  h += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3>' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3>';
   h += '<div class="aufgabe-art">' + zusammen + '</div></div>';
   h += '<div class="aufgabe-datum"><b>' + (isNaN(dObj.getTime()) ? '' : wt[dObj.getDay()] + ' ') + kurz + '</b><span class="badge ' + st.cls + '">' + st.label + '</span></div></div>';
   h += detailHtml;
@@ -1914,7 +1924,7 @@ function modalKundeZuteilen(pids){
   var g0 = geraetFuerPruefung(liste[0]);
   var datumAlt = String(liste[0].datum || '').substring(0, 10);
   var html = '<div class="modal-head"><h3>Zuteilen &amp; Termin</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:8px;"><b>' + (k ? escapeHtml(k.name) : '') + '</b><br>' + liste.length + ' Prüfungen &ndash; gilt für alle</div>';
+  html += '<div class="meta" style="margin-bottom:8px;"><b>' + (k ? escapeHtml(kundeAnzeigeName(k)) : '') + '</b><br>' + liste.length + ' Prüfungen &ndash; gilt für alle</div>';
   html += '<label>Wer macht das?</label><select id="zkWer"><option value="">– niemand –</option>';
   zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g0 && g0.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
   html += '</select>';
@@ -1970,7 +1980,7 @@ function modalPruefungZuteilen(pid){
   var k = kundeFuerPruefung(p);
   var html = '';
   html += '<div class="modal-head"><h3>Zuteilen &amp; Termin</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:8px;"><b>' + (k ? escapeHtml(k.name) : '') + '</b><br>' + pruefungAnzeigeText(p) + '</div>';
+  html += '<div class="meta" style="margin-bottom:8px;"><b>' + (k ? escapeHtml(kundeAnzeigeName(k)) : '') + '</b><br>' + pruefungAnzeigeText(p) + '</div>';
   html += '<label>Wer macht das?</label><select id="zpWer"><option value="">– niemand –</option>';
   zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g && g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
   html += '</select>';
@@ -2211,7 +2221,7 @@ function renderDashboard(){
       var liste = etGruppen[kid];
       var k = kundeFuerPruefung(liste[0]);
       html += '<div class="card"' + (k ? ' data-id="' + k.id + '"' : '') + '>';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge ok">' + liste.length + ' erledigt</span></div>';
+      html += '<div class="row"><h3>' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3><span class="badge ok">' + liste.length + ' erledigt</span></div>';
       liste.forEach(function(p, idx){
         var ei = ergebnisInfo(p.ergebnis);
         html += '<div class="row" style="' + (idx > 0 ? 'border-top:1px solid #eee2d3; padding-top:6px; margin-top:6px;' : 'margin-top:6px;') + '"><span class="meta" style="flex:1;">' + pruefungAnzeigeText(p) + (p.erledigtVon ? '<br><b>von ' + escapeHtml(p.erledigtVon === 'Chef' ? CHEF_NAME : p.erledigtVon) + '</b>' : '') + (p.bemerkung ? '<br>' + escapeHtml(p.bemerkung) : '') + '</span><span class="badge ' + ei.badgeCls + '">' + ei.label + '</span></div>';
@@ -2240,7 +2250,7 @@ function renderDashboard(){
       html += '<div class="section-title" style="margin-top:14px;">Heute und morgen geplant (' + gpReihe.length + (gpReihe.length === 1 ? ' Kunde' : ' Kunden') + ' &middot; ' + geplant.length + (geplant.length === 1 ? ' Prüfung' : ' Prüfungen') + ')</div>';
       gpReihe.forEach(function(gk){
         var g = gpGruppen[gk];
-        html += '<div class="card kunde-card" data-id="' + (g.k ? g.k.id : '') + '"><div class="row"><h3>' + (g.k ? escapeHtml(g.k.name) : 'Unbekannt') + '</h3><span class="badge blau">' + fmtDate(g.datum) + (g.liste.length > 1 ? ' &middot; ' + g.liste.length + ' Stk.' : '') + '</span></div>';
+        html += '<div class="card kunde-card" data-id="' + (g.k ? g.k.id : '') + '"><div class="row"><h3>' + (g.k ? escapeHtml(kundeAnzeigeName(g.k)) : 'Unbekannt') + '</h3><span class="badge blau">' + fmtDate(g.datum) + (g.liste.length > 1 ? ' &middot; ' + g.liste.length + ' Stk.' : '') + '</span></div>';
         g.liste.forEach(function(p, idx){
           html += '<div class="meta"' + (idx ? ' style="border-top:1px solid #eee3d6; margin-top:6px; padding-top:6px;"' : '') + '>' + pruefungAnzeigeText(p) + '</div>';
         });
@@ -2260,7 +2270,7 @@ function renderDashboard(){
   if(vmFaellig.length){
     html += '<div class="section-title" style="margin-top:14px; color:#c23f12;">Vermerke fällig (' + vmFaellig.length + ')</div>';
     vmFaellig.forEach(function(e){
-      html += '<div class="card kunde-card" data-id="' + e.k.id + '"><div class="row"><h3>' + escapeHtml(e.k.name) + '</h3><span class="badge soon">' + escapeHtml(vermerkFaelligText(e.v.faellig)) + '</span></div><div class="meta">' + escapeHtml(e.v.text) + '</div></div>';
+      html += '<div class="card kunde-card" data-id="' + e.k.id + '"><div class="row"><h3>' + escapeHtml(kundeAnzeigeName(e.k)) + '</h3><span class="badge soon">' + escapeHtml(vermerkFaelligText(e.v.faellig)) + '</span></div><div class="meta">' + escapeHtml(e.v.text) + '</div></div>';
     });
   }
 
@@ -2760,7 +2770,7 @@ function renderSchnellfuell(){
   h += '<div style="display:flex; align-items:center; gap:8px; margin-top:10px;"><span class="meta" style="flex-shrink:0;">Andere Größe:</span><input type="number" inputmode="numeric" id="sfAndereG" placeholder="Gramm" style="flex:1; min-width:0; margin:0;"><input type="number" inputmode="numeric" id="sfAndereN" placeholder="Anzahl" style="width:90px; margin:0;"></div>';
   h += '<label style="margin-top:10px;">Kunde (optional)</label><input type="text" id="sfKunde" list="sfKundenListe" autocomplete="off" placeholder="leer lassen = Lager / Verkauf" value="' + escapeHtml(state.sfKunde || '') + '">';
   h += '<datalist id="sfKundenListe">';
-  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(a, b){ return a.name.localeCompare(b.name); }).forEach(function(k){ h += '<option value="' + escapeHtml(k.name) + '">'; });
+  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(a, b){ return a.name.localeCompare(b.name); }).forEach(function(k){ h += '<option value="' + escapeHtml(kundeAnzeigeName(k)) + '">'; });
   h += '</datalist>';
   h += '<label>Notiz (optional)</label><input type="text" id="sfNotiz" autocomplete="off" placeholder="z.B. Abholung Freitag">';
   var sumN = 0, sumG = 0;
@@ -3696,7 +3706,7 @@ function renderGeraetCheck(geraetId){
   var html = '';
   html += '<button class="btn secondary small" id="backToScan">&larr; Zurück</button>';
   html += '<div class="card" style="margin-top:12px;">';
-  html += '<div class="meta">Kunde</div><h3>' + (k ? escapeHtml(k.name) : '-') + '</h3>';
+  html += '<div class="meta">Kunde</div><h3>' + (k ? escapeHtml(kundeAnzeigeName(k)) : '-') + '</h3>';
   if(k && k.kundennummer) html += '<div class="meta">Kundennummer: ' + escapeHtml(k.kundennummer) + '</div>';
   if(k && k.adresse) html += '<div class="meta">' + escapeHtml(k.adresse) + '</div>';
   html += '<div class="section-title" style="margin-top:12px;">Gerät ' + geraeteNummerAnzeige(g) + '</div>';
@@ -5349,7 +5359,7 @@ function renderKundenListe(query){
   liste.forEach(function(k){
     var geraeteAnz = state.geraete.filter(function(g){ return g.kundeId === k.id && !g.ausgeschieden; }).length;
     html += '<div class="card kunde-card" data-id="' + k.id + '">';
-    html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3>' + (k.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Portal</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
+    html += '<div class="row"><h3>' + escapeHtml(kundeAnzeigeName(k)) + '</h3>' + (k.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (k.freigabe ? '<span class="badge ok">Portal</span>' : '') + (k.stillgelegt ? '<span class="badge soon">Stillgelegt</span>' : '') + '</div>';
     if(k.objekt) html += '<div class="meta" style="font-weight:600;">' + escapeHtml(k.objekt) + '</div>';
     html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
     html += '<div class="meta">' + geraeteAnz + ' Gerät(e)</div>';
@@ -5455,7 +5465,7 @@ function renderKunden(){
       html += '<select id="zuweisen_' + g.id + '" style="margin-top:8px;">';
       html += '<option value="">Kunde wählen...</option>';
       state.kunden.filter(function(k){ return !k.geloescht; }).forEach(function(k){
-        html += '<option value="' + k.id + '">' + escapeHtml(k.name) + '</option>';
+        html += '<option value="' + k.id + '">' + escapeHtml(kundeAnzeigeName(k)) + '</option>';
       });
       html += '</select>';
       html += '<button class="btn small" data-zuweisen-geraet="' + g.id + '">Diesem Kunden zuweisen</button>';
@@ -5469,7 +5479,7 @@ function renderKunden(){
     geloeschte.sort(function(a,b){ return new Date(b.geloeschtAm||0) - new Date(a.geloeschtAm||0); });
     geloeschte.forEach(function(k){
       html += '<div class="card">';
-      html += '<h3>' + escapeHtml(k.name) + '</h3>';
+      html += '<h3>' + escapeHtml(kundeAnzeigeName(k)) + '</h3>';
       html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
       if(k.geloeschtAm) html += '<div class="meta">Gelöscht am ' + fmtDate(k.geloeschtAm) + '</div>';
       html += '<button class="btn small secondary" data-wiederherstellen="' + k.id + '" style="margin-top:8px;">Wiederherstellen</button>';
@@ -5493,7 +5503,7 @@ function renderKundeDetail(kundeId){
   var html = '';
   html += '<button class="btn secondary small" id="backToKunden">&larr; Zurück</button>';
   html += '<div class="card" style="margin-top:12px;">';
-  html += '<div class="row" style="align-items:flex-start;"><h3 style="flex:1;">' + escapeHtml(k.name) + '</h3>';
+  html += '<div class="row" style="align-items:flex-start;"><h3 style="flex:1;">' + escapeHtml(kundeAnzeigeName(k)) + '</h3>';
   html += '<button type="button" class="icon-btn" id="kundeAktionenBtn" title="Aktionen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>';
   html += '</div>';
   if(k.kundennummer || k.freigabe || k.stillgelegt){
@@ -5888,7 +5898,7 @@ function renderPruefungen(){
         var aufgeklappt = !!(state.pruefungOffenAufgeklappt && state.pruefungOffenAufgeklappt[kid]);
         html += '<div class="card" style="border-left:6px solid ' + randFarbe + ';">';
         html += '<div class="offenKundeToggle" data-kid="' + kid + '" style="cursor:pointer;">';
-        html += '<div style="display:flex; align-items:flex-start; gap:8px;"><h3 style="flex:1; margin:0;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="chev" style="color:var(--muted);">' + (aufgeklappt ? '&#9660;' : '&#9654;') + '</span></div>';
+        html += '<div style="display:flex; align-items:flex-start; gap:8px;"><h3 style="flex:1; margin:0;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3><span class="chev" style="color:var(--muted);">' + (aufgeklappt ? '&#9660;' : '&#9654;') + '</span></div>';
         html += '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">';
         if(nW) html += '<span class="badge warn">' + nW + ' überfällig</span>';
         if(nS) html += '<span class="badge soon">' + nS + ' bald fällig</span>';
@@ -5927,7 +5937,7 @@ function renderPruefungen(){
       erledigt.slice(0, 30).forEach(function(p){
         var k = kundeFuerPruefung(p);
         html += '<div class="card" style="border-left:6px solid ' + (filter === 'reparatur' ? '#1d5fa8' : '#c23f12') + ';">';
-        html += '<h3 style="margin:0;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3>';
+        html += '<h3 style="margin:0;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3>';
         html += '<div class="meta">' + pruefungAnzeigeText(p) + ' &middot; ' + fmtDate(p.erledigtAm || p.datum) + '</div>';
         if(p.bemerkung) html += '<div class="meta">' + escapeHtml(p.bemerkung) + '</div>';
         html += '<div style="display:flex; gap:8px; margin-top:8px;">';
@@ -5966,7 +5976,7 @@ function renderPruefungen(){
         var auf = !!(state.pruefungErlAuf && state.pruefungErlAuf[key]);
         html += '<div class="card" style="border-left:6px solid ' + (hatProblem ? '#1d5fa8' : '#1e8449') + '; padding-top:10px; padding-bottom:10px;">';
         html += '<div class="erlGruppeToggle" data-key="' + escapeHtml(key) + '" style="cursor:pointer;">';
-        html += '<div style="display:flex; gap:8px; align-items:baseline;"><h3 style="flex:1; margin:0; font-size:16px;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span style="font-weight:700; font-size:13px; white-space:nowrap;">' + tag + '</span><span class="chev" style="color:var(--muted);">' + (auf ? '&#9660;' : '&#9654;') + '</span></div>';
+        html += '<div style="display:flex; gap:8px; align-items:baseline;"><h3 style="flex:1; margin:0; font-size:16px;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3><span style="font-weight:700; font-size:13px; white-space:nowrap;">' + tag + '</span><span class="chev" style="color:var(--muted);">' + (auf ? '&#9660;' : '&#9654;') + '</span></div>';
         html += '<div class="meta" style="margin-top:2px;">' + katR.map(function(kt){ return kats[kt] + '&times; ' + escapeHtml(kt); }).join(' &middot; ') + '</div>';
         html += '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">';
         ergR.forEach(function(e){
@@ -6029,7 +6039,7 @@ function buildBaldFaelligDruckHtml(){
       var k = gr.kunde;
       html += '<div class="pb-kundenbox" style="margin-bottom:14px;">';
       html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (k && k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + (k && k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '</div>';
       html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
       html += '<table class="pb-tabelle" style="margin-top:8px;"><thead><tr><th>Gerät/Prüfung</th><th>Fällig</th></tr></thead><tbody>';
       gr.eintraege.forEach(function(p){
@@ -6083,7 +6093,7 @@ function buildTagesuebersichtDruckHtml(tagDatum){
       var k = kundeFuerPruefung(eintraege[0]);
       html += '<div class="pb-kundenbox" style="margin-bottom:14px;">';
       html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (k && k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + (k && k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '</div>';
       html += '<div>' + (k ? escapeHtml(k.adresse || '') : '') + '</div>';
       html += '<table class="pb-tabelle" style="margin-top:8px;"><thead><tr><th>Uhrzeit</th><th>Gerät/Prüfung</th><th>Ergebnis</th><th>Von</th></tr></thead><tbody>';
       eintraege.forEach(function(p){
@@ -6124,7 +6134,7 @@ function buildTerminlisteHtml(){
       var st = statusForDate(p.datum);
       var stCls = st.cls === 'warn' ? 'pb-rot' : (st.cls === 'soon' ? 'pb-blau' : 'pb-ok');
       html += '<tr>';
-      html += '<td>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</td>';
+      html += '<td>' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</td>';
       html += '<td>' + (k ? escapeHtml(k.adresse||'-') : '-') + '</td>';
       html += '<td>' + escapeHtml(p.typ||'Prüfung') + '</td>';
       html += '<td>' + fmtDate(p.datum) + '</td>';
@@ -6170,11 +6180,11 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
 
   if(k && k.objekt){
     html += '<div class="pb-kundenreihe">';
-    html += '<div class="pb-kundenbox"><div class="knr">Kunde' + (k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div><div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.name) + '</div><div>' + escapeHtml(k.adresse||'') + '</div></div>';
+    html += '<div class="pb-kundenbox"><div class="knr">Kunde' + (k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div><div style="font-weight:700; margin:2px 0;">' + escapeHtml(kundeAnzeigeName(k)) + '</div><div>' + escapeHtml(k.adresse||'') + '</div></div>';
     html += '<div class="pb-kundenbox objektbox"><div class="knr">Objekt</div><div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.objekt) + '</div><div>' + escapeHtml(k.objektAdresse || k.adresse || '') + '</div></div>';
     html += '</div>';
   } else {
-    html += '<div class="pb-kundenbox"><div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div><div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div><div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div></div>';
+    html += '<div class="pb-kundenbox"><div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div><div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : '-') + '</div><div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div></div>';
   }
 
   if(geraete.length === 0){
@@ -6829,7 +6839,7 @@ function renderStatistik(){
         if(summeCo2 > 0) summeText.push(Math.round(summeCo2) + ' g');
         if(summeLiter > 0) summeText.push((Math.round(summeLiter * 10) / 10) + ' L');
         html += '<div class="card">';
-        html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : (kid === '__ohneqr' ? 'Ohne QR-Code (Lager / Verkauf)' : 'Unbekannt')) + '</h3><span class="badge blau">' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + '</span></div>';
+        html += '<div class="row"><h3>' + (k ? escapeHtml(kundeAnzeigeName(k)) : (kid === '__ohneqr' ? 'Ohne QR-Code (Lager / Verkauf)' : 'Unbekannt')) + '</h3><span class="badge blau">' + zeilen.length + ' Füllung' + (zeilen.length === 1 ? '' : 'en') + '</span></div>';
         if(summeText.length) html += '<div class="meta">Gesamtmenge: ' + summeText.join(' &middot; ') + '</div>';
         zeilen.forEach(function(z){
           var info = fuellungLesen(z.fuellung, z.geraet.kategorie, z.geraet.standort);
@@ -7015,7 +7025,7 @@ function renderStatistik(){
     } else {
       portalKunden.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); }).forEach(function(k){
         html += '<div class="card">';
-        html += '<div class="row"><h3>' + escapeHtml(k.name) + '</h3></div>';
+        html += '<div class="row"><h3>' + escapeHtml(kundeAnzeigeName(k)) + '</h3></div>';
         html += '<div class="meta">Zugangscode: <b>' + escapeHtml(k.zugangscode || '(keiner erzeugt)') + '</b></div>';
         html += '</div>';
       });
@@ -7100,7 +7110,7 @@ function renderBerichte(){
       var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
       var katLabel = (sb.geraeteSnapshot && sb.geraeteSnapshot.length) ? (sb.geraeteSnapshot[0].kategorie || 'Feuerlöscher') : 'Feuerlöscher';
       html += '<div class="card">';
-      html += '<div class="row"><h3>' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</h3><span class="badge blau">' + escapeHtml(katLabel) + '</span></div>';
+      html += '<div class="row"><h3>' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3><span class="badge blau">' + escapeHtml(katLabel) + '</span></div>';
       html += '<div class="meta">' + (sb.geraeteSnapshot ? sb.geraeteSnapshot.length : 0) + ' Position(en) &middot; ' + fmtDate(sb.datum) + (sb.berichtNr ? ' &middot; ' + escapeHtml(sb.berichtNr) : '') + '</div>';
       html += '<div style="display:flex; gap:8px; margin-top:8px;">';
       html += '<button class="btn small secondary" data-viewsammelbericht="' + sb.id + '">Bericht ansehen</button>';
@@ -7118,7 +7128,7 @@ function renderBerichte(){
       var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
       html += '<div class="card">';
       html += '<div class="row"><h3>' + escapeHtml(g.typ) + '</h3><span class="badge warn">Ausgeschieden</span></div>';
-      html += '<div class="meta">' + (k ? escapeHtml(k.name) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+      html += '<div class="meta">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
       html += '<div class="meta">' + (g.baujahr ? 'Baujahr ' + g.baujahr + ' &middot; ' : '') + 'Ausgeschieden am ' + fmtDate(g.ausgeschiedenAm) + '</div>';
       html += '<button class="btn small secondary ausgeschiedenLoeschenBtn" style="margin-top:8px;" data-gid="' + g.id + '">Endgültig löschen</button>';
       html += '</div>';
@@ -7217,7 +7227,7 @@ function modalPruefungenVerschieben(kundeId){
   var offenePruefungen = state.pruefungen.filter(function(p){ return p.kundeId === kundeId && !p.erledigt; });
   var html = '';
   html += '<div class="modal-head"><h3>Prüfungen verschieben</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:10px;">Setzt den Termin aller ' + offenePruefungen.length + ' offenen Prüfungen von ' + escapeHtml(k.name) + ' auf ein neues Datum. Bereits erledigte Prüfungen bleiben unverändert.</div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Setzt den Termin aller ' + offenePruefungen.length + ' offenen Prüfungen von ' + escapeHtml(kundeAnzeigeName(k)) + ' auf ein neues Datum. Bereits erledigte Prüfungen bleiben unverändert.</div>';
   html += '<div class="row" style="gap:8px; flex-wrap:wrap;">';
   html += '<button type="button" class="btn small secondary" data-monate="3">+3 Monate</button>';
   html += '<button type="button" class="btn small secondary" data-monate="6">+6 Monate</button>';
@@ -7716,12 +7726,12 @@ function modalKundenZusammenfuehren(quelleId){
     }).slice(0, 30);
     var html = '';
     html += '<div class="modal-head"><h3>Kunden zusammenführen</h3><button class="close" id="mClose">&times;</button></div>';
-    html += '<div class="meta" style="margin-bottom:10px;">Alles von <b>' + escapeHtml(q.name) + (q.objekt ? ' &middot; ' + escapeHtml(q.objekt) : '') + (q.adresse ? ' &middot; ' + escapeHtml(q.adresse) : '') + '</b> (' + zaehle(q.id) + ' Geräte) wird in den Kunden übernommen, den du unten auswählst. Danach kommt dieser Eintrag in den Papierkorb.</div>';
+    html += '<div class="meta" style="margin-bottom:10px;">Alles von <b>' + escapeHtml(kundeAnzeigeName(q)) + (q.objekt ? ' &middot; ' + escapeHtml(q.objekt) : '') + (q.adresse ? ' &middot; ' + escapeHtml(q.adresse) : '') + '</b> (' + zaehle(q.id) + ' Geräte) wird in den Kunden übernommen, den du unten auswählst. Danach kommt dieser Eintrag in den Papierkorb.</div>';
     html += '<input id="zfSuche" type="text" placeholder="Anderen Kunden suchen (Name, Nr., Objekt)..." value="' + escapeHtml(suchtext || '') + '" style="margin-bottom:10px;">';
     if(!sq && treffer.length) html += '<div class="meta" style="margin-bottom:6px;">Gleicher Name / gleiche Kundennummer:</div>';
     if(!treffer.length){ html += '<div class="empty">' + (sq ? 'Keine Treffer' : 'Kein gleichnamiger Kunde gefunden – oben suchen') + '</div>'; }
     treffer.forEach(function(k){
-      html += '<button class="btn block secondary zfZielBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k.name) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '<br><span class="meta">' + escapeHtml(k.adresse || '') + ' &middot; ' + zaehle(k.id) + ' Geräte' + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</span></button>';
+      html += '<button class="btn block secondary zfZielBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(kundeAnzeigeName(k)) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + '<br><span class="meta">' + escapeHtml(k.adresse || '') + ' &middot; ' + zaehle(k.id) + ' Geräte' + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</span></button>';
     });
     openModal(html);
     document.getElementById('mClose').onclick = closeModal;
@@ -7931,7 +7941,7 @@ function modalGeraetVerschieben(geraetId){
       html += '<div class="empty">Keine Treffer</div>';
     } else {
       treffer.forEach(function(k){
-        html += '<button class="btn block secondary verschiebenZielBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k.name) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + (k.kundennummer ? ' <span class="badge blau" style="margin-left:6px;">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</button>';
+        html += '<button class="btn block secondary verschiebenZielBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(kundeAnzeigeName(k)) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + (k.kundennummer ? ' <span class="badge blau" style="margin-left:6px;">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</button>';
       });
     }
     openModal(html);
@@ -9006,7 +9016,7 @@ function modalErledigt(pruefungId){
   var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] || {};
   var html = '';
   html += '<div class="modal-head"><h3>Prüfung abschließen</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta">' + (k ? escapeHtml(k.name) : '') + ' &middot; ' + escapeHtml(p.typ || '') + '</div>';
+  html += '<div class="meta">' + (k ? escapeHtml(kundeAnzeigeName(k)) : '') + ' &middot; ' + escapeHtml(p.typ || '') + '</div>';
   html += '<label style="margin-top:10px;">Bemerkung</label><textarea id="fBemerkung" rows="3" placeholder="Befund, Maßnahmen..."></textarea>';
   html += '<label>Unterschrift Kunde</label>';
   html += '<canvas class="sig" id="sigPadKunde"></canvas>';
@@ -9120,7 +9130,7 @@ function buildBerichtHtml(p, k){
     html += '<div class="pb-kundenreihe">';
     html += '<div class="pb-kundenbox">';
     html += '<div class="knr">Kunde' + (k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-    html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.name) + '</div>';
+    html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(kundeAnzeigeName(k)) + '</div>';
     html += '<div>' + escapeHtml(k.adresse||'') + '</div>';
     html += '</div>';
     html += '<div class="pb-kundenbox objektbox">';
@@ -9132,7 +9142,7 @@ function buildBerichtHtml(p, k){
   } else {
     html += '<div class="pb-kundenbox">';
     html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-    html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+    html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : '-') + '</div>';
     html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
     html += '</div>';
   }
@@ -9195,7 +9205,7 @@ function buildBerichtHtml(p, k){
   html += '<div class="pb-sig-col">';
   if(sigKunde) html += '<img src="' + sigKunde + '">';
   else html += '<div style="height:60px;"></div>';
-  html += '<div class="sig-label">Unterschrift Kunde' + (k ? ' (' + escapeHtml(k.name) + ')' : '') + '</div>';
+  html += '<div class="sig-label">Unterschrift Kunde' + (k ? ' (' + escapeHtml(kundeAnzeigeName(k)) + ')' : '') + '</div>';
   html += '</div>';
   html += '</div>';
 
@@ -9823,7 +9833,7 @@ function buildFuellhistorieEinzelDruckHtml(g, fuellungen){
 
   html += '<div class="pb-kundenbox">';
   html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-  html += '<div style="font-weight:700;">' + (k ? escapeHtml(k.name) : 'Unbekannt') + '</div>';
+  html += '<div style="font-weight:700;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</div>';
   html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
   html += '</div>';
 
@@ -10147,7 +10157,7 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
   var rows = [];
   var html = '';
   html += '<div class="modal-head"><h3>Geräteliste einfügen</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta">Kunde: <b>' + escapeHtml(k.name) + '</b></div>';
+  html += '<div class="meta">Kunde: <b>' + escapeHtml(kundeAnzeigeName(k)) + '</b></div>';
   html += '<div class="meta" style="margin:6px 0;">Im alten Programm die Tabelle markieren (oder mit Strg+A die ganze Seite), kopieren (Strg+C) und hier einfügen. Jede Zeile wird ein Feuerlöscher.</div>';
   html += '<textarea id="glText" rows="6" placeholder="Hier einfügen ..." style="width:100%; box-sizing:border-box;"></textarea>';
   html += '<button class="btn block secondary" id="glVorschauBtn" style="margin-top:8px;">Vorschau anzeigen</button>';
@@ -11952,7 +11962,7 @@ function fbInboxHtml(fz){
     h += '<span class="badge" style="white-space:nowrap;">' + (strecke !== null ? (f.kmGeschaetzt != null && !f.kmBestaetigt ? 'ca. ' : '') + fbFmt(strecke) + ' km' : '? km') + '</span></div>';
     h += '<div style="font-size:13.5px; color:#2a2622; margin-top:6px; line-height:1.5;"><span style="color:#2e7d4f; font-weight:800;">A</span> ' + escapeHtml(f.startAdresse || (f.startGeo ? 'Adresse wird ermittelt ...' : (f.startUnbekannt ? 'Start nicht erfasst' : 'kein Standort'))) + (f.startAusVorfahrt ? ' <span style="font-size:11.5px; color:#8a7d70;">(Ort der letzten Ankunft)</span>' : '') + '<br>';
     h += '<span style="color:#c23f12; font-weight:800;">B</span> ' + escapeHtml(f.laufend ? 'unterwegs ...' : (f.zielAdresse || (f.zielGeo ? 'Adresse wird ermittelt ...' : (f.endeUnbekannt ? 'Ende nicht gemeldet' : 'kein Standort')))) + (f.endeUnbekannt && f.zielGeo ? ' <span style="font-size:11.5px; color:#8a7d70;">(Ort der nächsten Abfahrt)</span>' : '') + '</div>';
-    if(k) h += '<div style="font-size:13.5px; margin-top:6px; color:#2a2622;">&#127970; <b>' + escapeHtml(k.name) + '</b>' + (f.kundeVorschlag ? ' <span style="color:#8a7d70; font-size:12px;">(Vorschlag)</span>' : '') + '</div>';
+    if(k) h += '<div style="font-size:13.5px; margin-top:6px; color:#2a2622;">&#127970; <b>' + escapeHtml(kundeAnzeigeName(k)) + '</b>' + (f.kundeVorschlag ? ' <span style="color:#8a7d70; font-size:12px;">(Vorschlag)</span>' : '') + '</div>';
     if(f.fahrer) h += '<div class="meta">Fahrer: ' + escapeHtml(f.fahrer) + '</div>';
     if(f.laufend) h += '<div style="display:flex; gap:6px; margin-top:10px;"><button type="button" class="btn small secondary fbInDel" data-fid="' + escapeHtml(f.id) + '" style="flex:1;">&#128465; Löschen</button></div>';
     if(!f.laufend){
@@ -12225,7 +12235,7 @@ function modalFahrt(fahrtId){
   var ftKundeText = fbKundeName(v);
   html += '<label>Kunde (optional &ndash; aus der Liste wählen oder neuen Namen eintippen)</label><input type="text" id="ftKunde" list="ftKundenListe" autocomplete="off" placeholder="Kundenname" value="' + escapeHtml(ftKundeText) + '">';
   html += '<datalist id="ftKundenListe">';
-  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(a, b){ return a.name.localeCompare(b.name); }).forEach(function(k){ html += '<option value="' + escapeHtml(k.name) + '">'; });
+  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(a, b){ return a.name.localeCompare(b.name); }).forEach(function(k){ html += '<option value="' + escapeHtml(kundeAnzeigeName(k)) + '">'; });
   html += '</datalist>';
   html += '<label>Tätigkeit / Ziel &ndash; wo war ich überall?</label><textarea id="ftTaet" rows="4" placeholder="z.B. Lager Perchtoldsdorf, BMD Systemhaus Wien (Löscherprüfung), Baumarkt (Besorgung) &ndash; jede Station in eine Zeile" autocomplete="off">' + escapeHtml(v.taetigkeit || '') + '</textarea>';
   html += '<label>Fahrer</label><input type="text" id="ftFahrer" value="' + escapeHtml(v.fahrer || '') + '" autocomplete="off">';
@@ -12526,7 +12536,7 @@ function renderKalender(){
     } else {
       var kp = kundeFuerPruefung(e.p);
       html += '<div class="card kunde-card" data-id="' + (kp ? kp.id : '') + '" style="border-left:6px solid ' + kalFarbe(e.z) + ';">';
-      html += '<div class="row"><h3>' + (kp ? escapeHtml(kp.name) : 'Unbekannt') + '</h3><span class="badge soon">' + (e.p.zeit ? escapeHtml(e.p.zeit) + ' Uhr' : 'Prüfung') + '</span></div>';
+      html += '<div class="row"><h3>' + (kp ? escapeHtml(kundeAnzeigeName(kp)) : 'Unbekannt') + '</h3><span class="badge soon">' + (e.p.zeit ? escapeHtml(e.p.zeit) + ' Uhr' : 'Prüfung') + '</span></div>';
       html += '<div class="meta">' + pruefungAnzeigeText(e.p) + '</div>';
       html += e.z ? ('<div class="meta" style="display:flex; align-items:center; gap:6px;">' + kalPunkt(kalFarbe(e.z), true) + '<span>' + escapeHtml(zustaendigKurz(e.z)) + '</span></div>') : '<div class="meta" style="color:#c23f12;">Noch niemandem zugeteilt</div>';
       html += zuordSelectHtml(e.p);
@@ -12755,7 +12765,7 @@ function modalKalenderTag(key){
     } else {
       var kp = kundeFuerPruefung(e.p);
       html += '<div class="card" style="border-left:6px solid ' + kalFarbe(e.z) + ';">';
-      html += '<div class="row"><h3>' + (kp ? escapeHtml(kp.name) : 'Unbekannt') + '</h3><span class="badge soon">' + (e.p.zeit ? escapeHtml(e.p.zeit) + ' Uhr' : 'Prüfung') + '</span></div>';
+      html += '<div class="row"><h3>' + (kp ? escapeHtml(kundeAnzeigeName(kp)) : 'Unbekannt') + '</h3><span class="badge soon">' + (e.p.zeit ? escapeHtml(e.p.zeit) + ' Uhr' : 'Prüfung') + '</span></div>';
       html += '<div class="meta">' + pruefungAnzeigeText(e.p) + '</div>';
       html += e.z ? ('<div class="meta" style="display:flex; align-items:center; gap:6px;">' + kalPunkt(kalFarbe(e.z), true) + '<span>' + escapeHtml(zustaendigKurz(e.z)) + '</span></div>') : '<div class="meta" style="color:#c23f12;">Noch niemandem zugeteilt</div>';
       html += '</div>';
@@ -12783,7 +12793,7 @@ function modalKalenderTermin(terminId, datumVorgabe){
   if(t && t.kundeId){ var ktk = state.kunden.filter(function(x){ return x.id === t.kundeId; })[0]; if(ktk) ktKundeName = ktk.name || ''; }
   html += '<label>Kunde (optional &ndash; aus der Liste wählen oder neuen Namen eintippen)</label><input id="ktKunde" type="text" list="ktKundenListe" autocomplete="off" placeholder="Kundenname" value="' + escapeHtml(ktKundeName) + '">';
   html += '<datalist id="ktKundenListe">';
-  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(x, y){ return x.name.localeCompare(y.name); }).forEach(function(k){ html += '<option value="' + escapeHtml(k.name) + '">'; });
+  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(x, y){ return x.name.localeCompare(y.name); }).forEach(function(k){ html += '<option value="' + escapeHtml(kundeAnzeigeName(k)) + '">'; });
   html += '</datalist>';
   html += '<div class="meta" style="margin-top:-4px;">Ist der Kunde noch nicht im Programm, wird er beim Speichern automatisch neu angelegt (Daten kannst du später beim Kunden ergänzen).</div>';
   html += '<label>Notiz (optional)</label><input id="ktNotiz" type="text" value="' + escapeHtml(t ? (t.notiz || '') : '') + '">';
@@ -14048,7 +14058,7 @@ function modalSammelbericht(kundeId){
 
   var html = '';
   html += '<div class="modal-head"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  html += '<div class="meta" style="margin-bottom:10px;">' + escapeHtml(kundeAnzeigeName(k)) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
   html += '<label>Prüfbericht-Nr.</label><input id="sbBerichtNr" type="text" value="SB-' + fmtDate(new Date().toISOString()).split('.').reverse().join('') + '">';
   html += '<label style="margin-top:10px;">Prüfdatum für alle Geräte setzen</label>';
   html += '<div class="row" style="gap:8px;"><input type="date" id="sbPruefdatumAlle" style="flex:1; min-width:0;" value="' + new Date().toISOString().substring(0,10) + '"><button type="button" class="btn small secondary" id="sbPruefdatumAlleBtn" style="flex:0 0 auto;">Für alle übernehmen</button></div>';
@@ -14408,7 +14418,7 @@ function buildSammelberichtHtml(sb, k){
       html += '<div class="pb-kundenreihe">';
       html += '<div class="pb-kundenbox">';
       html += '<div class="knr">Kunde' + (k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-      html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(k.name) + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + escapeHtml(kundeAnzeigeName(k)) + '</div>';
       html += '<div>' + escapeHtml(k.adresse||'') + '</div>';
       html += '</div>';
       html += '<div class="pb-kundenbox objektbox">';
@@ -14420,7 +14430,7 @@ function buildSammelberichtHtml(sb, k){
     } else {
       html += '<div class="pb-kundenbox">';
       html += '<div class="knr">Kunde' + (k && k.kundennummer ? ' Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
-      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(k.name) : '-') + '</div>';
+      html += '<div style="font-weight:700; margin:2px 0;">' + (k ? escapeHtml(kundeAnzeigeName(k)) : '-') + '</div>';
       html += '<div>' + (k ? escapeHtml(k.adresse||'') : '') + '</div>';
       html += '</div>';
     }
@@ -14489,7 +14499,7 @@ function buildSammelberichtHtml(sb, k){
   html += '<div class="pb-sig-col">';
   if(sb.unterschriftKunde) html += '<img src="' + sb.unterschriftKunde + '">';
   else html += '<div style="height:60px;"></div>';
-  html += '<div class="sig-label">Unterschrift Kunde' + (k ? ' (' + escapeHtml(k.name) + ')' : '') + '</div>';
+  html += '<div class="sig-label">Unterschrift Kunde' + (k ? ' (' + escapeHtml(kundeAnzeigeName(k)) + ')' : '') + '</div>';
   html += '</div>';
   html += '</div>';
 
@@ -14599,7 +14609,7 @@ function modalTagesberichtNeu(kundeId, vorgabe){
 
   var html = '';
   html += '<div class="modal-head"><h3>Neuer Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta">' + escapeHtml(k.name) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
+  html += '<div class="meta">' + escapeHtml(kundeAnzeigeName(k)) + (k.kundennummer ? ' &middot; Nr. ' + escapeHtml(k.kundennummer) : '') + '</div>';
   if(k.objekt) html += '<div class="meta">' + escapeHtml(k.objekt) + '</div>';
 
   html += '<label style="margin-top:10px;">Datum</label><input type="date" id="tbDatum" value="' + heute + '">';
@@ -14765,7 +14775,7 @@ function buildTagesberichtDruckHtml(tb, k, qrId){
   html += '<table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px;">';
   html += tbKopfzeile('Datum', fmtDate(tb.datum), 'Kundennummer', k && k.kundennummer ? '<b style="font-size:14px;">' + escapeHtml(k.kundennummer) + '</b>' : '');
   html += tbKopfzeile('Zeit', escapeHtml(tb.von || '') + ((tb.von || tb.bis) ? ' &ndash; ' : '') + escapeHtml(tb.bis || ''), 'Techniker', escapeHtml(tb.techniker || ''));
-  html += tbKopfzeile('Firma / Auftraggeber', k ? escapeHtml(k.name) : '-', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
+  html += tbKopfzeile('Firma / Auftraggeber', k ? escapeHtml(kundeAnzeigeName(k)) : '-', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', escapeHtml(tb.anlageBereich || ''));
   html += '</table>';
 
@@ -14853,7 +14863,7 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
   var lvg = k ? tagesberichtVorgabe(k.id) : null;
   html += tbKopfzeile('Datum', lvg ? fmtDate(lvg.datum) : '', 'Kundennummer', k && k.kundennummer ? '<b style="font-size:14px;">' + escapeHtml(k.kundennummer) + '</b>' : '');
   html += tbKopfzeile('Zeit', 'von ' + (lvg && lvg.von ? escapeHtml(lvg.von) : '________') + ' bis ________', 'Techniker', lvg ? escapeHtml(lvg.techniker || '') : '');
-  html += tbKopfzeile('Firma / Auftraggeber', k ? escapeHtml(k.name) : '', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
+  html += tbKopfzeile('Firma / Auftraggeber', k ? escapeHtml(kundeAnzeigeName(k)) : '', 'Objekt', k && k.objekt ? escapeHtml(k.objekt) : '');
   html += tbKopfzeile('Adresse', k ? escapeHtml(k.adresse || '') : '', 'Anlage / Bereich', '');
   html += '</table>';
 
@@ -14888,7 +14898,7 @@ function modalTagesberichtFormularWahl(suchtext){
   html += '<input id="tbFormSuche" type="text" placeholder="Suche nach Name, Kundennummer oder Objekt..." value="' + escapeHtml(suchtext || '') + '" style="margin-bottom:10px;">';
   if(!treffer.length) html += '<div class="empty">Keine Treffer</div>';
   treffer.forEach(function(k){
-    html += '<button class="btn block secondary tbFormKundeBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k.name) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + (k.kundennummer ? ' <span class="badge blau" style="margin-left:6px;">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</button>';
+    html += '<button class="btn block secondary tbFormKundeBtn" data-kid="' + k.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(kundeAnzeigeName(k)) + (k.objekt ? ' &middot; ' + escapeHtml(k.objekt) : '') + (k.kundennummer ? ' <span class="badge blau" style="margin-left:6px;">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</button>';
   });
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -15039,7 +15049,7 @@ function modalQrKunde(kundeId){
   var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta">' + escapeHtml(k.name) + '</div>';
+  html += '<div class="meta">' + escapeHtml(kundeAnzeigeName(k)) + '</div>';
   html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Weißen Rand beim Zuschneiden nicht wegschneiden.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
   openModal(html);
@@ -15133,7 +15143,7 @@ function lieferscheinDaten(berichte, k){
   }
   var adr = lsAdresseZerlegen(k ? k.adresse : '');
   return {
-    firma: k ? (k.name || '') : '',
+    firma: k ? kundeAnzeigeName(k) : '',
     anschrift1: adr[0],
     anschrift2: adr[1],
     datum: lsDatum(datum),
@@ -15639,7 +15649,7 @@ function statMonateHtml(jahr, fuerDruck){
     h += '<div class="meta" style="margin-top:3px; font-size:12px;">' + x.anz + ' Rechnung' + (x.anz === 1 ? '' : 'en') + (x.offen ? ' &middot; <b style="color:#c23f12;">offen ' + eurText(x.offen) + '</b>' : '') + (x.eingang ? ' &middot; <span style="color:#1e8449;">eingegangen ' + eurText(x.eingang) + '</span>' : '') + '</div>';
     if(istAuf){
       x.rg.forEach(function(e){
-        h += '<div class="kunde-card" data-id="' + e.k.id + '" style="display:flex; gap:8px; padding:6px 0 6px 10px; border-left:3px solid ' + (e.r.bezahlt ? '#1e8449' : '#e8541f') + '; margin-top:6px; font-size:13px;"><div style="flex:1; min-width:0;"><b>' + escapeHtml(e.k.name) + '</b><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + (e.r.bezahlt ? ' &middot; bezahlt' + (e.r.bezahltAm ? ' ' + fmtDate(e.r.bezahltAm) : '') : ' &middot; <b style="color:#c23f12;">offen</b>') + '</div></div><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div>';
+        h += '<div class="kunde-card" data-id="' + e.k.id + '" style="display:flex; gap:8px; padding:6px 0 6px 10px; border-left:3px solid ' + (e.r.bezahlt ? '#1e8449' : '#e8541f') + '; margin-top:6px; font-size:13px;"><div style="flex:1; min-width:0;"><b>' + escapeHtml(kundeAnzeigeName(e.k)) + '</b><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + (e.r.bezahlt ? ' &middot; bezahlt' + (e.r.bezahltAm ? ' ' + fmtDate(e.r.bezahltAm) : '') : ' &middot; <b style="color:#c23f12;">offen</b>') + '</div></div><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div>';
       });
     }
     h += '</div>';
@@ -15681,7 +15691,7 @@ function statZahlungslisteHtml(jahr){
     offen.forEach(function(e){
       var d = String(e.r.datum).substring(0, 10).split('-');
       var tage = Math.max(0, Math.round((heute - new Date(parseInt(d[0], 10), parseInt(d[1], 10) - 1, parseInt(d[2], 10), 12)) / 86400000));
-      h += '<tr><td><b>' + escapeHtml(e.k.name) + '</b></td><td>' + fmtDate(e.r.datum) + '</td><td>' + escapeHtml(e.r.notiz || '') + '</td><td><b>' + eurText(e.r.betrag) + '</b></td><td style="color:' + (tage > 30 ? '#c23f12' : 'inherit') + ';">' + tage + (tage === 1 ? ' Tag' : ' Tagen') + '</td></tr>';
+      h += '<tr><td><b>' + escapeHtml(kundeAnzeigeName(e.k)) + '</b></td><td>' + fmtDate(e.r.datum) + '</td><td>' + escapeHtml(e.r.notiz || '') + '</td><td><b>' + eurText(e.r.betrag) + '</b></td><td style="color:' + (tage > 30 ? '#c23f12' : 'inherit') + ';">' + tage + (tage === 1 ? ' Tag' : ' Tagen') + '</td></tr>';
     });
     h += '<tr style="font-weight:700;"><td>Summe offen</td><td></td><td></td><td>' + eurText(summe(offen)) + '</td><td></td></tr>';
     h += '</tbody></table>';
@@ -15692,7 +15702,7 @@ function statZahlungslisteHtml(jahr){
   } else {
     h += '<table class="pb-tabelle"><thead><tr><th>Kunde</th><th>Rechnungsdatum</th><th>Notiz</th><th>Betrag</th><th>Bezahlt am</th></tr></thead><tbody>';
     bezahlt.forEach(function(e){
-      h += '<tr><td><b>' + escapeHtml(e.k.name) + '</b></td><td>' + fmtDate(e.r.datum) + '</td><td>' + escapeHtml(e.r.notiz || '') + '</td><td>' + eurText(e.r.betrag) + '</td><td>' + (e.r.bezahltAm ? fmtDate(e.r.bezahltAm) : '&#10003;') + '</td></tr>';
+      h += '<tr><td><b>' + escapeHtml(kundeAnzeigeName(e.k)) + '</b></td><td>' + fmtDate(e.r.datum) + '</td><td>' + escapeHtml(e.r.notiz || '') + '</td><td>' + eurText(e.r.betrag) + '</td><td>' + (e.r.bezahltAm ? fmtDate(e.r.bezahltAm) : '&#10003;') + '</td></tr>';
     });
     h += '<tr style="font-weight:700;"><td>Summe bezahlt</td><td></td><td></td><td>' + eurText(summe(bezahlt)) + '</td><td></td></tr>';
     h += '</tbody></table>';
@@ -15745,7 +15755,7 @@ function statistikKundenHtml(){
       var heuteT = new Date(); heuteT.setHours(12, 0, 0, 0);
       var tage = Math.round((heuteT - new Date(parseInt(rdT[0], 10), parseInt(rdT[1], 10) - 1, parseInt(rdT[2], 10), 12, 0, 0)) / 86400000);
       var tageText = tage <= 0 ? 'seit heute offen' : ('seit ' + tage + (tage === 1 ? ' Tag' : ' Tagen') + ' offen');
-      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(e.k.name) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div>' + (tage >= 30 ? '<button type="button" class="btn small secondary" data-rgmahnung="' + escapeHtml(e.k.id) + '|' + escapeHtml(e.r.id) + '" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">&#9993; Zahlungserinnerung</button>' : '') + '</div>';
+      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(kundeAnzeigeName(e.k)) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div>' + (tage >= 30 ? '<button type="button" class="btn small secondary" data-rgmahnung="' + escapeHtml(e.k.id) + '|' + escapeHtml(e.r.id) + '" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">&#9993; Zahlungserinnerung</button>' : '') + '</div>';
     });
     h += '<div class="section-title" style="margin-top:14px;">Rangliste nach Umsatz</div>';
   }
@@ -16061,7 +16071,7 @@ function modalZahlungserinnerung(kundeId, rechnungId){
     + 'Wolfgang Janiba Brandschutztechnik GmbH\nKetzergasse 299, 2380 Perchtoldsdorf\nTel 0676/305 83 98 · info@loeschtechnik.at';
   var betreff = 'Zahlungserinnerung – Rechnung vom ' + fmtDate(r.datum);
   var html = '<div class="modal-head"><h3>Zahlungserinnerung</h3><button class="close" id="mClose">&times;</button></div>';
-  html += '<div class="meta">' + escapeHtml(k.name) + (k.email ? ' &middot; ' + escapeHtml(k.email) : ' &middot; <span style="color:#c23f12;">keine E-Mail beim Kunden hinterlegt</span>') + '</div>';
+  html += '<div class="meta">' + escapeHtml(kundeAnzeigeName(k)) + (k.email ? ' &middot; ' + escapeHtml(k.email) : ' &middot; <span style="color:#c23f12;">keine E-Mail beim Kunden hinterlegt</span>') + '</div>';
   html += '<label>Betreff</label><input id="zeBetreff" type="text" value="' + escapeHtml(betreff) + '">';
   html += '<label>Text (kannst du anpassen)</label><textarea id="zeText" rows="14" style="width:100%; font-size:14px;">' + escapeHtml(text) + '</textarea>';
   html += '<button class="btn block" id="zeMail" style="margin-top:10px;">In Mail-App öffnen</button>';
