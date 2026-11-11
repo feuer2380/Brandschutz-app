@@ -1753,6 +1753,12 @@ function istVollsicht(){
   return !!(m && m.vollzugriff);
 }
 function istEingeschraenkt(){ return state.rolle === 'mitarbeiter' && !istVollsicht(); }
+// Voller Kalender (Termine anlegen + alle Termine sehen), auch ohne Vollzugriff auf alles andere
+function kalVollsicht(){
+  if(istVollsicht()) return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !!(m && m.kalenderAnlegen);
+}
 function pruefungFuerMich(p){
   if(!istEingeschraenkt()) return true;
   var g = geraetFuerPruefung(p);
@@ -5249,7 +5255,7 @@ var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
   { name: 'Janiba Wolfgang sen.', pinPruefwert: 'b1b89ef39b06b58a21533ed951b596ec651fa17a89b69523f05cf6558777a9da', lagerbuch: true, vollzugriff: true, statistik: true },
   { name: 'Prominzer Tobias', pinPruefwert: 'd6508a86e67e359c12c96a90b69e0db0bc9a80e84e3a7585261f6c3ed6591e78' },
-  { name: 'Mayerhofer Tobias', pinPruefwert: '9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd' },
+  { name: 'Mayerhofer Tobias', pinPruefwert: '9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd', kalenderAnlegen: true },
   { name: 'Holakovsky Manuela', pinPruefwert: 'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38', aufgabenVergeben: true, vollzugriff: true, statistik: true },
   { name: 'Henke Alexander', pinPruefwert: '82e8e2870105ec7f465aa8c8e99b0e0a65c9713bb2ac845d48b9d51c1bfc723f' },
   { name: 'Harris Sandra', pinPruefwert: 'af0757f3208d062e6a6e80e4c771fce69f9dbc951daec8378c3788710015180c', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
@@ -12374,7 +12380,7 @@ function kalEintragFarben(e){
   return [e.z || ''];
 }
 function kalPersonAktiv(){
-  if(istEingeschraenkt()) return state.mitarbeiterName;
+  if(istEingeschraenkt() && !kalVollsicht()) return state.mitarbeiterName;
   return state.kalPerson || '';
 }
 function kalEintraegeFuerTag(key){
@@ -12392,7 +12398,7 @@ function kalEintraegeFuerTag(key){
     var g = geraetFuerPruefung(p);
     var z = g ? g.zustaendig : null;
     if(person){ if(z !== person) return; }
-    else if(istEingeschraenkt()) return;
+    else if(istEingeschraenkt() && !kalVollsicht()) return;
     res.push({ art: 'pruefung', p: p, g: g, z: z, sort: (p.zeit || '98:00') });
   });
   res.sort(function(a, b){ return a.sort.localeCompare(b.sort); });
@@ -12406,7 +12412,7 @@ function renderKalender(){
   var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var heute = kalHeuteKey();
   var gewTag = state.kalTag || heute;
-  var voll = istVollsicht();
+  var voll = kalVollsicht();
   var html = '';
   html += '<div class="row" style="align-items:center; margin-bottom:10px;"><div class="section-title" style="margin:0;">Kalender</div>';
   if(voll) html += '<button type="button" class="btn small" id="kalNeu">+ Termin</button>';
