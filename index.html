@@ -8003,7 +8003,7 @@ function modalGeraetBearbeiten(geraetId){
   html += '</div>';
   html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" value="' + escapeHtml(g.seriennummer || '') + '" placeholder="z.B. auf dem Typenschild">';
-  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:8px;"><input type="checkbox" id="fFluorfrei" style="width:20px; height:20px;"' + (g.fluorfrei ? ' checked' : '') + '> Löschmittel fluorfrei (Bio-Schaum)</label>';
+  html += '<span id="fjFluorfreiBox"><label style="display:flex; align-items:center; gap:8px; margin-top:8px;"><input type="checkbox" id="fFluorfrei" style="width:20px; height:20px;"' + (g.fluorfrei ? ' checked' : '') + '> Löschmittel fluorfrei (Bio-Schaum)</label></span>';
   html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><div class="row" style="gap:8px;"><input id="fExterneId" type="text" value="' + escapeHtml(g.externeId || '') + '" placeholder="z.B. 2269" style="flex:1;"><button type="button" class="btn secondary" id="fExterneIdScanBtn" style="flex:0 0 auto; padding:0 14px;">&#128247;</button></div>';
   html += '<label>Standort</label><input id="fStandort" type="text" value="' + escapeHtml(g.standort || '') + '" list="standortDatalist" autocomplete="off">';
@@ -8551,8 +8551,13 @@ function bindKategorieToggle(kundeIdFuerReserve){
     if(block) block.style.display = (sel.value === 'Feuerlöscher' || sel.value === 'Rauchmelder') ? '' : 'none';
     if(blockAkku) blockAkku.style.display = (sel.value === 'RWA-Anlage') ? '' : 'none';
     if(blockPZ) blockPZ.style.display = istFuellKategorie(sel.value) ? '' : 'none';
-    if(blockMaengel) blockMaengel.style.display = istBegehung ? '' : 'none';
+    var istLoescherArt = (sel.value === 'Feuerlöscher' || istFuellKategorie(sel.value));
+    // Mängel-Feld bei Anlagen/Türen/Klappen/Begehung (nicht bei Löschern, dort über Prüfergebnis)
+    if(blockMaengel) blockMaengel.style.display = (istBegehung || !istLoescherArt) ? '' : 'none';
     if(blockSeriennr) blockSeriennr.style.display = istBegehung ? 'none' : '';
+    // Fluorfrei-Häkchen nur bei Feuerlöschern sinnvoll
+    var ffBox = document.getElementById('fjFluorfreiBox');
+    if(ffBox) ffBox.style.display = (sel.value === 'Feuerlöscher') ? '' : 'none';
     var typChipsBlock = document.getElementById('typChipsBlock');
     if(typChipsBlock) typChipsBlock.style.display = 'none';
     if(typLabel) typLabel.textContent = istBegehung ? 'Begehung (Datum/Beschreibung)' : 'Typ';
@@ -8875,7 +8880,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
   html += '</div>';
   html += '<div id="fjBlockSeriennr">';
   html += '<label>Seriennummer</label><input id="fSeriennr" type="text" placeholder="z.B. auf dem Typenschild">';
-  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:8px;"><input type="checkbox" id="fFluorfrei" style="width:20px; height:20px;"> Löschmittel fluorfrei (Bio-Schaum)</label>';
+  html += '<span id="fjFluorfreiBox"><label style="display:flex; align-items:center; gap:8px; margin-top:8px;"><input type="checkbox" id="fFluorfrei" style="width:20px; height:20px;"> Löschmittel fluorfrei (Bio-Schaum)</label></span>';
   html += '</div>';
   html += '<label>Externe ID (altes QR-Aufkleber-System)</label><div class="row" style="gap:8px;"><input id="fExterneId" type="text" value="' + escapeHtml(vorgabe.externeId || '') + '" placeholder="z.B. 2269" style="flex:1;"><button type="button" class="btn secondary" id="fExterneIdScanBtn" style="flex:0 0 auto; padding:0 14px;">&#128247;</button></div>';
   html += '<label>Standort</label><input id="fStandort" type="text" placeholder="z.B. Erdgeschoss, Gang links" value="' + escapeHtml(vorgabe.standort || (letzte && letzte.standort ? letzte.standort : '')) + '" list="standortDatalist" autocomplete="off">';
