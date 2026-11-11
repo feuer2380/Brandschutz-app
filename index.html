@@ -14066,6 +14066,8 @@ function modalSammelbericht(kundeId){
   html += '<label>Prüfbericht-Nr.</label><input id="sbBerichtNr" type="text" value="SB-' + fmtDate(new Date().toISOString()).split('.').reverse().join('') + '">';
   html += '<label style="margin-top:10px;">Prüfdatum für alle Geräte setzen</label>';
   html += '<div class="row" style="gap:8px;"><input type="date" id="sbPruefdatumAlle" style="flex:1; min-width:0;" value="' + new Date().toISOString().substring(0,10) + '"><button type="button" class="btn small secondary" id="sbPruefdatumAlleBtn" style="flex:0 0 auto;">Für alle übernehmen</button></div>';
+  html += '<div class="meta" style="margin-top:10px;">Geräte für den Bericht auswählen (nur angehakte kommen auf den Bericht und werden als geprüft eingetragen):</div>';
+  html += '<div class="row" style="gap:8px; margin-top:4px;"><button type="button" class="btn small secondary" id="sbAlleAus" style="flex:1;">Alle auswählen</button><button type="button" class="btn small secondary" id="sbKeineAus" style="flex:1;">Alle abwählen</button></div>';
 
   if(geraeteSortiert.length === 0){
     html += '<div class="empty">Keine aktiven Geräte bei diesem Kunden</div>';
@@ -14082,6 +14084,7 @@ function modalSammelbericht(kundeId){
       var klasse = function(key){ return aktErg === key ? 'btn small sbErgBtn active' : 'btn small secondary sbErgBtn'; };
       var stil = function(key){ return 'flex:1;' + (aktErg === key ? ' background:' + farbe(key) + ';' : ''); };
       html += '<div class="card" data-geraetkarte="' + g.id + '">';
+      html += '<label style="display:flex; align-items:center; gap:8px; font-weight:600; margin-bottom:8px;"><input type="checkbox" class="sbInkl" data-gid="' + g.id + '" checked style="width:20px; height:20px;"> In Bericht aufnehmen</label>';
       html += '<div style="flex:1; min-width:0;"><strong>Nr. ' + katNr2 + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + bioHinweisHtml(g) + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       if(istRWA){
         html += '<div style="margin-top:10px;">';
@@ -14174,12 +14177,19 @@ function modalSammelbericht(kundeId){
     };
   });
 
+  var sbAlleAusBtn = document.getElementById('sbAlleAus');
+  if(sbAlleAusBtn) sbAlleAusBtn.onclick = function(){ document.querySelectorAll('.sbInkl').forEach(function(cb){ cb.checked = true; }); };
+  var sbKeineAusBtn = document.getElementById('sbKeineAus');
+  if(sbKeineAusBtn) sbKeineAusBtn.onclick = function(){ document.querySelectorAll('.sbInkl').forEach(function(cb){ cb.checked = false; }); };
+
   document.getElementById('sbSpeichern').onclick = function(){
+    var geraeteBericht = geraeteSortiert.filter(function(g){ var cb = document.querySelector('.sbInkl[data-gid="' + g.id + '"]'); return !cb || cb.checked; });
+    if(!geraeteBericht.length){ toast('Bitte mindestens ein Gerät für den Bericht auswählen'); return; }
     // Native Abfrage, damit das ausgefüllte Formular (Unterschriften, Daten) erhalten bleibt
-    if(!confirm('Achtung: Damit werden alle ' + geraeteSortiert.length + ' Geräte als GEPRÜFT eingetragen (Prüfdatum und nächster Termin). Wenn du nur ausdrucken willst: Abbrechen und die Ausstattungsliste verwenden. Prüfbericht wirklich erstellen?')) return;
-    sbErstellenStarten();
+    if(!confirm('Achtung: Damit werden ' + geraeteBericht.length + ' Gerät(e) als GEPRÜFT eingetragen (Prüfdatum und nächster Termin). Wenn du nur ausdrucken willst: Abbrechen und die Ausstattungsliste verwenden. Prüfbericht wirklich erstellen?')) return;
+    sbErstellenStarten(geraeteBericht);
   };
-  function sbErstellenStarten(){
+  function sbErstellenStarten(geraeteBericht){
     var sbBtn = document.getElementById('sbSpeichern');
     sbBtn.disabled = true;
     sbBtn.textContent = 'Wird gespeichert...';
@@ -14197,8 +14207,8 @@ function modalSammelbericht(kundeId){
     var snapshot = [];
 
     function naechstesGeraet(){
-      sbBtn.textContent = 'Speichere Gerät ' + (idx + 1) + ' von ' + geraeteSortiert.length + '...';
-      if(idx >= geraeteSortiert.length){
+      sbBtn.textContent = 'Speichere Gerät ' + (idx + 1) + ' von ' + geraeteBericht.length + '...';
+      if(idx >= geraeteBericht.length){
         sbBtn.textContent = 'Erstelle Bericht(e)...';
         var basisNr = document.getElementById('sbBerichtNr').value.trim();
         var allgemeineBemerkung = document.getElementById('sbBemerkung').value.trim();
@@ -14250,7 +14260,7 @@ function modalSammelbericht(kundeId){
         speichereNaechstenBericht();
         return;
       }
-      var g = geraeteSortiert[idx];
+      var g = geraeteBericht[idx];
       var istRWA = ((g.kategorie || 'Feuerlöscher').trim()) === 'RWA-Anlage';
       var akkuEl = istRWA ? document.getElementById('sbAkku_' + g.id) : null;
       var akkuVal = akkuEl ? akkuEl.value : '';
