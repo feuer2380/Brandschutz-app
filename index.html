@@ -9210,25 +9210,74 @@ function erlBerichtOeffnen(pids){
   if(!liste.length) return;
   var p0 = liste[0];
   var tag = fmtDate(p0.erledigtAm || p0.datum);
-  // Gibt es an diesem Tag einen gespeicherten Sammelbericht fuer den Kunden? Dann den nehmen.
+  // Alle gespeicherten Sammelberichte dieses Kunden an diesem Tag -> IMMER zu EINEM Bericht zusammenfassen
   var sbs = (state.sammelberichte || []).filter(function(sb){ return sb.kundeId === p0.kundeId && fmtDate(sb.datum) === tag; });
-  if(liste.length > 1 && sbs.length === 1){ modalSammelberichtAnsicht(sbs[0].id); return; }
-  if(liste.length > 1 && sbs.length > 1){
-    var h = '<div class="modal-head"><h3>Welcher Bericht?</h3><button class="close" id="mClose">&times;</button></div>';
-    sbs.forEach(function(sb){
-      var kats = {};
-      (sb.geraeteSnapshot || []).forEach(function(g){ kats[(g.kategorie || 'Feuerlöscher').trim()] = 1; });
-      h += '<button class="btn block secondary sbWahlBtn" data-sbid="' + sb.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(sb.berichtNr || 'Sammelbericht') + '<br><span class="meta">' + escapeHtml(Object.keys(kats).join(', ')) + ' &middot; ' + (sb.geraeteSnapshot || []).length + ' Geräte</span></button>';
-    });
-    h += '<button class="btn block" id="sbWahlAlle" style="margin-top:6px;">Alle Prüfungen dieses Tages als ein Bericht</button>';
-    openModal(h);
-    document.getElementById('mClose').onclick = closeModal;
-    document.querySelectorAll('.sbWahlBtn').forEach(function(b){ b.onclick = function(){ modalSammelberichtAnsicht(b.getAttribute('data-sbid')); }; });
-    document.getElementById('sbWahlAlle').onclick = function(){ modalBerichteMehrere(liste); };
-    return;
-  }
+  if(sbs.length === 1){ modalSammelberichtAnsicht(sbs[0].id); return; }
+  if(sbs.length > 1){ modalKombiBericht(sbs, p0.kundeId); return; }
+  // Kein gespeicherter Sammelbericht vorhanden
   if(liste.length === 1){ modalBerichtAnsicht(p0.id); return; }
   modalBerichteMehrere(liste);
+}
+// Mehrere Sammelberichte eines Kunden zu einem einzigen Bericht zusammenführen
+function kombiSammelbericht(sbs){
+  var sortiert = sbs.slice().sort(function(a, b){ return String(a.datum).localeCompare(String(b.datum)); });
+  var alle = [], sigK = '', sigT = '', bem = [], nummern = [], datum = null;
+  sortiert.forEach(function(sb){
+    if(!datum) datum = sb.datum;
+    if(!sigK && sb.unterschriftKunde) sigK = sb.unterschriftKunde;
+    if(!sigT && sb.unterschriftTechniker) sigT = sb.unterschriftTechniker;
+    if(sb.bemerkung) bem.push(sb.bemerkung);
+    if(sb.berichtNr) nummern.push(sb.berichtNr);
+    (sb.geraeteSnapshot || []).forEach(function(g){ alle.push(Object.assign({}, g)); });
+  });
+  // Positionsnummern je Kategorie fortlaufend neu vergeben (sonst doppelte Nr.)
+  var zael = {};
+  alle.forEach(function(g){
+    var kat = (g.kategorie || 'Feuerlöscher').trim();
+    zael[kat] = (zael[kat] || 0) + 1;
+    g.nr = zael[kat];
+  });
+  var basisNr = nummern.length ? nummern[0] : ('PB-' + fmtDate(datum).split('.').reverse().join('') + '-GES');
+  return {
+    id: 'kombi-' + (sortiert[0] ? sortiert[0].id : ''),
+    kombiQuelle: sortiert.map(function(s){ return s.id; }),
+    kundeId: sortiert[0] ? sortiert[0].kundeId : '',
+    datum: datum,
+    berichtNr: basisNr,
+    geraeteSnapshot: alle,
+    unterschriftKunde: sigK,
+    unterschriftTechniker: sigT,
+    bemerkung: bem.join(' | ')
+  };
+}
+function modalKombiBericht(sbs, kundeId){
+  var sb = kombiSammelbericht(sbs);
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var anzahl = (sb.geraeteSnapshot || []).length;
+  var html = '';
+  html += '<div class="modal-head no-print"><h3>Prüfbericht (' + anzahl + ' Geräte)</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta no-print" style="margin-bottom:10px;">Alle ' + sbs.length + ' Berichte dieses Tages in einem Prüfbericht zusammengefasst.</div>';
+  html += buildSammelberichtHtml(sb, k);
+  html += '<div class="no-print" style="margin-top:16px;">';
+  html += querSchalterHtml();
+  html += '<button class="btn block" id="druckBtnKombi">Drucken / Als PDF teilen</button>';
+  html += '<button class="btn block secondary" id="lsBtnKombi" style="margin-top:10px;">Lieferschein erstellen</button>';
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('lsBtnKombi').onclick = function(){ modalLieferschein([sb], k); };
+  document.getElementById('druckBtnKombi').onclick = function(){
+    var b = document.getElementById('druckBtnKombi');
+    b.disabled = true; b.textContent = 'Bereite vor...';
+    try{
+      bsvDruckenOderTeilen(buildSammelberichtHtml(sb, k), (sb.berichtNr || 'Pruefbericht') + '.pdf', function(){
+        b.disabled = false; b.textContent = 'Drucken / Als PDF teilen';
+      });
+    }catch(err){
+      b.disabled = false; b.textContent = 'Drucken / Als PDF teilen';
+      toast('Fehler beim Vorbereiten: ' + (err && err.message ? err.message : err));
+    }
+  };
 }
 function modalBerichteMehrere(liste){
   var k = kundeFuerPruefung(liste[0]);
