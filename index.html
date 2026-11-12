@@ -12638,9 +12638,9 @@ function modalTerminKundeZuordnen(t, kAlt){
   var html = '';
   html += '<div class="modal-head"><h3>Kunde zuordnen</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:6px;">Termin: <b>' + escapeHtml(t.titel || 'Termin') + '</b>' + (kAlt ? ' &middot; bisher: ' + escapeHtml(kAlt.name || '') : '') + '</div>';
-  html += '<label>Kundennummer</label>';
-  html += '<input id="tkzNr" type="text" inputmode="numeric" autocomplete="off" placeholder="z.B. 210271" style="font-size:22px; font-weight:700; letter-spacing:1px;">';
-  html += '<div class="meta" style="margin-top:-4px;">Auch ein Teil vom Namen geht.</div>';
+  html += '<label>Name oder Kundennummer</label>';
+  html += '<input id="tkzNr" type="text" autocomplete="off" placeholder="z.B. Wiener oder 210271" style="font-size:18px; font-weight:600;">';
+  html += '<div class="meta" style="margin-top:-4px;">Namen oder Nummer eingeben und aus der Liste wählen. Auch ein Teil vom Namen genügt.</div>';
   html += '<div id="tkzTreffer" style="margin:10px 0;"></div>';
   html += '<button class="btn block" id="tkzSpeichern" disabled style="opacity:.45;">Diesen Kunden übernehmen &amp; speichern</button>';
   if(kAlt) html += '<button class="btn block secondary" id="tkzErgaenzen" style="margin-top:10px;">Stattdessen Daten von &bdquo;' + escapeHtml(kAlt.name || '') + '&ldquo; ergänzen</button>';
@@ -12654,7 +12654,7 @@ function modalTerminKundeZuordnen(t, kAlt){
   function karte(k, aktiv){
     var adr = k.adresse || ((k.strasse || '') + (k.ort ? ', ' + (k.plz ? k.plz + ' ' : '') + k.ort : ''));
     return '<div class="card" data-tkzid="' + k.id + '" style="cursor:pointer; margin-bottom:8px; ' + (aktiv ? 'border:2px solid #2e8b57; background:#eef8f1;' : '') + '">' +
-      '<div class="row"><h3>' + (aktiv ? '&#10003; ' : '') + escapeHtml(k.name || '') + '</h3>' + (k.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>' +
+      '<div class="row"><h3>' + (aktiv ? '&#10003; ' : '') + escapeHtml(kundeAnzeigeName(k)) + '</h3>' + (k.kundennummer ? '<span class="badge blau">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + '</div>' +
       (k.objekt ? '<div class="meta">' + escapeHtml(k.objekt) + '</div>' : '') +
       (adr ? '<div class="meta">' + escapeHtml(adr) + '</div>' : '') + '</div>';
   }
@@ -12663,24 +12663,29 @@ function modalTerminKundeZuordnen(t, kAlt){
     btn.disabled = !k;
     btn.style.opacity = k ? '1' : '.45';
   }
+  // Suchindex einmal vorberechnen (schnell auch bei vielen Kunden)
+  var suchIndex = [];
+  state.kunden.forEach(function(k){
+    if(k.geloescht || (kAlt && k.id === kAlt.id)) return;
+    suchIndex.push({ k: k, nr: tkzNorm(k.kundennummer), hay: tkzNorm(kundeAnzeigeName(k) + ' ' + (k.objekt || '')) });
+  });
   function suche(){
     var q = tkzNorm(eing.value);
     setzeGewaehlt(null);
     if(!q){ box.innerHTML = ''; return; }
-    var aktive = state.kunden.filter(function(k){ return !k.geloescht && (!kAlt || k.id !== kAlt.id); });
-    var exakt = aktive.filter(function(k){ return k.kundennummer && tkzNorm(k.kundennummer) === q; });
-    var liste;
-    if(exakt.length){
-      liste = exakt;
-    } else {
-      liste = aktive.filter(function(k){
-        return tkzNorm(k.kundennummer).indexOf(q) > -1 || tkzNorm(k.name).indexOf(q) > -1 || tkzNorm(k.objekt).indexOf(q) > -1;
-      }).slice(0, 6);
+    var liste = [];
+    var i;
+    for(i = 0; i < suchIndex.length; i++){ if(suchIndex[i].nr && suchIndex[i].nr === q) liste.push(suchIndex[i].k); }
+    if(!liste.length){
+      for(i = 0; i < suchIndex.length && liste.length < 10; i++){
+        var e = suchIndex[i];
+        if((e.nr && e.nr.indexOf(q) > -1) || e.hay.indexOf(q) > -1) liste.push(e.k);
+      }
     }
-    if(!liste.length){ box.innerHTML = '<div class="meta" style="color:#c23f12;">Kein Kunde mit dieser Nummer gefunden</div>'; return; }
+    if(!liste.length){ box.innerHTML = '<div class="meta" style="color:#c23f12;">Kein Kunde gefunden</div>'; return; }
     if(liste.length === 1) setzeGewaehlt(liste[0]);
     var h = '';
-    for(var i = 0; i < liste.length; i++) h += karte(liste[i], gewaehlt && gewaehlt.id === liste[i].id);
+    for(i = 0; i < liste.length; i++) h += karte(liste[i], gewaehlt && gewaehlt.id === liste[i].id);
     if(liste.length > 1) h = '<div class="meta" style="margin-bottom:6px;">Mehrere Treffer &ndash; bitte antippen:</div>' + h;
     box.innerHTML = h;
     box.querySelectorAll('[data-tkzid]').forEach(function(c){
@@ -12692,7 +12697,8 @@ function modalTerminKundeZuordnen(t, kAlt){
       };
     });
   }
-  eing.oninput = suche;
+  var sucheTmr = null;
+  eing.oninput = function(){ if(sucheTmr) clearTimeout(sucheTmr); sucheTmr = setTimeout(suche, 130); };
   eing.onkeydown = function(ev){ if(ev.key === 'Enter' && gewaehlt){ ev.preventDefault(); btn.onclick(); } };
   setTimeout(function(){ try{ eing.focus(); }catch(e){} }, 150);
 
@@ -12700,20 +12706,14 @@ function modalTerminKundeZuordnen(t, kAlt){
     if(!gewaehlt) return;
     var k = gewaehlt;
     var platzhalterWeg = tkzPlatzhalterLeer(kAlt, t);
+    // Lokal sofort setzen, Oberfläche gleich aktualisieren (kein komplettes Neuladen)
     t.kundeId = k.id;
-    dbPut('termine', t, function(){
-      var fertig = function(){
-        closeModal();
-        loadAll(function(){ render(); toast('Termin mit ' + (k.name || 'Kunde') + ' verknüpft'); });
-      };
-      if(platzhalterWeg){
-        kAlt.geloescht = true;
-        kAlt.geloeschtAm = new Date().toISOString();
-        dbPut('kunden', kAlt, fertig);
-      } else {
-        fertig();
-      }
-    });
+    if(platzhalterWeg){ kAlt.geloescht = true; kAlt.geloeschtAm = new Date().toISOString(); }
+    closeModal();
+    render();
+    toast('Termin mit ' + (kundeAnzeigeName(k) || 'Kunde') + ' verknüpft');
+    // Im Hintergrund speichern
+    dbPut('termine', t, function(){ if(platzhalterWeg){ dbPut('kunden', kAlt, function(){}); } });
   };
   var bE = document.getElementById('tkzErgaenzen');
   if(bE) bE.onclick = function(){ closeModal(); modalKundeBearbeiten(kAlt.id); };
@@ -12830,15 +12830,19 @@ function modalKalenderTermin(terminId, datumVorgabe){
     var box = document.getElementById('ktKundeTreffer');
     var hid = document.getElementById('ktKundeId');
     if(!inp || !box) return;
+    var ktIndex = [];
+    state.kunden.forEach(function(k){
+      if(k.geloescht) return;
+      ktIndex.push({ k: k, nr: String(k.kundennummer || '').toLowerCase(), hay: (kundeAnzeigeName(k) || '').toLowerCase() });
+    });
     var zeige = function(q){
       q = (q || '').trim().toLowerCase();
       if(!q){ box.style.display = 'none'; box.innerHTML = ''; return; }
-      var tref = state.kunden.filter(function(k){
-        if(k.geloescht) return false;
-        var name = (kundeAnzeigeName(k) || '').toLowerCase();
-        var nr = String(k.kundennummer || '').toLowerCase();
-        return name.indexOf(q) > -1 || (nr && nr.indexOf(q) > -1);
-      }).slice(0, 10);
+      var tref = [];
+      for(var xi = 0; xi < ktIndex.length && tref.length < 10; xi++){
+        var e = ktIndex[xi];
+        if(e.hay.indexOf(q) > -1 || (e.nr && e.nr.indexOf(q) > -1)) tref.push(e.k);
+      }
       if(!tref.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
       var h = '';
       tref.forEach(function(k){
@@ -12856,7 +12860,8 @@ function modalKalenderTermin(terminId, datumVorgabe){
         };
       });
     };
-    inp.oninput = function(){ if(hid) hid.value = ''; zeige(inp.value); };
+    var ktTmr = null;
+    inp.oninput = function(){ if(hid) hid.value = ''; if(ktTmr) clearTimeout(ktTmr); var v = inp.value; ktTmr = setTimeout(function(){ zeige(v); }, 130); };
     inp.onfocus = function(){ if(inp.value) zeige(inp.value); };
   })();
   var wdhSel = document.getElementById('ktWdh');
