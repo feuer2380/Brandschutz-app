@@ -12795,11 +12795,12 @@ function modalKalenderTermin(terminId, datumVorgabe){
   html += '<label>Uhrzeit (optional)</label><input id="ktZeit" type="time" value="' + escapeHtml(t ? (t.zeit || '') : '') + '">';
   var ktKundeName = '';
   if(t && t.kundeId){ var ktk = state.kunden.filter(function(x){ return x.id === t.kundeId; })[0]; if(ktk) ktKundeName = ktk.name || ''; }
-  html += '<label>Kunde (optional &ndash; aus der Liste wählen oder neuen Namen eintippen)</label><input id="ktKunde" type="text" list="ktKundenListe" autocomplete="off" placeholder="Kundenname" value="' + escapeHtml(ktKundeName) + '">';
-  html += '<datalist id="ktKundenListe">';
-  state.kunden.filter(function(k){ return !k.geloescht && k.name; }).slice().sort(function(x, y){ return x.name.localeCompare(y.name); }).forEach(function(k){ html += '<option value="' + escapeHtml(kundeAnzeigeName(k)) + '">'; });
-  html += '</datalist>';
-  html += '<div class="meta" style="margin-top:-4px;">Ist der Kunde noch nicht im Programm, wird er beim Speichern automatisch neu angelegt (Daten kannst du später beim Kunden ergänzen).</div>';
+  var ktKundeIdVor = (t && t.kundeId) ? t.kundeId : '';
+  html += '<label>Kunde (optional &ndash; Name oder Kundennummer eingeben und auswählen)</label>';
+  html += '<input type="hidden" id="ktKundeId" value="' + escapeHtml(ktKundeIdVor) + '">';
+  html += '<input id="ktKunde" type="text" autocomplete="off" placeholder="Name oder Kundennummer" value="' + escapeHtml(ktKundeName) + '">';
+  html += '<div id="ktKundeTreffer" style="display:none; border:1px solid #e0d5c3; border-radius:10px; margin-top:4px; max-height:240px; overflow-y:auto; background:#fff;"></div>';
+  html += '<div class="meta" style="margin-top:4px;">Tippe Name oder Kundennummer und wähle den Kunden aus der Liste. Ein noch nicht vorhandener Kunde wird beim Speichern neu angelegt.</div>';
   html += '<label>Notiz (optional)</label><input id="ktNotiz" type="text" value="' + escapeHtml(t ? (t.notiz || '') : '') + '">';
   html += '<label>Für wen? (mehrere möglich)</label><div style="margin-bottom:10px;">';
   html += '<label style="' + zeilenStil + '"><input type="checkbox" data-ktwer="alle" style="' + cbStil + '"' + (emp.indexOf('alle') > -1 ? ' checked' : '') + '> <b>Alle Mitarbeiter</b></label>';
@@ -12823,6 +12824,41 @@ function modalKalenderTermin(terminId, datumVorgabe){
   if(t && t.serieId) html += '<button class="btn block secondary" id="ktSerieLoeschen" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">Diesen und alle folgenden der Serie löschen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  // Kundensuche mit Auswahl-Liste (Name oder Kundennummer)
+  (function(){
+    var inp = document.getElementById('ktKunde');
+    var box = document.getElementById('ktKundeTreffer');
+    var hid = document.getElementById('ktKundeId');
+    if(!inp || !box) return;
+    var zeige = function(q){
+      q = (q || '').trim().toLowerCase();
+      if(!q){ box.style.display = 'none'; box.innerHTML = ''; return; }
+      var tref = state.kunden.filter(function(k){
+        if(k.geloescht) return false;
+        var name = (kundeAnzeigeName(k) || '').toLowerCase();
+        var nr = String(k.kundennummer || '').toLowerCase();
+        return name.indexOf(q) > -1 || (nr && nr.indexOf(q) > -1);
+      }).slice(0, 10);
+      if(!tref.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+      var h = '';
+      tref.forEach(function(k){
+        var zusatz = (k.strasse ? k.strasse + ', ' : '') + (k.plz ? k.plz + ' ' : '') + (k.ort || '');
+        h += '<div class="ktTrefferZeile" data-kid="' + escapeHtml(k.id) + '" style="padding:10px 12px; border-bottom:1px solid #f0e8da; cursor:pointer;"><strong>' + escapeHtml(kundeAnzeigeName(k)) + '</strong>' + (k.kundennummer ? ' <span class="meta">Nr. ' + escapeHtml(k.kundennummer) + '</span>' : '') + (zusatz.trim() ? '<br><span class="meta">' + escapeHtml(zusatz) + '</span>' : '') + '</div>';
+      });
+      box.innerHTML = h; box.style.display = 'block';
+      box.querySelectorAll('.ktTrefferZeile').forEach(function(z){
+        z.onclick = function(){
+          var k = state.kunden.filter(function(x){ return x.id === z.getAttribute('data-kid'); })[0];
+          if(!k) return;
+          inp.value = kundeAnzeigeName(k);
+          if(hid) hid.value = k.id;
+          box.style.display = 'none'; box.innerHTML = '';
+        };
+      });
+    };
+    inp.oninput = function(){ if(hid) hid.value = ''; zeige(inp.value); };
+    inp.onfocus = function(){ if(inp.value) zeige(inp.value); };
+  })();
   var wdhSel = document.getElementById('ktWdh');
   if(wdhSel) wdhSel.onchange = function(){ document.getElementById('ktBisBox').style.display = wdhSel.value ? '' : 'none'; };
   document.querySelectorAll('[data-ktwer]').forEach(function(c){
@@ -12849,7 +12885,15 @@ function modalKalenderTermin(terminId, datumVorgabe){
     obj.notiz = document.getElementById('ktNotiz').value.trim();
     obj.personen = gew;
     var kName = document.getElementById('ktKunde').value.trim();
-    var kTreffer = kName ? state.kunden.filter(function(x){ return !x.geloescht && (x.name || '').toLowerCase() === kName.toLowerCase(); })[0] : null;
+    var kIdSel = (document.getElementById('ktKundeId') || {}).value || '';
+    var kTreffer = kIdSel ? state.kunden.filter(function(x){ return x.id === kIdSel && !x.geloescht; })[0] : null;
+    if(!kTreffer && kName){
+      kTreffer = state.kunden.filter(function(x){
+        if(x.geloescht) return false;
+        var kl = kName.toLowerCase();
+        return (x.name || '').toLowerCase() === kl || (kundeAnzeigeName(x) || '').toLowerCase() === kl || (x.kundennummer && String(x.kundennummer).toLowerCase() === kl);
+      })[0];
+    }
     var neuerKunde = null;
     if(kName && !kTreffer){
       neuerKunde = { id: uid(), name: kName, vorname: '', nachname: '', kundennummer: '', objekt: '', objektAdresse: '', strasse: '', plz: '', ort: '', adresse: '', telefon: '', email: '' };
