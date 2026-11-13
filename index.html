@@ -15392,7 +15392,32 @@ function lieferscheinPdfErzeugen(daten, vorlageBytes, opt){
     };
 
     var rechnung = opt.modus === 'rechnung';
-    setze('Text11', daten.firma, 10);
+    // Firma: lange Namen nicht winzig machen, sondern auf zwei Zeilen aufteilen (2. Zeile neben "Anschrift:")
+    (function(){
+      var name = String(daten.firma || '').replace(/\s+/g, ' ').trim();
+      var gr = 10, BREIT1 = 212, BREIT2 = 200;
+      var breite = function(t, g){ return helv ? helv.widthOfTextAtSize(t, g) : t.length * g * 0.5; };
+      if(!name || breite(name, gr) <= BREIT1){ setze('Text11', name, 10); return; }
+      var teil1 = name, teil2 = '';
+      var m = name.match(/^(.*?)\s+((?:p\.\s?A\.|c\/o\s|z\.\s?H\.|vertreten durch\s|vertr\.\s).*)$/i);
+      if(m && breite(m[1], gr) <= BREIT1){ teil1 = m[1]; teil2 = m[2]; }
+      else {
+        var w = name.split(' '), a = '';
+        for(var i = 0; i < w.length; i++){
+          var probe = a ? a + ' ' + w[i] : w[i];
+          if(breite(probe, gr) > BREIT1 && a){ teil1 = a; teil2 = w.slice(i).join(' '); break; }
+          a = probe;
+        }
+      }
+      setze('Text11', teil1, 10);
+      if(teil2){
+        var g2 = gr;
+        while(g2 > 7 && breite(teil2, g2) > BREIT2) g2 -= 0.5;
+        var o2 = { x: 86, y: 640.5, size: g2, color: PL.rgb(0, 0, 0) };
+        if(helv) o2.font = helv;
+        try{ seite.drawText(teil2, o2); }catch(eF2){}
+      }
+    })();
     setze('Anschrift 1', daten.anschrift1, 10);
     setze('Anschrift 2', daten.anschrift2, 10);
     setze('am', daten.datum, 10);
