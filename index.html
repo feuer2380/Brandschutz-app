@@ -2972,10 +2972,12 @@ function modalLagerDrucken(){
   html += '<div class="modal-head"><h3>Drucken</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<button type="button" class="btn block secondary" id="mLagerlisteBtn">Lagerliste drucken</button>';
   html += '<button type="button" class="btn block secondary" style="margin-top:8px;" id="mAlleQrBtn">Alle QR-Codes drucken</button>';
+  html += '<button type="button" class="btn block" style="margin-top:8px;" id="mKartenBtn">QR-Karten drucken (Kartendrucker)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mLagerlisteBtn').onclick = function(){ closeModal(); lagerstandDrucken(); };
   document.getElementById('mAlleQrBtn').onclick = function(){ closeModal(); alleLagerQrDrucken(); };
+  document.getElementById('mKartenBtn').onclick = function(){ closeModal(); setTimeout(function(){ modalLagerKarten(null); }, 50); };
 }
 
 // Lagerbuch sehen: Chef und Mitarbeiter mit lagerbuch: true in MITARBEITER_LISTE
@@ -3369,8 +3371,10 @@ function modalQrLagerartikel(artikelId){
   html += '<div class="meta">' + escapeHtml(a.name) + '</div>';
   html += '<div class="meta qr-hinweis" style="margin-bottom:6px;">Zum Sichern: Finger auf dem schwarz-weißen Muster unten gedrückt halten, bis das Menü erscheint. Ausdrucken und am Regal/Artikel anbringen. Scannen öffnet direkt die Mengen-Anpassung.</div>';
   html += '<div class="qr-box" id="qrTarget"></div>';
+  html += '<button type="button" class="btn block" id="mLagerKarteBtn" style="margin-top:12px;">Als Karte drucken (Kartendrucker)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('mLagerKarteBtn').onclick = function(){ closeModal(); setTimeout(function(){ modalLagerKarten(a.id); }, 50); };
   try{
     new QRCode(document.getElementById('qrTarget'), {
       text: qrText,
@@ -3397,6 +3401,275 @@ function buildAlleLagerQrDruckHtml(){
   });
   html += '</div></div>';
   return { html: html, liste: liste };
+}
+
+// ---------- Lager-Karten (Scheckkarte 85,6 x 54 mm, z.B. Badgy 200) ----------
+var LAGERKARTE_B = 85.6, LAGERKARTE_H = 54, LAGERKARTE_PXMM = 2022 / 85.6; // ca. 600 dpi
+
+function lagerKarteZeilen(ctx, text, maxBreite, maxZeilen){
+  var roh = String(text || '').split(/\s+/);
+  var woerter = [];
+  // Zahl und Einheit zusammenhalten (z.B. "6 kg")
+  for(var r = 0; r < roh.length; r++){
+    if(woerter.length && /^\d+([.,]\d+)?$/.test(woerter[woerter.length - 1]) && /^(kg|g|l|L|Liter|Stk|m|mm|cm)\.?$/.test(roh[r])) woerter[woerter.length - 1] += ' ' + roh[r];
+    else woerter.push(roh[r]);
+  }
+  var zeilen = [], akt = '';
+  for(var i = 0; i < woerter.length; i++){
+    var w = woerter[i];
+    if(!w) continue;
+    var probe = akt ? (akt + ' ' + w) : w;
+    if(ctx.measureText(probe).width <= maxBreite || !akt){
+      akt = probe;
+    } else {
+      zeilen.push(akt);
+      akt = w;
+    }
+  }
+  if(akt) zeilen.push(akt);
+  var passt = zeilen.length <= maxZeilen;
+  for(var j = 0; j < zeilen.length; j++){ if(ctx.measureText(zeilen[j]).width > maxBreite) passt = false; }
+  return { zeilen: zeilen, passt: passt };
+}
+
+// Zeichnet eine Karte und gibt ein Canvas zurueck
+function lagerKarteCanvas(a, logoImg){
+  var f = LAGERKARTE_PXMM;
+  var c = document.createElement('canvas');
+  c.width = Math.round(LAGERKARTE_B * f);
+  c.height = Math.round(LAGERKARTE_H * f);
+  var ctx = c.getContext('2d');
+  var mm = function(v){ return v * f; };
+  var schrift = 'Helvetica, Arial, sans-serif';
+
+  // Hintergrund weiss
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // Kopfband in Logo-Farbe
+  var bandH = 18;
+  var bandFarbe = '#271f1b';
+  if(logoImg && logoImg.naturalWidth){
+    try{
+      var tc = document.createElement('canvas'); tc.width = 4; tc.height = 4;
+      var tx = tc.getContext('2d');
+      tx.drawImage(logoImg, logoImg.naturalWidth - 8, 0, 6, 6, 0, 0, 4, 4);
+      var p = tx.getImageData(1, 1, 1, 1).data;
+      bandFarbe = 'rgb(' + p[0] + ',' + p[1] + ',' + p[2] + ')';
+    }catch(eF){}
+  }
+  ctx.fillStyle = bandFarbe;
+  ctx.fillRect(0, 0, c.width, mm(bandH));
+  var logoBreite = 0;
+  if(logoImg && logoImg.naturalWidth){
+    var lh = bandH - 2.4;
+    var lw = lh * logoImg.naturalWidth / logoImg.naturalHeight;
+    ctx.drawImage(logoImg, mm(2.5), mm(1.2), mm(lw), mm(lh));
+    logoBreite = lw;
+  }
+  // "LAGER" rechts im Kopfband
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#f7e11b';
+  ctx.font = 'bold ' + mm(6.4) + 'px ' + schrift;
+  ctx.fillText('LAGER', mm(LAGERKARTE_B - 3), mm(9.6));
+  ctx.fillStyle = '#ffffff';
+  ctx.font = mm(2.3) + 'px ' + schrift;
+  ctx.fillText('Entnahme / Zugang', mm(LAGERKARTE_B - 3), mm(13.2));
+  ctx.fillText('per QR-Code buchen', mm(LAGERKARTE_B - 3), mm(15.9));
+
+  // Warnstreifen unten (gelb/schwarz)
+  var streifH = 3.2;
+  var sy = LAGERKARTE_H - streifH;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, mm(sy), c.width, mm(streifH)); ctx.clip();
+  ctx.fillStyle = '#f7e11b';
+  ctx.fillRect(0, mm(sy), c.width, mm(streifH));
+  ctx.fillStyle = '#1a1a1a';
+  for(var x = -streifH; x < LAGERKARTE_B + streifH; x += 4){
+    ctx.beginPath();
+    ctx.moveTo(mm(x), mm(LAGERKARTE_H));
+    ctx.lineTo(mm(x + 2), mm(LAGERKARTE_H));
+    ctx.lineTo(mm(x + 2 + streifH), mm(sy));
+    ctx.lineTo(mm(x + streifH), mm(sy));
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // QR-Code rechts
+  var qrGr = 27;
+  var qrX = LAGERKARTE_B - 3 - qrGr;
+  var qrY = bandH + ((sy - bandH) - qrGr) / 2;
+  try{
+    var tmp = document.createElement('div');
+    tmp.style.position = 'absolute'; tmp.style.left = '-9999px'; tmp.style.top = '0';
+    document.body.appendChild(tmp);
+    new QRCode(tmp, { text: 'BSV-LAGER:' + a.id, width: 580, height: 580, correctLevel: QRCode.CorrectLevel.M });
+    var qc = tmp.querySelector('canvas');
+    if(qc){
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(qc, mm(qrX), mm(qrY), mm(qrGr), mm(qrGr));
+      ctx.imageSmoothingEnabled = true;
+    }
+    document.body.removeChild(tmp);
+  }catch(eQ){}
+
+  // Text links
+  var tx0 = 3.2;
+  var textBreite = qrX - tx0 - 2.5;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#c4161c';
+  ctx.font = 'bold ' + mm(2.4) + 'px ' + schrift;
+  ctx.fillText('ARTIKEL', mm(tx0), mm(bandH + 4.6));
+
+  var gr = 6.2, erg = null;
+  ctx.fillStyle = '#111111';
+  while(gr >= 3.2){
+    ctx.font = 'bold ' + mm(gr) + 'px ' + schrift;
+    erg = lagerKarteZeilen(ctx, a.name || '', mm(textBreite), gr > 4.6 ? 2 : 3);
+    if(erg.passt) break;
+    gr -= 0.2;
+  }
+  var y = bandH + 5.2 + gr;
+  var zmax = gr > 4.6 ? 2 : 3;
+  for(var z = 0; z < erg.zeilen.length && z < zmax; z++){
+    var zt = erg.zeilen[z];
+    if(z === zmax - 1 && erg.zeilen.length > zmax) zt = zt + '...';
+    ctx.fillText(zt, mm(tx0), mm(y));
+    y += gr * 1.15;
+  }
+
+  // rote Linie
+  ctx.fillStyle = '#c4161c';
+  ctx.fillRect(mm(tx0), mm(y - gr * 0.55), mm(12), mm(0.6));
+  y += 1.4;
+
+  ctx.fillStyle = '#444444';
+  if(a.externeId){
+    ctx.font = 'bold ' + mm(2.8) + 'px ' + schrift;
+    ctx.fillText('Nr. ' + a.externeId, mm(tx0), mm(Math.min(y + 1.2, sy - 5.4)));
+  }
+
+  ctx.fillStyle = '#666666';
+  ctx.font = mm(2.1) + 'px ' + schrift;
+  ctx.fillText('Mit der App scannen, Menge buchen', mm(tx0), mm(sy - 1.8));
+  return c;
+}
+
+function lagerLogoLaden(cb){
+  var img = new Image();
+  var fertig = false;
+  var los = function(){ if(!fertig){ fertig = true; cb(img); } };
+  img.onload = los; img.onerror = function(){ fertig = true; cb(null); };
+  img.src = LOGO_DATA;
+  if(img.complete && img.naturalWidth) los();
+}
+
+function lagerKartenPdf(liste, anzahl){
+  if(!liste || !liste.length){ toast('Keine Artikel ausgewählt'); return; }
+  if(!window.jspdf || !window.QRCode){ toast('Programm-Bibliothek fehlt (Internet?)'); return; }
+  anzahl = Math.max(1, Math.min(50, parseInt(anzahl, 10) || 1));
+  toast('Karten werden erstellt...');
+  lagerLogoLaden(function(logo){
+    setTimeout(function(){
+      try{
+        var pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: [LAGERKARTE_H, LAGERKARTE_B], compress: true });
+        var erste = true;
+        for(var i = 0; i < liste.length; i++){
+          var bild = lagerKarteCanvas(liste[i], logo).toDataURL('image/jpeg', 0.95);
+          for(var k = 0; k < anzahl; k++){
+            if(!erste) pdf.addPage([LAGERKARTE_H, LAGERKARTE_B], 'landscape');
+            erste = false;
+            pdf.addImage(bild, 'JPEG', 0, 0, LAGERKARTE_B, LAGERKARTE_H, undefined, 'FAST');
+          }
+        }
+        var name = liste.length === 1 ? ('Lagerkarte ' + (liste[0].name || '')).replace(/[\\\/:*?"<>|]/g, '-') + '.pdf' : 'Lagerkarten.pdf';
+        lagerKartenPdfAusgeben(pdf.output('blob'), name);
+      }catch(e){
+        console.error('Lagerkarten', e);
+        toast('Fehler beim Erstellen der Karten');
+      }
+    }, 50);
+  });
+}
+
+function lagerKartenPdfAusgeben(blob, name){
+  var mobil = !!window.navigator.standalone || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if(mobil && navigator.canShare && window.File){
+    try{
+      var datei = new File([blob], name, { type: 'application/pdf' });
+      if(navigator.canShare({ files: [datei] })){
+        navigator.share({ files: [datei], title: name }).catch(function(){});
+        return;
+      }
+    }catch(eS){}
+  }
+  // Am PC: PDF herunterladen und zusaetzlich im neuen Tab oeffnen (dort Drucken -> Badgy200)
+  var url = URL.createObjectURL(blob);
+  var w = null;
+  try{ w = window.open(url, '_blank'); }catch(eW){}
+  if(!w){
+    var link = document.createElement('a');
+    link.href = url; link.download = name;
+    document.body.appendChild(link); link.click();
+    setTimeout(function(){ document.body.removeChild(link); }, 500);
+  }
+}
+
+function lagerKarteVorschau(zielId, a){
+  lagerLogoLaden(function(logo){
+    var ziel = document.getElementById(zielId);
+    if(!ziel || !window.QRCode) return;
+    try{
+      var bild = lagerKarteCanvas(a, logo).toDataURL('image/jpeg', 0.85);
+      ziel.innerHTML = '<img src="' + bild + '" style="width:100%; max-width:420px; border-radius:14px; box-shadow:0 2px 10px rgba(0,0,0,0.45); display:block; margin:0 auto;">';
+    }catch(e){}
+  });
+}
+
+var LAGERKARTE_HINWEIS = 'Druck am PC: PDF öffnen, Drucker <b>Badgy200</b> wählen, Größe <b>100 % / Tatsächliche Größe</b> (keine Anpassung), Querformat. Am iPhone: PDF teilen bzw. in Dateien sichern und am PC drucken.';
+
+function modalLagerKarten(vorauswahlId){
+  var liste = state.lagerartikel.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  if(liste.length === 0){ toast('Keine Lagerartikel vorhanden'); return; }
+  var html = '';
+  html += '<div class="modal-head"><h3>Lager-Karten drucken</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;">Scheckkarte 85,6 x 54 mm mit Logo und QR-Code (für Kartendrucker Badgy 200).</div>';
+  html += '<div id="lkVorschau" style="margin:6px 0 12px;"></div>';
+  html += '<div class="row" style="gap:8px; margin-bottom:8px;"><button type="button" class="btn small secondary" id="lkAlle">Alle</button><button type="button" class="btn small secondary" id="lkKeine">Keine</button><span class="meta" id="lkZahl" style="margin-left:auto;"></span></div>';
+  html += '<div style="max-height:38vh; overflow-y:auto; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:4px 10px;">';
+  liste.forEach(function(a){
+    var an = (vorauswahlId ? a.id === vorauswahlId : false);
+    html += '<label style="display:flex; align-items:center; gap:10px; padding:8px 0; margin:0; font-weight:normal;">';
+    html += '<input type="checkbox" class="lkWahl" value="' + a.id + '"' + (an ? ' checked' : '') + ' style="width:22px; height:22px; flex:0 0 auto;">';
+    html += '<span>' + escapeHtml(a.name || '') + (a.externeId ? ' <span class="meta">(' + escapeHtml(a.externeId) + ')</span>' : '') + '</span></label>';
+  });
+  html += '</div>';
+  html += '<label style="margin-top:10px;">Anzahl Karten je Artikel</label><input id="lkAnzahl" type="number" inputmode="numeric" value="1" min="1" max="50">';
+  html += '<button type="button" class="btn block" id="lkErstellen" style="margin-top:14px;">Karten-PDF erstellen</button>';
+  html += '<div class="meta" style="margin-top:10px; font-size:12px;">' + LAGERKARTE_HINWEIS + '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var gewaehlt = function(){
+    var ids = [];
+    document.querySelectorAll('.lkWahl').forEach(function(cb){ if(cb.checked) ids.push(cb.value); });
+    return liste.filter(function(a){ return ids.indexOf(a.id) !== -1; });
+  };
+  var aktualisieren = function(){
+    var g = gewaehlt();
+    document.getElementById('lkZahl').textContent = g.length + ' ausgewählt';
+    lagerKarteVorschau('lkVorschau', g.length ? g[0] : liste[0]);
+  };
+  document.querySelectorAll('.lkWahl').forEach(function(cb){ cb.onchange = aktualisieren; });
+  document.getElementById('lkAlle').onclick = function(){ document.querySelectorAll('.lkWahl').forEach(function(cb){ cb.checked = true; }); aktualisieren(); };
+  document.getElementById('lkKeine').onclick = function(){ document.querySelectorAll('.lkWahl').forEach(function(cb){ cb.checked = false; }); aktualisieren(); };
+  document.getElementById('lkErstellen').onclick = function(){
+    var g = gewaehlt();
+    if(!g.length){ toast('Bitte Artikel auswählen'); return; }
+    lagerKartenPdf(g, document.getElementById('lkAnzahl').value);
+  };
+  aktualisieren();
 }
 
 function renderScan(){
