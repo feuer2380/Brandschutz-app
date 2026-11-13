@@ -1175,6 +1175,13 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
   var querWunsch = bsvQuerformat() && !pa.querySelector('.qr-etikett') && !nurHoch;
   var pdfErzwingen = !!window.__bsvPdfErzwingen;
   window.__bsvPdfErzwingen = false;
+  // Wenn gesetzt: PDF nicht teilen, sondern als Blob zurueckgeben (z.B. fuer Lieferschein + Pruefbericht in einem PDF)
+  var blobZiel = window.__bsvPdfBlobZiel || null;
+  window.__bsvPdfBlobZiel = null;
+  if(blobZiel){
+    if(!window.html2canvas || !window.jspdf){ blobZiel(null, new Error('PDF-Bibliothek nicht geladen (Internet?)')); if(cb) cb(); return; }
+    pdfErzwingen = true;
+  }
   if((!eigenstaendig && !querWunsch && !pdfErzwingen) || !window.html2canvas || !window.jspdf){
     setTimeout(function(){
       // Seitengröße je nach Druckart setzen (Etikett 40x30 mm oder normale Seite) und danach wieder entfernen
@@ -1433,6 +1440,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       });
 
       var blob = pdf.output('blob');
+      if(blobZiel){ blobZiel(blob, null); if(cb) cb(); return; }
       var geteilt = false;
 
       if(navigator.canShare && window.File){
@@ -1457,6 +1465,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
     }).catch(function(err){
       aufraeumen();
       console.error('PDF-Erstellung fehlgeschlagen', err);
+      if(blobZiel){ blobZiel(null, err); if(cb) cb(); return; }
       try{ openModal('<div class="modal-head"><h3>PDF-Fehler</h3><button class="close" id="mClose">&times;</button></div><div class="meta" style="margin-bottom:8px;">Bitte Screenshot an Wolfgang schicken:</div><div style="font-size:12px; word-break:break-word; background:#fff; padding:10px; border-radius:8px;">' + escapeHtml((err && err.message ? err.message : String(err)) + ((err && err.message && err.message.indexOf('V1:') === -1 && err.stack) ? ' | STACK: ' + String(err.stack).substring(0, 400) : '')) + '</div>'); var mc = document.getElementById('mClose'); if(mc) mc.onclick = closeModal; }catch(eM){ toast('PDF-Fehler: ' + (err && err.message ? err.message : String(err))); }
       // Ausweg: Bericht als eigene Seite öffnen (dort: Teilen-Symbol -> Drucken / Als PDF sichern)
       setTimeout(function(){
@@ -15582,6 +15591,7 @@ function modalLieferschein(berichte, k){
   html += '<label style="display:inline-flex; align-items:center; gap:6px; font-weight:400; margin:0 14px 0 0; width:auto;"><input type="radio" name="lsBez" value="nein" style="width:auto; margin:0;"> nicht bezahlt</label></div>';
   html += '<div id="lsStatus" class="meta" style="margin:12px 0;"></div>';
   html += '<button class="btn block" id="lsTeilen">Erstellen &amp; teilen / drucken</button>';
+  html += '<button class="btn block" id="lsKombi" style="margin-top:10px; background:#1d5fa8;">&#9993; Lieferschein + Prüfbericht in einem PDF (für E-Mail)</button>';
   html += '<button class="btn block secondary" id="lsSchliessen" style="margin-top:10px;">Schließen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
@@ -15656,6 +15666,17 @@ function modalLieferschein(berichte, k){
   posZeileHinzu('CO2-Dichtung');
   zahlungNachModus();
 
+  document.getElementById('lsKombi').onclick = function(){
+    var knopf = document.getElementById('lsKombi');
+    if(knopf.disabled) return;
+    knopf.disabled = true;
+    var alterText = knopf.innerHTML;
+    knopf.textContent = 'Bitte warten...';
+    lsKombiErstellen(berichte, k, daten, opt(), document.getElementById('lsStatus'), function(){
+      var kn = document.getElementById('lsKombi');
+      if(kn){ kn.disabled = false; kn.innerHTML = alterText; }
+    });
+  };
   document.getElementById('lsTeilen').onclick = function(){
     var st = document.getElementById('lsStatus');
     st.textContent = 'Wird erstellt...';
@@ -15681,6 +15702,62 @@ function modalLieferschein(berichte, k){
     });
   };
 }
+// Lieferschein (pdf-lib) + Pruefbericht (html2canvas/jsPDF) zu einer Datei zusammenfuegen und teilen
+function lsKombiErstellen(berichte, k, daten, optWerte, statusEl, fertig){
+  var meld = function(t, fehler){ if(statusEl) statusEl.innerHTML = fehler ? '<span style="color:#c23f12;">' + escapeHtml(t) + '</span>' : escapeHtml(t); };
+  var nr = '';
+  for(var ni = 0; ni < berichte.length; ni++){ if(berichte[ni].berichtNr){ nr = berichte[ni].berichtNr; break; } }
+  var dateiname = 'Pruefbericht-Lieferschein' + (nr ? '-' + nr.replace(/[^A-Za-z0-9_-]/g, '') : '') + '.pdf';
+  meld('Lieferschein wird erstellt...');
+  lsPdfLibLaden(function(err){
+    if(err){ meld('Fehler: ' + (err.message || err), true); fertig(); return; }
+    lsVorlageLaden(function(err2, vorlage){
+      if(err2){ meld('Fehler: ' + (err2.message || err2), true); fertig(); return; }
+      lieferscheinPdfErzeugen(daten, vorlage.slice(0), optWerte).then(function(lsBytes){
+        meld('Prüfbericht wird erstellt (kann einige Sekunden dauern)...');
+        var html = '';
+        for(var bi = 0; bi < berichte.length; bi++){
+          if(bi > 0) html += '<div style="page-break-before:always;"></div>';
+          html += buildSammelberichtHtml(berichte[bi], k);
+        }
+        window.__bsvPdfBlobZiel = function(blob, fehler){
+          if(!blob){ meld('Prüfbericht-Fehler: ' + (fehler && fehler.message ? fehler.message : fehler), true); fertig(); return; }
+          meld('Wird zusammengefügt...');
+          blob.arrayBuffer().then(function(pbBytes){
+            var PL = window.PDFLib;
+            var ziel, lsDoc, pbDoc;
+            return PL.PDFDocument.create().then(function(z){ ziel = z; return PL.PDFDocument.load(lsBytes); })
+              .then(function(d1){ lsDoc = d1; return PL.PDFDocument.load(pbBytes); })
+              .then(function(d2){ pbDoc = d2; return ziel.copyPages(lsDoc, lsDoc.getPageIndices()); })
+              .then(function(seiten1){ seiten1.forEach(function(sp){ ziel.addPage(sp); }); return ziel.copyPages(pbDoc, pbDoc.getPageIndices()); })
+              .then(function(seiten2){ seiten2.forEach(function(sp){ ziel.addPage(sp); }); return ziel.save(); });
+          }).then(function(bytes){
+            meld('');
+            fertig();
+            var gesamt = new Blob([bytes], { type: 'application/pdf' });
+            var datei = null;
+            try{ datei = new File([gesamt], dateiname, { type: 'application/pdf' }); }catch(e){ datei = null; }
+            if(datei && navigator.canShare && navigator.share && navigator.canShare({ files: [datei] })){
+              navigator.share({ files: [datei], title: dateiname }).catch(function(e2){
+                if(e2 && e2.name === 'AbortError') return;
+                lsOeffnenOderLaden(gesamt, dateiname);
+              });
+            } else {
+              lsOeffnenOderLaden(gesamt, dateiname);
+            }
+          }).catch(function(e3){ meld('Fehler beim Zusammenfügen: ' + (e3 && e3.message ? e3.message : e3), true); fertig(); });
+        };
+        try{
+          bsvDruckenOderTeilen(html, dateiname, null);
+        }catch(e4){
+          window.__bsvPdfBlobZiel = null;
+          meld('Fehler: ' + (e4 && e4.message ? e4.message : e4), true); fertig();
+        }
+      }).catch(function(e5){ meld('Fehler: ' + (e5 && e5.message ? e5.message : e5), true); fertig(); });
+    });
+  });
+}
+
 // Wenn Teilen nicht geht: PDF in neuem Tab öffnen (dort Drucken/Sichern), sonst herunterladen
 function lsOeffnenOderLaden(blob, name){
   var url = URL.createObjectURL(blob);
