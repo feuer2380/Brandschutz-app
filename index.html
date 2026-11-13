@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-13 16:55';
-var APP_VERSION_TEXT = '13.11. 16:55';
+var APP_VERSION = '2026-11-13 18:30';
+var APP_VERSION_TEXT = '13.11. 18:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -2864,6 +2864,8 @@ function bindSchnellfuell(){
       if(!state.schnellfuellungen) state.schnellfuellungen = [];
       state.schnellfuellungen = state.schnellfuellungen.filter(function(x){ return x.id !== e.id; });
       state.schnellfuellungen.push(e);
+      var tP = (kT && treueAktiv(kT)) ? treueCo2Punkte(posten) : 0;
+      if(tP > 0) treueBuchen(kT, tP, sfFlaschen(e) + ' x CO2-F\u00fcllung', 'sf:' + e.id, function(){ toast('+' + tP + ' Treuepunkte f\u00fcr ' + kundeAnzeigeName(kT)); });
       state.sfAnz = {}; state.sfKunde = '';
       toast(sfFlaschen(e) + ' Füllung' + (sfFlaschen(e) === 1 ? '' : 'en') + ' gespeichert');
       render();
@@ -2874,6 +2876,9 @@ function bindSchnellfuell(){
       var id = el.getAttribute('data-id');
       customConfirm('Diesen Eintrag löschen?', function(){
         dbDelete('schnellfuellungen', id, function(){
+          var sfE = (state.schnellfuellungen || []).filter(function(x){ return x.id === id; })[0];
+          var sfK = sfE && sfE.kundeId ? state.kunden.filter(function(x){ return x.id === sfE.kundeId; })[0] : null;
+          if(sfK && treueBuchungenEntfernen(sfK, 'sf:' + id)) dbPut('kunden', sfK, function(){ treuePortalSync(sfK); });
           state.schnellfuellungen = (state.schnellfuellungen || []).filter(function(x){ return x.id !== id; });
           render();
         });
@@ -3462,8 +3467,17 @@ function lagerLogoKraeftig(img){
   }catch(e){ return img; }
 }
 
-// Zeichnet eine Karte und gibt ein Canvas zurueck
+// Lagerkarte: Artikel mit QR-Code
 function lagerKarteCanvas(a, logoImg){
+  return ausweisKarteCanvas({
+    titel: 'LAGER', zeile1: 'Entnahme / Zugang', zeile2: 'per QR-Code buchen',
+    label: 'ARTIKEL', name: a.name || '', nr: a.externeId ? ('Nr. ' + a.externeId) : '',
+    qr: 'BSV-LAGER:' + a.id, fuss: 'Mit der App scannen, Menge buchen'
+  }, logoImg);
+}
+
+// Zeichnet eine Karte (85,6 x 54 mm) und gibt ein Canvas zurueck
+function ausweisKarteCanvas(a, logoImg){
   var f = LAGERKARTE_PXMM;
   var c = document.createElement('canvas');
   c.width = Math.round(LAGERKARTE_B * f);
@@ -3501,12 +3515,15 @@ function lagerKarteCanvas(a, logoImg){
   ctx.textAlign = 'right';
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#f7e11b';
-  ctx.font = 'bold ' + mm(6.4) + 'px ' + schrift;
-  ctx.fillText('LAGER', mm(LAGERKARTE_B - 3), mm(9.6));
+  var titelGr = 6.4;
+  var titelPlatz = LAGERKARTE_B - 3 - (2.5 + logoBreite) - 3;
+  ctx.font = 'bold ' + mm(titelGr) + 'px ' + schrift;
+  while(titelGr > 3 && ctx.measureText(a.titel).width > mm(titelPlatz)){ titelGr -= 0.2; ctx.font = 'bold ' + mm(titelGr) + 'px ' + schrift; }
+  ctx.fillText(a.titel, mm(LAGERKARTE_B - 3), mm(9.6));
   ctx.fillStyle = '#ffffff';
   ctx.font = mm(2.3) + 'px ' + schrift;
-  ctx.fillText('Entnahme / Zugang', mm(LAGERKARTE_B - 3), mm(13.2));
-  ctx.fillText('per QR-Code buchen', mm(LAGERKARTE_B - 3), mm(15.9));
+  ctx.fillText(a.zeile1, mm(LAGERKARTE_B - 3), mm(13.2));
+  ctx.fillText(a.zeile2, mm(LAGERKARTE_B - 3), mm(15.9));
 
   // Warnstreifen unten (gelb/schwarz)
   var streifH = 3.2;
@@ -3535,7 +3552,7 @@ function lagerKarteCanvas(a, logoImg){
     var tmp = document.createElement('div');
     tmp.style.position = 'absolute'; tmp.style.left = '-9999px'; tmp.style.top = '0';
     document.body.appendChild(tmp);
-    new QRCode(tmp, { text: 'BSV-LAGER:' + a.id, width: 580, height: 580, correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(tmp, { text: a.qr, width: 580, height: 580, correctLevel: QRCode.CorrectLevel.M });
     var qc = tmp.querySelector('canvas');
     if(qc){
       ctx.imageSmoothingEnabled = false;
@@ -3551,7 +3568,7 @@ function lagerKarteCanvas(a, logoImg){
   ctx.textAlign = 'left';
   ctx.fillStyle = '#c4161c';
   ctx.font = 'bold ' + mm(2.4) + 'px ' + schrift;
-  ctx.fillText('ARTIKEL', mm(tx0), mm(bandH + 4.6));
+  ctx.fillText(a.label, mm(tx0), mm(bandH + 4.6));
 
   var gr = 6.8, erg = null;
   ctx.fillStyle = '#111111';
@@ -3580,14 +3597,14 @@ function lagerKarteCanvas(a, logoImg){
   y += 1.4;
 
   ctx.fillStyle = '#444444';
-  if(a.externeId){
+  if(a.nr){
     ctx.font = 'bold ' + mm(2.8) + 'px ' + schrift;
-    ctx.fillText('Nr. ' + a.externeId, mm(tx0), mm(Math.min(y + 1.2, sy - 5.4)));
+    ctx.fillText(a.nr, mm(tx0), mm(Math.min(y + 1.2, sy - 5.4)));
   }
 
   ctx.fillStyle = '#666666';
   ctx.font = mm(2.1) + 'px ' + schrift;
-  ctx.fillText('Mit der App scannen, Menge buchen', mm(tx0), mm(sy - 1.8));
+  ctx.fillText(a.fuss, mm(tx0), mm(sy - 1.8));
   return c;
 }
 
@@ -3704,6 +3721,513 @@ function modalLagerKarten(vorauswahlId){
     lagerKartenPdf(g, document.getElementById('lkAnzahl').value);
   };
   aktualisieren();
+}
+
+// ---------- Stempel-Karten fuer Mitarbeiter (Scheckkarte, Terminal in der Firma) ----------
+function stempelKartePruef(name){
+  return pinSha256('janiba-karte|' + name).substring(0, 10);
+}
+function stempelKarteCode(name){
+  return 'BSV-KARTE:' + name + '|' + stempelKartePruef(name);
+}
+// gibt den Namen zurueck, wenn die Karte echt ist, sonst null
+function stempelKarteLesen(text){
+  if(!text || text.indexOf('BSV-KARTE:') !== 0) return null;
+  var rest = text.substring('BSV-KARTE:'.length);
+  var p = rest.lastIndexOf('|');
+  if(p < 1) return null;
+  var name = rest.substring(0, p);
+  return (rest.substring(p + 1) === stempelKartePruef(name)) ? name : null;
+}
+function stempelKarteOptionen(name){
+  return {
+    titel: 'ZEITERFASSUNG', zeile1: 'Kommen / Pause / Gehen', zeile2: 'am Terminal scannen',
+    label: 'MITARBEITER', name: name, nr: '',
+    qr: stempelKarteCode(name), fuss: 'Persönliche Karte - nicht weitergeben'
+  };
+}
+function stempelKartenPdf(namen, anzahl){
+  if(!namen || !namen.length){ toast('Keine Mitarbeiter ausgewählt'); return; }
+  if(!window.jspdf || !window.QRCode){ toast('Programm-Bibliothek fehlt (Internet?)'); return; }
+  anzahl = Math.max(1, Math.min(10, parseInt(anzahl, 10) || 1));
+  toast('Karten werden erstellt...');
+  lagerLogoLaden(function(logo){
+    setTimeout(function(){
+      try{
+        var pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: [LAGERKARTE_H, LAGERKARTE_B], compress: true });
+        var erste = true;
+        for(var i = 0; i < namen.length; i++){
+          var bild = ausweisKarteCanvas(stempelKarteOptionen(namen[i]), logo).toDataURL('image/jpeg', 0.95);
+          for(var k = 0; k < anzahl; k++){
+            if(!erste) pdf.addPage([LAGERKARTE_H, LAGERKARTE_B], 'landscape');
+            erste = false;
+            pdf.addImage(bild, 'JPEG', 0, 0, LAGERKARTE_B, LAGERKARTE_H, undefined, 'FAST');
+          }
+        }
+        lagerKartenPdfAusgeben(pdf.output('blob'), namen.length === 1 ? ('Stempelkarte ' + namen[0] + '.pdf') : 'Stempelkarten.pdf');
+      }catch(e){
+        console.error('Stempelkarten', e);
+        toast('Fehler beim Erstellen der Karten');
+      }
+    }, 50);
+  });
+}
+function modalStempelKarten(){
+  var namen = zeitMitarbeiterNamen();
+  var html = '';
+  html += '<div class="modal-head"><h3>Stempel-Karten</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;">Persönliche Karte je Mitarbeiter (85,6 x 54 mm, Kartendrucker Badgy 200). In der Firma am Stempel-Terminal scannen.</div>';
+  html += '<div id="skVorschau" style="margin:6px 0 12px;"></div>';
+  html += '<div class="row" style="gap:8px; margin-bottom:8px;"><button type="button" class="btn small secondary" id="skAlle">Alle</button><button type="button" class="btn small secondary" id="skKeine">Keine</button></div>';
+  html += '<div style="border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:4px 10px;">';
+  namen.forEach(function(n){
+    html += '<label style="display:flex; align-items:center; gap:10px; padding:8px 0; margin:0; font-weight:normal;">';
+    html += '<input type="checkbox" class="skWahl" value="' + escapeHtml(n) + '" checked style="width:22px; height:22px; flex:0 0 auto;">';
+    html += '<span>' + escapeHtml(n) + '</span></label>';
+  });
+  html += '</div>';
+  html += '<label style="margin-top:10px;">Anzahl Karten je Mitarbeiter</label><input id="skAnzahl" type="number" inputmode="numeric" value="1" min="1" max="10">';
+  html += '<button type="button" class="btn block" id="skErstellen" style="margin-top:14px;">Karten-PDF erstellen</button>';
+  html += '<div class="meta" style="margin-top:10px; font-size:12px;">' + LAGERKARTE_HINWEIS + '<br>Stempel-Terminal: Seite <b>terminal.html</b> auf dem Gerät in der Firma öffnen.</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var gewaehlt = function(){
+    var g = [];
+    document.querySelectorAll('.skWahl').forEach(function(cb){ if(cb.checked) g.push(cb.value); });
+    return g;
+  };
+  var vorschau = function(){
+    var g = gewaehlt();
+    var n = g.length ? g[0] : namen[0];
+    lagerLogoLaden(function(logo){
+      var ziel = document.getElementById('skVorschau');
+      if(!ziel || !window.QRCode) return;
+      try{
+        var bild = ausweisKarteCanvas(stempelKarteOptionen(n), logo).toDataURL('image/jpeg', 0.85);
+        ziel.innerHTML = '<img src="' + bild + '" style="width:100%; max-width:420px; border-radius:14px; box-shadow:0 2px 10px rgba(0,0,0,0.45); display:block; margin:0 auto;">';
+      }catch(e){}
+    });
+  };
+  document.querySelectorAll('.skWahl').forEach(function(cb){ cb.onchange = vorschau; });
+  document.getElementById('skAlle').onclick = function(){ document.querySelectorAll('.skWahl').forEach(function(cb){ cb.checked = true; }); vorschau(); };
+  document.getElementById('skKeine').onclick = function(){ document.querySelectorAll('.skWahl').forEach(function(cb){ cb.checked = false; }); vorschau(); };
+  document.getElementById('skErstellen').onclick = function(){ stempelKartenPdf(gewaehlt(), document.getElementById('skAnzahl').value); };
+  vorschau();
+}
+
+// ---------- Treueprogramm (nur Privatkunden mit Haekchen "Treueprogramm") ----------
+var TREUE_PUNKTE_PRO_EURO = 10; // Punkte je 1 EUR netto
+var TREUE_PRAEMIEN = [
+  { id: 'co2', name: '1 CO2-Füllung gratis', punkte: 1000 },
+  { id: 'pruef', name: '1 Überprüfung gratis', punkte: 3000 },
+  { id: 'decke', name: 'Löschdecke P100', punkte: 7000 },
+  { id: 'melder', name: 'Rauchmelder Senys2', punkte: 9000 },
+  { id: 'p2g', name: 'Autolöscher P2G', punkte: 10000 }
+];
+var TREUE_BONUS = [
+  { name: 'Pünktlicher Prüftermin', punkte: 200 },
+  { name: 'Kunde wirbt Kunde', punkte: 1000 }
+];
+// Netto-Preis je CO2-Fuellung nach Groesse (Gramm) - nur diese Groessen bringen Punkte
+var TREUE_CO2_NETTO = { 425: 5.75 };
+var TREUE_KARTEN_ID = 'treuekarten';
+
+function treueAktiv(k){ return !!(k && k.treueAktiv && !k.geloescht); }
+function treuePunkte(k){
+  var s = 0;
+  ((k && k.treueBuchungen) || []).forEach(function(b){ s += Number(b.p) || 0; });
+  return s;
+}
+function treuePunkteText(n){
+  var s = String(Math.abs(Math.round(n))), out = '';
+  while(s.length > 3){ out = '.' + s.substring(s.length - 3) + out; s = s.substring(0, s.length - 3); }
+  return (n < 0 ? '-' : '') + s + out;
+}
+function treuePunkteAusBrutto(brutto){ return Math.round((Number(brutto) || 0) / 1.2 * TREUE_PUNKTE_PRO_EURO); }
+function treueCo2Punkte(posten){
+  var p = 0;
+  (posten || []).forEach(function(x){ var n = TREUE_CO2_NETTO[x.gramm]; if(n) p += Math.round(n * TREUE_PUNKTE_PRO_EURO) * (x.anzahl || 0); });
+  return p;
+}
+// Buchung nur an das Kundenobjekt haengen (Speichern macht der Aufrufer)
+function treueBuchungAnhaengen(k, punkte, text, ref){
+  if(!k.treueBuchungen) k.treueBuchungen = [];
+  k.treueBuchungen.push({ id: uid(), d: new Date().toISOString(), p: Math.round(punkte), t: text || '', ref: ref || '', von: lagerAktuellerBenutzer() });
+}
+function treueBuchungenEntfernen(k, ref){
+  if(!k || !k.treueBuchungen || !ref) return false;
+  var vorher = k.treueBuchungen.length;
+  k.treueBuchungen = k.treueBuchungen.filter(function(b){ return b.ref !== ref; });
+  return k.treueBuchungen.length !== vorher;
+}
+function treueBuchen(k, punkte, text, ref, cb){
+  treueBuchungAnhaengen(k, punkte, text, ref);
+  dbPut('kunden', k, function(){ treuePortalSync(k); if(cb) cb(); });
+}
+
+// --- Kartenverzeichnis (in einstellungen/treuekarten) ---
+function treueKartenDaten(){
+  var e = (state.einstellungen || []).filter(function(x){ return x && x.id === TREUE_KARTEN_ID; })[0];
+  if(!e) e = { id: TREUE_KARTEN_ID, naechsteNr: 1001, karten: {} };
+  if(!e.karten) e.karten = {};
+  if(!e.naechsteNr) e.naechsteNr = 1001;
+  return e;
+}
+function treueKartenSpeichern(obj, cb){
+  obj.geaendertAm = new Date().toISOString();
+  state.einstellungen = (state.einstellungen || []).filter(function(x){ return x.id !== TREUE_KARTEN_ID; }).concat([obj]);
+  dbPut('einstellungen', obj, function(){ if(cb) cb(); });
+}
+function treueNeuerCode(){
+  var z = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = '';
+  var arr = null;
+  try{ arr = new Uint32Array(10); window.crypto.getRandomValues(arr); }catch(e){ arr = null; }
+  for(var i = 0; i < 10; i++){ var r = arr ? arr[i] : Math.floor(Math.random() * 4294967296); s += z.charAt(r % z.length); }
+  return s;
+}
+function treueKarteUrl(code){ return KUNDEN_PORTAL_URL + '?karte=' + code; }
+// legt neue Karten an (optional gleich einem Kunden zugeordnet); gibt [{code, nr}] zurueck
+function treueKartenAnlegen(anzahl, kundeId, cb){
+  var reg = treueKartenDaten();
+  var neu = [];
+  for(var i = 0; i < anzahl; i++){
+    var code = treueNeuerCode();
+    while(reg.karten[code]) code = treueNeuerCode();
+    reg.karten[code] = { nr: reg.naechsteNr, kundeId: kundeId || '', gesperrt: false, erstellt: new Date().toISOString().substring(0, 10) };
+    neu.push({ code: code, nr: reg.naechsteNr });
+    reg.naechsteNr++;
+  }
+  treueKartenSpeichern(reg, function(){ if(cb) cb(neu); });
+}
+function treueKartenVonKunde(kundeId){
+  var reg = treueKartenDaten(), liste = [];
+  Object.keys(reg.karten).forEach(function(c){ var x = reg.karten[c]; if(x.kundeId === kundeId) liste.push({ code: c, nr: x.nr, gesperrt: !!x.gesperrt }); });
+  return liste.sort(function(a, b){ return a.nr - b.nr; });
+}
+
+// --- Oeffentlicher Punktestand fuers Kundenportal (ohne Namen) ---
+function treuePortalSync(k){
+  if(!k || !db) return;
+  var karten = treueKartenVonKunde(k.id);
+  if(!karten.length) return;
+  var buch = (k.treueBuchungen || []).slice().sort(function(a, b){ return String(b.d).localeCompare(String(a.d)); }).slice(0, 15)
+    .map(function(b){ return { d: String(b.d).substring(0, 10), t: b.t, p: b.p }; });
+  var daten = { id: 'treue', typ: 'treue', punkte: treuePunkte(k), praemien: TREUE_PRAEMIEN, buchungen: buch, aktiv: treueAktiv(k), stand: new Date().toISOString() };
+  karten.forEach(function(kt){
+    portalSchluessel('treue-' + kt.code, function(key, fehler){
+      if(fehler || !key) return;
+      var ref = db.collection(PORTAL_STORE).doc(key).collection('geraete').doc('treue');
+      if(kt.gesperrt || !treueAktiv(k)) ref.delete().catch(function(){});
+      else ref.set(daten).catch(function(err){ console.error('Treue-Portal Fehler', err); });
+    });
+  });
+}
+
+// --- Karte zeichnen (85,6 x 54 mm) ---
+function treueKarteCanvas(code, nr, logoImg){
+  var f = LAGERKARTE_PXMM;
+  var c = document.createElement('canvas');
+  c.width = Math.round(LAGERKARTE_B * f); c.height = Math.round(LAGERKARTE_H * f);
+  var ctx = c.getContext('2d');
+  var mm = function(v){ return v * f; };
+  var schrift = 'Helvetica, Arial, sans-serif';
+  var hg = '#271f1b';
+  try{
+    var tc = document.createElement('canvas'); tc.width = 4; tc.height = 4;
+    var tx = tc.getContext('2d'); tx.drawImage(logoImg, logoImg.naturalWidth - 8, 0, 6, 6, 0, 0, 4, 4);
+    var px = tx.getImageData(1, 1, 1, 1).data; hg = 'rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')';
+  }catch(e){}
+  ctx.fillStyle = hg; ctx.fillRect(0, 0, c.width, c.height);
+  var sh = 3.2, sy = LAGERKARTE_H - sh;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, mm(sy), c.width, mm(sh)); ctx.clip();
+  ctx.fillStyle = '#f7e11b'; ctx.fillRect(0, mm(sy), c.width, mm(sh));
+  ctx.fillStyle = '#1a1a1a';
+  for(var x = -sh; x < LAGERKARTE_B + sh; x += 4){ ctx.beginPath(); ctx.moveTo(mm(x), mm(LAGERKARTE_H)); ctx.lineTo(mm(x + 2), mm(LAGERKARTE_H)); ctx.lineTo(mm(x + 2 + sh), mm(sy)); ctx.lineTo(mm(x + sh), mm(sy)); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  var lw = 49, lh = 20;
+  if(logoImg && logoImg.naturalWidth){
+    lh = lw * logoImg.naturalHeight / logoImg.naturalWidth;
+    ctx.drawImage(lagerLogoKraeftig(logoImg), mm(2.5), mm(3), mm(lw), mm(lh));
+  }
+  var tx0 = 4;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  var gr = 8; ctx.font = 'bold ' + mm(gr) + 'px ' + schrift;
+  while(gr > 3 && ctx.measureText('TREUEKARTE').width > mm(lw - 3)){ gr -= 0.2; ctx.font = 'bold ' + mm(gr) + 'px ' + schrift; }
+  var ty = 3 + lh + 3 + gr * 0.75;
+  ctx.fillStyle = '#f7e11b'; ctx.strokeStyle = '#f7e11b'; ctx.lineWidth = mm(gr * 0.04); ctx.lineJoin = 'round';
+  ctx.strokeText('TREUEKARTE', mm(tx0), mm(ty)); ctx.fillText('TREUEKARTE', mm(tx0), mm(ty));
+  ctx.fillStyle = '#ffffff'; ctx.font = mm(2.7) + 'px ' + schrift;
+  ctx.fillText('Punkte sammeln - Prämien sichern', mm(tx0), mm(ty + 4.6));
+  ctx.fillStyle = '#cfc6bd'; ctx.font = mm(2.3) + 'px ' + schrift;
+  ctx.fillText('Tel. 0676 / 305 83 98', mm(tx0), mm(sy - 5.4));
+  ctx.fillText('www.brandschutztechnik-janiba.at', mm(tx0), mm(sy - 2.2));
+  var feld = 30.5, fx = LAGERKARTE_B - 3 - feld, fy = 4, r = mm(2.2);
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.moveTo(mm(fx) + r, mm(fy)); ctx.arcTo(mm(fx + feld), mm(fy), mm(fx + feld), mm(fy + feld), r); ctx.arcTo(mm(fx + feld), mm(fy + feld), mm(fx), mm(fy + feld), r); ctx.arcTo(mm(fx), mm(fy + feld), mm(fx), mm(fy), r); ctx.arcTo(mm(fx), mm(fy), mm(fx + feld), mm(fy), r); ctx.closePath(); ctx.fill();
+  try{
+    var tmp = document.createElement('div'); tmp.style.position = 'absolute'; tmp.style.left = '-9999px'; document.body.appendChild(tmp);
+    new QRCode(tmp, { text: treueKarteUrl(code), width: 580, height: 580, correctLevel: QRCode.CorrectLevel.M });
+    var qc = tmp.querySelector('canvas');
+    if(qc){ ctx.imageSmoothingEnabled = false; ctx.drawImage(qc, mm(fx + 2.2), mm(fy + 2.2), mm(feld - 4.4), mm(feld - 4.4)); ctx.imageSmoothingEnabled = true; }
+    document.body.removeChild(tmp);
+  }catch(eQ){}
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff'; ctx.font = mm(2.3) + 'px ' + schrift;
+  ctx.fillText('Scannen: Punktestand', mm(fx + feld / 2), mm(fy + feld + 4));
+  if(nr){ ctx.textAlign = 'right'; ctx.fillStyle = '#9a8f86'; ctx.font = mm(2.2) + 'px ' + schrift; ctx.fillText('Nr. ' + nr, mm(LAGERKARTE_B - 3), mm(sy - 1.4)); }
+  return c;
+}
+function treueKartenPdf(karten){
+  if(!karten || !karten.length) return;
+  if(!window.jspdf || !window.QRCode){ toast('Programm-Bibliothek fehlt (Internet?)'); return; }
+  toast('Karten werden erstellt...');
+  lagerLogoLaden(function(logo){
+    setTimeout(function(){
+      try{
+        var pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: [LAGERKARTE_H, LAGERKARTE_B], compress: true });
+        karten.forEach(function(kt, i){
+          if(i > 0) pdf.addPage([LAGERKARTE_H, LAGERKARTE_B], 'landscape');
+          pdf.addImage(treueKarteCanvas(kt.code, kt.nr, logo).toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, LAGERKARTE_B, LAGERKARTE_H, undefined, 'FAST');
+        });
+        lagerKartenPdfAusgeben(pdf.output('blob'), karten.length === 1 ? ('Treuekarte ' + karten[0].nr + '.pdf') : 'Treuekarten.pdf');
+      }catch(e){ console.error('Treuekarten', e); toast('Fehler beim Erstellen der Karten'); }
+    }, 50);
+  });
+}
+
+// --- Scan einer Treuekarte ---
+function treueScan(code){
+  var reg = treueKartenDaten();
+  var kt = reg.karten[code];
+  if(!kt){ toast('Unbekannte Treuekarte'); return; }
+  if(kt.gesperrt){ toast('Diese Treuekarte ist gesperrt (Nr. ' + kt.nr + ')'); return; }
+  if(!kt.kundeId){ modalTreueKarteZuordnen(code); return; }
+  modalTreueKunde(kt.kundeId);
+}
+function modalTreueKarteZuordnen(code){
+  var reg = treueKartenDaten();
+  var kt = reg.karten[code];
+  var html = '<div class="modal-head"><h3>Neue Treuekarte Nr. ' + kt.nr + '</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;">Diese Karte gehört noch niemandem. Kunden suchen und antippen:</div>';
+  html += '<input type="text" id="tkSuche" placeholder="Name, Ort oder Kundennummer suchen..." autocomplete="off">';
+  html += '<div id="tkListe" style="margin-top:8px;"></div>';
+  html += '<button type="button" class="btn block secondary" id="tkNeuKunde" style="margin-top:12px;">+ Neuen Kunden anlegen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var zeigen = function(){
+    var q = document.getElementById('tkSuche').value.trim().toLowerCase();
+    var l = state.kunden.filter(function(k){ return !k.geloescht && k.name; });
+    if(q) l = l.filter(function(k){ return (kundeAnzeigeName(k) + ' ' + (k.adresse || '') + ' ' + (k.kundennummer || '')).toLowerCase().indexOf(q) !== -1; });
+    l.sort(function(a, b){ return (treueAktiv(b) ? 1 : 0) - (treueAktiv(a) ? 1 : 0) || kundeAnzeigeName(a).localeCompare(kundeAnzeigeName(b)); });
+    var h = '';
+    l.slice(0, 30).forEach(function(k){
+      h += '<button type="button" class="btn block secondary tkWahl" data-kid="' + escapeHtml(k.id) + '" style="text-align:left; justify-content:flex-start; margin-top:6px;">' + escapeHtml(kundeAnzeigeName(k)) + (treueAktiv(k) ? ' &#9733;' : '') + '<span class="meta" style="margin-left:auto;">' + escapeHtml(k.ort || '') + '</span></button>';
+    });
+    if(!l.length) h = '<div class="empty">Kein Kunde gefunden</div>';
+    document.getElementById('tkListe').innerHTML = h;
+    document.querySelectorAll('.tkWahl').forEach(function(b){
+      b.onclick = function(){
+        var k = state.kunden.filter(function(x){ return x.id === b.getAttribute('data-kid'); })[0];
+        if(!k) return;
+        customConfirm('Karte Nr. ' + kt.nr + ' an ' + kundeAnzeigeName(k) + ' ausgeben?', function(){
+          var r2 = treueKartenDaten();
+          r2.karten[code].kundeId = k.id;
+          r2.karten[code].ausgegeben = new Date().toISOString().substring(0, 10);
+          treueKartenSpeichern(r2, function(){
+            var weiter = function(){ treuePortalSync(k); toast('Karte Nr. ' + kt.nr + ' zugeordnet'); modalTreueKunde(k.id); };
+            if(!k.treueAktiv){ k.treueAktiv = true; dbPut('kunden', k, weiter); } else weiter();
+          });
+        });
+      };
+    });
+  };
+  document.getElementById('tkSuche').oninput = zeigen;
+  document.getElementById('tkNeuKunde').onclick = function(){ closeModal(); toast('Kunden anlegen, dann die Karte nochmal scannen'); setTimeout(function(){ modalNeuerKunde(); }, 80); };
+  zeigen();
+}
+
+// --- Treue-Fenster eines Kunden (nach Scan oder aus der Kundenkartei) ---
+function treueFortschrittHtml(punkte, gross){
+  var h = '';
+  TREUE_PRAEMIEN.forEach(function(p){
+    var pz = Math.max(0, Math.min(100, Math.round(punkte / p.punkte * 100)));
+    var ok = punkte >= p.punkte;
+    h += '<div style="padding:8px 0; border-bottom:1px solid var(--line);">';
+    h += '<div class="row" style="align-items:center;"><div style="flex:1; font-weight:700;">' + escapeHtml(p.name) + '</div>';
+    h += '<span class="meta">' + treuePunkteText(Math.min(punkte, p.punkte)) + ' / ' + treuePunkteText(p.punkte) + '</span>';
+    if(gross && ok) h += '<button type="button" class="btn small treueEinl" data-pid="' + p.id + '" style="margin-left:8px; background:#1e8449;">Einlösen</button>';
+    h += '</div>';
+    h += '<div style="height:9px; border-radius:6px; background:rgba(128,128,128,0.25); margin-top:5px; overflow:hidden;"><div style="height:100%; width:' + pz + '%; background:' + (ok ? '#1e8449' : '#c23f12') + ';"></div></div>';
+    h += '</div>';
+  });
+  return h;
+}
+function modalTreueKunde(kundeId){
+  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  if(!k){ toast('Kunde nicht gefunden'); return; }
+  var punkte = treuePunkte(k);
+  var html = '<div class="modal-head"><h3>Treuekarte</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="font-size:19px; font-weight:800;">' + escapeHtml(kundeAnzeigeName(k)) + '</div>';
+  if(!treueAktiv(k)) html += '<div class="meta" style="color:#c23f12;">Treueprogramm bei diesem Kunden nicht aktiv (Kunde bearbeiten &rarr; Häkchen).</div>';
+  html += '<div style="text-align:center; margin:10px 0 4px;"><div style="font-size:42px; font-weight:800; color:#c23f12; line-height:1;">' + treuePunkteText(punkte) + '</div><div class="meta">Punkte</div></div>';
+  // CO2-Fuellung buchen
+  html += '<div class="card" style="margin-top:10px; padding:10px 12px;">';
+  html += '<div style="font-weight:700; margin-bottom:6px;">CO2-Füllung buchen</div>';
+  Object.keys(TREUE_CO2_NETTO).forEach(function(g){
+    html += '<div class="row" style="align-items:center; gap:10px; padding:4px 0;"><div style="flex:1; font-weight:700;">' + sfGrammText(Number(g)) + ' <span class="meta">(+' + Math.round(TREUE_CO2_NETTO[g] * TREUE_PUNKTE_PRO_EURO) + ' P.)</span></div>';
+    html += '<button type="button" class="btn secondary tkCo2M" data-g="' + g + '" style="margin:0; width:46px; padding:6px 0; font-size:20px;">&minus;</button>';
+    html += '<div class="tkCo2N" data-g="' + g + '" style="width:34px; text-align:center; font-size:20px; font-weight:800;">1</div>';
+    html += '<button type="button" class="btn tkCo2P" data-g="' + g + '" style="margin:0; width:46px; padding:6px 0; font-size:20px;">+</button></div>';
+  });
+  html += '<button type="button" class="btn block" id="tkCo2Buchen" style="margin-top:8px;">Füllung speichern &amp; Punkte gutschreiben</button>';
+  html += '</div>';
+  html += '<div style="font-weight:700; margin-top:14px;">Prämien</div>';
+  html += treueFortschrittHtml(punkte, true);
+  if(istVollsicht()){
+    html += '<div style="font-weight:700; margin-top:14px;">Bonus / Korrektur</div>';
+    html += '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">';
+    TREUE_BONUS.forEach(function(b, i){ html += '<button type="button" class="btn small secondary tkBonus" data-i="' + i + '">+' + treuePunkteText(b.punkte) + ' ' + escapeHtml(b.name) + '</button>'; });
+    html += '</div>';
+    html += '<div class="row" style="gap:6px; margin-top:8px;"><input type="text" inputmode="numeric" id="tkManP" placeholder="Punkte, z.B. 500 oder -200" style="flex:1; min-width:0;"><input type="text" id="tkManT" placeholder="Grund" style="flex:1; min-width:0;"><button type="button" class="btn small" id="tkMan" style="flex:0 0 auto;">OK</button></div>';
+  }
+  var buch = (k.treueBuchungen || []).slice().sort(function(a, b){ return String(b.d).localeCompare(String(a.d)); }).slice(0, 12);
+  if(buch.length){
+    html += '<div style="font-weight:700; margin-top:14px;">Letzte Buchungen</div>';
+    buch.forEach(function(b){
+      html += '<div class="row" style="padding:5px 0; border-bottom:1px solid var(--line); font-size:13px;"><div style="flex:1;">' + fmtDate(b.d) + ' &middot; ' + escapeHtml(b.t || '') + '</div><b style="color:' + (b.p < 0 ? '#c23f12' : '#1e8449') + ';">' + (b.p > 0 ? '+' : '') + treuePunkteText(b.p) + '</b></div>';
+    });
+  }
+  html += '<button type="button" class="btn block secondary" id="tkZumKunden" style="margin-top:14px;">Zur Kundenkartei</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('tkZumKunden').onclick = function(){ closeModal(); state.activeKundeId = k.id; state.tab = 'kundeDetail'; render(); window.scrollTo(0, 0); };
+  var neuZeigen = function(){ modalTreueKunde(k.id); if(state.tab === 'kundeDetail') render(); };
+  document.querySelectorAll('.tkCo2P, .tkCo2M').forEach(function(b){
+    b.onclick = function(){
+      var el = document.querySelector('.tkCo2N[data-g="' + b.getAttribute('data-g') + '"]');
+      var n = (parseInt(el.textContent, 10) || 0) + (b.classList.contains('tkCo2P') ? 1 : -1);
+      el.textContent = n < 0 ? 0 : n;
+    };
+  });
+  document.getElementById('tkCo2Buchen').onclick = function(){
+    var posten = [];
+    document.querySelectorAll('.tkCo2N').forEach(function(el){ var n = parseInt(el.textContent, 10) || 0; if(n > 0) posten.push({ gramm: Number(el.getAttribute('data-g')), anzahl: n }); });
+    if(!posten.length){ toast('Bitte Anzahl einstellen'); return; }
+    this.disabled = true;
+    var jetzt = new Date();
+    var e = { id: uid(), datum: kalHeuteKey() + 'T' + ('0' + jetzt.getHours()).slice(-2) + ':' + ('0' + jetzt.getMinutes()).slice(-2), posten: posten, kundeId: k.id, kundeFrei: '', notiz: 'Treuekarte', erstelltVon: lagerAktuellerBenutzer(), erstelltAm: jetzt.toISOString() };
+    dbPut('schnellfuellungen', e, function(){
+      if(!state.schnellfuellungen) state.schnellfuellungen = [];
+      state.schnellfuellungen.push(e);
+      var p = treueAktiv(k) ? treueCo2Punkte(posten) : 0;
+      if(p > 0) treueBuchen(k, p, sfFlaschen(e) + ' x CO2-Füllung', 'sf:' + e.id, function(){ toast('+' + p + ' Punkte'); neuZeigen(); });
+      else { toast('Füllung gespeichert'); neuZeigen(); }
+    });
+  };
+  document.querySelectorAll('.treueEinl').forEach(function(b){
+    b.onclick = function(){
+      var pr = TREUE_PRAEMIEN.filter(function(x){ return x.id === b.getAttribute('data-pid'); })[0];
+      if(!pr) return;
+      customConfirm('Prämie "' + pr.name + '" einlösen? Es werden ' + treuePunkteText(pr.punkte) + ' Punkte abgezogen.', function(){
+        treueBuchen(k, -pr.punkte, 'Prämie: ' + pr.name, '', function(){ toast('Prämie eingelöst'); neuZeigen(); });
+      });
+    };
+  });
+  document.querySelectorAll('.tkBonus').forEach(function(b){
+    b.onclick = function(){
+      var bo = TREUE_BONUS[parseInt(b.getAttribute('data-i'), 10)];
+      treueBuchen(k, bo.punkte, 'Bonus: ' + bo.name, '', function(){ toast('+' + bo.punkte + ' Punkte'); neuZeigen(); });
+    };
+  });
+  var man = document.getElementById('tkMan');
+  if(man) man.onclick = function(){
+    var p = parseInt(String(document.getElementById('tkManP').value).replace(/[^0-9-]/g, ''), 10);
+    if(!p){ toast('Bitte Punkte eingeben'); return; }
+    treueBuchen(k, p, document.getElementById('tkManT').value.trim() || 'Korrektur', '', function(){ toast((p > 0 ? '+' : '') + p + ' Punkte'); neuZeigen(); });
+  };
+}
+
+// --- Karte in der Kundenkartei ---
+function treueKundenKarteHtml(k){
+  if(!treueAktiv(k)) return '';
+  var punkte = treuePunkte(k);
+  var naechste = TREUE_PRAEMIEN.filter(function(p){ return p.punkte > punkte; })[0];
+  var karten = treueKartenVonKunde(k.id);
+  var h = '<div class="card" style="margin-top:14px;">';
+  h += '<div class="row"><div class="section-title" style="margin:0;">Treuekarte</div><span class="badge ok">' + treuePunkteText(punkte) + ' Punkte</span></div>';
+  if(naechste){
+    var pz = Math.round(punkte / naechste.punkte * 100);
+    h += '<div class="meta" style="margin-top:6px;">Nächste Prämie: <b>' + escapeHtml(naechste.name) + '</b> (noch ' + treuePunkteText(naechste.punkte - punkte) + ' Punkte)</div>';
+    h += '<div style="height:9px; border-radius:6px; background:rgba(128,128,128,0.25); margin-top:5px; overflow:hidden;"><div style="height:100%; width:' + pz + '%; background:#c23f12;"></div></div>';
+  } else {
+    h += '<div class="meta" style="margin-top:6px; color:#1e8449;"><b>Alle Prämien erreichbar!</b></div>';
+  }
+  h += '<div class="meta" style="margin-top:6px;">' + (karten.length ? 'Karten: ' + karten.map(function(c){ return 'Nr. ' + c.nr + (c.gesperrt ? ' (gesperrt)' : ''); }).join(', ') : 'Noch keine Karte ausgegeben') + '</div>';
+  h += '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">';
+  h += '<button type="button" class="btn small" id="tkOeffnen">Punkte / Prämien</button>';
+  h += '<button type="button" class="btn small secondary" id="tkKarteDruck">Neue Karte drucken</button>';
+  if(karten.some(function(c){ return !c.gesperrt; })) h += '<button type="button" class="btn small secondary" id="tkSperren" style="color:#c23f12;">Karte verloren / sperren</button>';
+  h += '</div></div>';
+  return h;
+}
+function bindTreueKunde(){
+  var k = state.kunden.filter(function(x){ return x.id === state.activeKundeId; })[0];
+  if(!k) return;
+  var o = document.getElementById('tkOeffnen'); if(o) o.onclick = function(){ modalTreueKunde(k.id); };
+  var d = document.getElementById('tkKarteDruck');
+  if(d) d.onclick = function(){
+    customConfirm('Neue Treuekarte für ' + kundeAnzeigeName(k) + ' anlegen und drucken?', function(){
+      treueKartenAnlegen(1, k.id, function(neu){ treuePortalSync(k); treueKartenPdf(neu); render(); });
+    });
+  };
+  var s = document.getElementById('tkSperren');
+  if(s) s.onclick = function(){
+    var aktiv = treueKartenVonKunde(k.id).filter(function(c){ return !c.gesperrt; });
+    customConfirm('Karte' + (aktiv.length > 1 ? 'n ' : ' ') + aktiv.map(function(c){ return 'Nr. ' + c.nr; }).join(', ') + ' sperren? Die Punkte bleiben beim Kunden. Danach eine neue Karte drucken.', function(){
+      var reg = treueKartenDaten();
+      aktiv.forEach(function(c){ if(reg.karten[c.code]) reg.karten[c.code].gesperrt = true; });
+      treueKartenSpeichern(reg, function(){
+        aktiv.forEach(function(c){ portalSchluessel('treue-' + c.code, function(key){ if(key) db.collection(PORTAL_STORE).doc(key).collection('geraete').doc('treue').delete().catch(function(){}); }); });
+        toast('Gesperrt'); render();
+      });
+    });
+  };
+}
+
+// --- Uebersicht (Mehr -> Treueprogramm) ---
+function modalTreueUebersicht(){
+  var liste = state.kunden.filter(treueAktiv).map(function(k){ return { k: k, p: treuePunkte(k) }; }).sort(function(a, b){ return b.p - a.p; });
+  var reg = treueKartenDaten();
+  var frei = Object.keys(reg.karten).filter(function(c){ return !reg.karten[c].kundeId && !reg.karten[c].gesperrt; }).length;
+  var html = '<div class="modal-head"><h3>Treueprogramm</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
+  html += '<div class="meta" style="margin-top:6px;">' + TREUE_PUNKTE_PRO_EURO + ' Punkte je 1 &euro; netto. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
+  html += '<div class="row" style="gap:8px; margin-top:12px;"><input type="number" inputmode="numeric" id="tuAnz" value="10" min="1" max="100" style="flex:0 0 80px;"><button type="button" class="btn" id="tuDruck" style="flex:1;">Leere Karten auf Vorrat drucken</button></div>';
+  html += '<div class="meta" style="margin-top:4px;">Leere Karte an Kunden ausgeben: Karte im Reiter Scan scannen &rarr; Kunden auswählen.</div>';
+  if(frei){
+    html += '<button type="button" class="btn block secondary" id="tuNochmal" style="margin-top:8px;">Leere Karten nochmal drucken (' + frei + ')</button>';
+  }
+  html += '<div style="margin-top:14px;">';
+  if(!liste.length) html += '<div class="empty">Noch kein Kunde im Treueprogramm.<br>Kunde bearbeiten &rarr; Häkchen &bdquo;Treueprogramm&ldquo;.</div>';
+  liste.forEach(function(x){
+    html += '<button type="button" class="btn block secondary tuKunde" data-kid="' + escapeHtml(x.k.id) + '" style="justify-content:flex-start; margin-top:6px;">' + escapeHtml(kundeAnzeigeName(x.k)) + '<span style="margin-left:auto; font-weight:800;">' + treuePunkteText(x.p) + ' P.</span></button>';
+  });
+  html += '</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('tuDruck').onclick = function(){
+    var n = Math.max(1, Math.min(100, parseInt(document.getElementById('tuAnz').value, 10) || 1));
+    customConfirm(n + ' neue, leere Treuekarten anlegen und drucken?', function(){
+      treueKartenAnlegen(n, '', function(neu){ treueKartenPdf(neu); });
+    });
+  };
+  var nm = document.getElementById('tuNochmal');
+  if(nm) nm.onclick = function(){
+    var r = treueKartenDaten(), l = [];
+    Object.keys(r.karten).forEach(function(c){ if(!r.karten[c].kundeId && !r.karten[c].gesperrt) l.push({ code: c, nr: r.karten[c].nr }); });
+    l.sort(function(a, b){ return a.nr - b.nr; });
+    treueKartenPdf(l);
+  };
+  document.querySelectorAll('.tuKunde').forEach(function(b){ b.onclick = function(){ modalTreueKunde(b.getAttribute('data-kid')); }; });
 }
 
 function renderScan(){
@@ -3846,8 +4370,15 @@ function zeigeGeraetAuswahl(matches){
 function verarbeiteScan(text){
   stopScanner();
   var id = text.trim();
+  var treueMatch = id.match(/kunde\.html\?karte=([A-Za-z0-9]+)/i);
+  if(treueMatch){ treueScan(treueMatch[1].toUpperCase()); return; }
   var portalMatch = id.match(/kunde\.html\?id=([^&\s]+)/i);
   if(portalMatch) id = decodeURIComponent(portalMatch[1]);
+  if(id.indexOf('BSV-KARTE:') === 0){
+    var kartenName = stempelKarteLesen(id);
+    if(!kartenName){ toast('Stempel-Karte ung\u00fcltig'); setTimeout(startScanner, 400); return; }
+    id = 'BSV-STEMPEL:' + kartenName;
+  }
   if(id.indexOf('BSV-STEMPEL:') === 0){
     var stName = id.substring('BSV-STEMPEL:'.length);
     if(ZEIT_ALTE_NAMEN[stName]) stName = ZEIT_ALTE_NAMEN[stName];
@@ -5600,9 +6131,9 @@ var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
   { name: 'Janiba Wolfgang sen.', pinPruefwert: 'b1b89ef39b06b58a21533ed951b596ec651fa17a89b69523f05cf6558777a9da', lagerbuch: true, vollzugriff: true, statistik: true },
   { name: 'Mayerhofer Tobias', pinPruefwert: '9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd', kalenderAnlegen: true },
-  { name: 'Holakovsky Manuela', pinPruefwert: 'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38', aufgabenVergeben: true, vollzugriff: true, statistik: true, stundenVoll: true },
+  { name: 'Holakovsky Manuela', pinPruefwert: 'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38', teleworking: true, aufgabenVergeben: true, vollzugriff: true, statistik: true, stundenVoll: true },
   { name: 'Henke Alexander', pinPruefwert: '82e8e2870105ec7f465aa8c8e99b0e0a65c9713bb2ac845d48b9d51c1bfc723f' },
-  { name: 'Harris Sandra', pinPruefwert: 'af0757f3208d062e6a6e80e4c771fce69f9dbc951daec8378c3788710015180c', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
+  { name: 'Harris Sandra', pinPruefwert: 'af0757f3208d062e6a6e80e4c771fce69f9dbc951daec8378c3788710015180c', teleworking: true, aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
 ];
 // Alte Namen aus früheren Versionen -> neue Namen
 var ZEIT_ALTE_NAMEN = {
@@ -5854,6 +6385,7 @@ function renderKundeDetail(kundeId){
 
   html += vermerkeKartenHtml(k);
   html += umsatzKarteHtml(k);
+  html += treueKundenKarteHtml(k);
 
   html += '<div class="row" style="margin-top:14px;"><div class="section-title" style="margin:0;">Geräte</div>';
   html += '<button class="btn small" id="addGeraetBtn">+ Gerät</button></div>';
@@ -8118,6 +8650,7 @@ function modalKundeBearbeiten(kundeId){
   html += '<label>E-Mail</label><input id="fEmail" type="email" value="' + escapeHtml(k.email || '') + '">';
   html += '<label style="display:flex; align-items:center; gap:8px; margin-top:14px;"><input type="checkbox" id="fFreigabe" style="width:auto;"' + (k.freigabe ? ' checked' : '') + '> Kundenportal freigegeben (Kunde darf QR-Code scannen und Prüfstatus einsehen)</label>';
   html += '<div class="meta" style="margin-top:2px;">Nur nach unterschriebenem Wartungsvertrag aktivieren.</div>';
+  html += '<label style="display:flex; align-items:center; gap:8px; margin-top:14px;"><input type="checkbox" id="fTreue" style="width:auto;"' + (k.treueAktiv ? ' checked' : '') + '> Treueprogramm (Privatkunde sammelt Punkte)</label>';
   html += '<label style="margin-top:10px;">Zugangscode fürs Kundenportal</label>';
   html += '<div class="row" style="gap:8px;"><input id="fZugangscode" type="text" readonly value="' + escapeHtml(k.zugangscode || '') + '" style="flex:1; font-weight:700; letter-spacing:1px;"><button type="button" class="btn secondary" id="fCodeNeuBtn" style="flex:0 0 auto; padding:0 16px;">Neu</button></div>';
   html += '<div class="meta" style="margin-top:2px;">Zufällig erzeugt, hat nichts mit der Kundennummer zu tun. Diesen Code dem Kunden mitteilen.</div>';
@@ -8164,7 +8697,10 @@ function modalKundeBearbeiten(kundeId){
     k.email = document.getElementById('fEmail').value.trim();
     k.freigabe = document.getElementById('fFreigabe').checked;
     k.zugangscode = document.getElementById('fZugangscode').value.trim() || (k.freigabe ? generiereZugangscode() : '');
+    var treueVorher = !!k.treueAktiv;
+    k.treueAktiv = document.getElementById('fTreue').checked;
     dbPut('kunden', k, function(){
+      if(treueVorher !== k.treueAktiv) treuePortalSync(k);
       loadAll(function(){ render(); closeModal(); toast('Änderungen gespeichert'); });
     });
   };
@@ -10874,7 +11410,9 @@ function zeitStatus(name){
     var beimArzt = liste[liste.length - 1].ort === 'Arzt';
     return { key: 'pause', arzt: beimArzt, label: beimArzt ? 'Beim Arzt' : 'In Pause', farbe: beimArzt ? '#2a6fb0' : '#d98a00', liste: liste };
   }
-  return { key: 'arbeit', label: 'Bei der Arbeit', farbe: 'var(--ok)', liste: liste };
+  var tw = false;
+  for(var ti = liste.length - 1; ti >= 0; ti--){ if(liste[ti].typ === 'kommen' || liste[ti].typ === 'pause_ende'){ tw = liste[ti].ort === 'Teleworking'; if(liste[ti].typ === 'kommen') break; } }
+  return { key: 'arbeit', label: tw ? 'Im Teleworking' : 'Bei der Arbeit', farbe: tw ? '#6a4fb0' : 'var(--ok)', liste: liste };
 }
 
 function zeitStempeln(name, typ, ortWert, notiz, cb, uhrzeit){
@@ -10919,13 +11457,21 @@ function zeitZeilenText(liste){
   });
 }
 
+// Teleworking-Knopf nur fuer Mitarbeiter mit teleworking: true in MITARBEITER_LISTE (Sekretariat)
+function zeitDarfTeleworking(name){
+  for(var i = 0; i < MITARBEITER_LISTE.length; i++){
+    if(MITARBEITER_LISTE[i].name === name) return !!MITARBEITER_LISTE[i].teleworking;
+  }
+  return false;
+}
 function zeitAktionenHtml(name, st){
   var h = '';
-  var btn = function(typ, text, farbe, arzt){
-    return '<button class="btn block" data-zeitstempel="' + typ + '"' + (arzt ? ' data-zeitarzt="1"' : '') + ' data-zeitname="' + escapeHtml(name) + '" style="margin-top:8px; padding:18px; font-size:19px;' + (farbe ? ' background:' + farbe + ';' : '') + '">' + text + '</button>';
+  var btn = function(typ, text, farbe, arzt, ortFix){
+    return '<button class="btn block" data-zeitstempel="' + typ + '"' + (arzt ? ' data-zeitarzt="1"' : '') + (ortFix ? ' data-zeitortfix="' + ortFix + '"' : '') + ' data-zeitname=""' + escapeHtml(name) + '" style="margin-top:8px; padding:18px; font-size:19px;' + (farbe ? ' background:' + farbe + ';' : '') + '">' + text + '</button>';
   };
   if(st.key === 'abwesend' || st.key === 'gegangen'){
     h += btn('kommen', 'Kommen', '#2e7d4f');
+    if(zeitDarfTeleworking(name)) h += btn('kommen', 'Kommen - Teleworking', '#6a4fb0', false, 'teleworking');
   } else if(st.key === 'arbeit'){
     h += btn('pause_start', 'Zum Arzt', '#2a6fb0', true);
     h += btn('pause_start', 'Pause', '#d98a00');
@@ -10951,7 +11497,7 @@ function zeitAktionenHtml(name, st){
 function zeitKlick(btn, cb){
   btn.disabled = true;
   var name = btn.getAttribute('data-zeitname');
-  var ort = btn.getAttribute('data-zeitarzt') ? 'arzt' : zeitOrtWertLesen(name);
+  var ort = btn.getAttribute('data-zeitortfix') || (btn.getAttribute('data-zeitarzt') ? 'arzt' : zeitOrtWertLesen(name));
   var uz = '';
   var uels = document.querySelectorAll('input[data-zeitzeit]');
   for(var i = 0; i < uels.length; i++){ if(uels[i].getAttribute('data-zeitzeit') === name) uz = uels[i].value; }
@@ -11083,8 +11629,10 @@ function modalStempelQr(){
   });
   html += '</div>';
   html += '<div class="no-print" style="margin-top:16px;"><button class="btn block" id="zeitQrDruckBtn">Drucken / Als PDF teilen</button></div>';
+  html += '<div class="no-print" style="margin-top:8px;"><button class="btn block secondary" id="zeitKartenBtn">Stempel-Karten drucken (Kartendrucker)</button></div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('zeitKartenBtn').onclick = function(){ closeModal(); setTimeout(modalStempelKarten, 50); };
   var qrErzeugen = function(prefix){
     namen.forEach(function(n, i){
       try{
@@ -13473,10 +14021,12 @@ function modalMehrMenu(){
     html += '<button type="button" class="btn block" id="mehrSichern" style="margin-top:10px;">Alles sichern (Datei herunterladen)</button>';
     html += '<div class="meta" style="margin-top:4px; text-align:center;">' + (letzte ? 'Letzte Sicherung auf diesem Gerät: ' + escapeHtml(letzte) : 'Auf diesem Gerät noch keine Sicherung gemacht') + '</div>';
   }
+  if(istVollsicht()) html += '<button type="button" class="btn block secondary" id="mehrTreue" style="margin-top:16px;">&#9733; Treueprogramm (Privatkunden)</button>';
   html += '<button type="button" class="btn block secondary" id="mehrGeraetAbmelden" style="margin-top:16px; color:#c23f12;">Gerät abmelden (Firmen-Konto)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mehrGeraetAbmelden').onclick = function(){ closeModal(); geraetAbmelden(); };
+  if(document.getElementById('mehrTreue')) document.getElementById('mehrTreue').onclick = function(){ closeModal(); setTimeout(modalTreueUebersicht, 50); };
   if(document.getElementById('mehrSichern')) document.getElementById('mehrSichern').onclick = function(){ closeModal(); datensicherungErstellen(); };
   if(document.getElementById('mehrFluor')) document.getElementById('mehrFluor').onclick = function(){ closeModal(); modalFluorfreiListe(); };
   if(document.getElementById('mehrFluorGesamt')) document.getElementById('mehrFluorGesamt').onclick = function(){ closeModal(); modalFluorGesamt('alle'); };
@@ -16283,8 +16833,11 @@ function bindUmsatz(){
     }
     var datum = document.getElementById('rgDatum').value || new Date().toISOString().substring(0, 10);
     if(!k.rechnungen) k.rechnungen = [];
-    k.rechnungen.push({ id: uid(), datum: datum, betrag: Math.round(betrag * 100) / 100, notiz: document.getElementById('rgNotiz').value.trim(), bezahlt: document.getElementById('rgStatus').value === 'bezahlt', bezahltAm: document.getElementById('rgStatus').value === 'bezahlt' ? datum : null });
-    dbPut('kunden', k, function(){ render(); toast('Rechnung gespeichert'); });
+    var rgId = uid();
+    k.rechnungen.push({ id: rgId, datum: datum, betrag: Math.round(betrag * 100) / 100, notiz: document.getElementById('rgNotiz').value.trim(), bezahlt: document.getElementById('rgStatus').value === 'bezahlt', bezahltAm: document.getElementById('rgStatus').value === 'bezahlt' ? datum : null });
+    var tP = treueAktiv(k) ? treuePunkteAusBrutto(betrag) : 0;
+    if(tP > 0) treueBuchungAnhaengen(k, tP, 'Rechnung ' + eurText(betrag), 'rg:' + rgId);
+    dbPut('kunden', k, function(){ if(tP > 0) treuePortalSync(k); render(); toast('Rechnung gespeichert' + (tP > 0 ? ' (+' + treuePunkteText(tP) + ' Treuepunkte)' : '')); });
   };
   document.querySelectorAll('[data-rgpaid]').forEach(function(b){
     b.onclick = function(){
@@ -16300,7 +16853,8 @@ function bindUmsatz(){
       var id = b.getAttribute('data-rgdel');
       customConfirm('Rechnung löschen?', function(){
         k.rechnungen = (k.rechnungen || []).filter(function(x){ return x.id !== id; });
-        dbPut('kunden', k, function(){ render(); });
+        var tWeg = treueBuchungenEntfernen(k, 'rg:' + id);
+        dbPut('kunden', k, function(){ if(tWeg) treuePortalSync(k); render(); });
       });
     };
   });
@@ -16837,7 +17391,7 @@ document.addEventListener('click', function(ev){
   render();
 });
 function bindDynamic(){
-  if(state.tab === 'kundeDetail'){ bindVermerke(); bindUmsatz(); }
+  if(state.tab === 'kundeDetail'){ bindVermerke(); bindUmsatz(); bindTreueKunde(); }
   bindKundenCards(document);
   var lbb = document.getElementById('lagerBestellBtn');
   if(lbb) lbb.onclick = function(){ bsvDruckenOderTeilen(lagerBestelllisteHtml(), 'Bestellliste_' + kalHeuteKey() + '.pdf'); };

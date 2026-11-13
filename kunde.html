@@ -497,8 +497,63 @@ function ladeGeschuetzt(schluessel, id, cb){
   }).catch(function(){ cb(null); });
 }
 
+// ---------- Treuekarte: Punktestand (nur lesen) ----------
+function punkteText(n){
+  var s = String(Math.abs(Math.round(n || 0))), out = '';
+  while(s.length > 3){ out = '.' + s.substring(s.length - 3) + out; s = s.substring(0, s.length - 3); }
+  return (n < 0 ? '-' : '') + s + out;
+}
+function startTreue(code){
+  var k = document.querySelector('.kopf .sub');
+  if(k) k.textContent = 'Ihre Treuekarte';
+  try{ document.title = 'Treuekarte - Wolfgang Janiba Brandschutztechnik GmbH'; }catch(e){}
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+  }catch(e){}
+  berechneSchluessel('treue-' + code, function(schluessel){
+    if(!schluessel){ zeigeFehler('Ihr Browser unterstützt diese Seite leider nicht.'); return; }
+    firebase.firestore().collection('portal').doc(schluessel).collection('geraete').doc('treue').get().then(function(doc){
+      if(!doc.exists || !doc.data().aktiv){ zeigeFehler('Diese Treuekarte ist noch nicht aktiviert. Bitte bei Ihrem nächsten Besuch vorzeigen.'); return; }
+      zeigeTreue(doc.data());
+    }).catch(function(err){
+      console.error(err);
+      zeigeFehler('Die Daten konnten nicht geladen werden. Bitte Internetverbindung prüfen und Seite neu laden.');
+    });
+  });
+}
+function zeigeTreue(t){
+  var p = t.punkte || 0;
+  var h = '<div class="card" style="text-align:center;">';
+  h += '<div style="font-size:13px; color:#777; text-transform:uppercase; letter-spacing:1px;">Ihr Punktestand</div>';
+  h += '<div style="font-size:52px; font-weight:800; color:#c23f12; line-height:1.1; margin:6px 0;">' + punkteText(p) + '</div>';
+  h += '<div style="font-size:13px; color:#777;">Stand: ' + fmtDate(t.stand) + '</div>';
+  h += '</div>';
+  h += '<div class="card"><h2>Prämien</h2>';
+  (t.praemien || []).forEach(function(pr){
+    var pz = Math.max(0, Math.min(100, Math.round(p / pr.punkte * 100)));
+    var ok = p >= pr.punkte;
+    h += '<div style="padding:10px 0; border-bottom:1px solid #eee;">';
+    h += '<div style="display:flex; align-items:baseline; gap:8px;"><div style="flex:1; font-weight:700;">' + escapeHtml(pr.name) + '</div>';
+    h += '<div style="font-size:13px;' + (ok ? ' color:#1e8449; font-weight:700;' : ' color:#555;') + '">' + (ok ? 'Einlösbar!' : punkteText(p) + ' / ' + punkteText(pr.punkte)) + '</div></div>';
+    h += '<div style="height:10px; border-radius:6px; background:#e6e1da; margin-top:6px; overflow:hidden;"><div style="height:100%; width:' + pz + '%; background:' + (ok ? '#1e8449' : '#c23f12') + ';"></div></div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  if(t.buchungen && t.buchungen.length){
+    h += '<div class="card"><h2>Letzte Buchungen</h2>';
+    t.buchungen.forEach(function(b){
+      h += '<div style="display:flex; gap:8px; padding:7px 0; border-bottom:1px solid #eee; font-size:14px;"><div style="flex:1;">' + fmtDate(b.d) + ' &middot; ' + escapeHtml(b.t || '') + '</div><b style="color:' + (b.p < 0 ? '#c23f12' : '#1e8449') + ';">' + (b.p > 0 ? '+' : '') + punkteText(b.p) + '</b></div>';
+    });
+    h += '</div>';
+  }
+  h += '<div class="card"><h2>So funktioniert&#39;s</h2><div style="font-size:14px; line-height:1.5;">Mit jedem Euro (netto) bei Wolfgang Janiba Brandschutztechnik sammeln Sie 10 Punkte &ndash; bei CO2-Füllungen, Überprüfungen und Neukäufen. Einfach die Karte vorzeigen. Prämien lösen wir bei Ihrem nächsten Besuch für Sie ein.</div></div>';
+  document.getElementById('inhalt').innerHTML = h;
+}
+
 function start(){
   var params = new URLSearchParams(window.location.search);
+  var karte = params.get('karte');
+  if(karte){ startTreue(String(karte).toUpperCase()); return; }
   var id = params.get('id');
   if(!id){
     zeigeFehler('Kein Gerät angegeben. Bitte den QR-Code am Feuerlöscher erneut scannen.');

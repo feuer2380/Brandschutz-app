@@ -92,6 +92,10 @@ function pinPruefwert(pin){
 }
 var CHEF_PIN_PRUEFWERT = '7b0ac164b46333502459bc71928b9ba693510030212e6ac99fa58ef1a2df7a34';
 var MITARBEITER = [{name:'Janiba Wolfgang sen.',pw:'b1b89ef39b06b58a21533ed951b596ec651fa17a89b69523f05cf6558777a9da'},{name:'Prominzer Tobias',pw:'d6508a86e67e359c12c96a90b69e0db0bc9a80e84e3a7585261f6c3ed6591e78'},{name:'Mayerhofer Tobias',pw:'9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd'},{name:'Holakovsky Manuela',pw:'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38'},{name:'Harris Sandra',pw:'af0757f3208d062e6a6e80e4c771fce69f9dbc951daec8378c3788710015180c'},{name:'Henke Alexander',pw:'82e8e2870105ec7f465aa8c8e99b0e0a65c9713bb2ac845d48b9d51c1bfc723f'}];
+// Teleworking-Knopf nur fuer das Sekretariat
+// Voller Zugriff auf alle Zeiten (ansehen, korrigieren, nachtragen) wie der Chef
+var STUNDEN_VOLL = ['Holakovsky Manuela'];
+var TELEWORKING = ['Holakovsky Manuela', 'Harris Sandra'];
 var TYPEN = {kommen:'Kommen',pause_start:'Pause Beginn',pause_ende:'Pause Ende',gehen:'Gehen'};
 var MONATE = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 var db, zeiten = [], kunden = [], me = null, ansicht = 'heute', zielName = null, mJahr, mMonat, geladen = false;
@@ -158,7 +162,7 @@ function ortText(z){
   return z.ort;
 }
 function ortOptionen(vor){
-  var h = '<option value="">– nicht angegeben –</option><option value="lager"' + (vor === 'lager' ? ' selected' : '') + '>Lager</option><option value="arzt"' + (vor === 'arzt' ? ' selected' : '') + '>Arzt</option><option value="sonst"' + (vor === 'sonst' ? ' selected' : '') + '>Sonstiges</option>';
+  var h = '<option value="">– nicht angegeben –</option><option value="lager"' + (vor === 'lager' ? ' selected' : '') + '>Lager</option><option value="teleworking"' + (vor === 'teleworking' ? ' selected' : '') + '>Teleworking</option><option value="arzt"' + (vor === 'arzt' ? ' selected' : '') + '>Arzt</option><option value="sonst"' + (vor === 'sonst' ? ' selected' : '') + '>Sonstiges</option>';
   var ks = kunden.filter(function(k){ return !k.geloescht && !k.stillgelegt; }).sort(function(a, b){ return (a.name || '').localeCompare(b.name || ''); });
   if(ks.length){ h += '<optgroup label="Kunde">'; ks.forEach(function(k){ h += '<option value="k:' + esc(k.id) + '"' + (vor === 'k:' + k.id ? ' selected' : '') + '>' + esc(k.name || 'Kunde') + '</option>'; }); h += '</optgroup>'; }
   return h;
@@ -166,6 +170,7 @@ function ortOptionen(vor){
 function ortAus(w){
   if(!w) return {ort:null, kundeId:null};
   if(w === 'lager') return {ort:'Lager', kundeId:null};
+  if(w === 'teleworking') return {ort:'Teleworking', kundeId:null};
   if(w === 'arzt') return {ort:'Arzt', kundeId:null};
   if(w === 'sonst') return {ort:'Sonstiges', kundeId:null};
   if(w.indexOf('k:') === 0) return {ort:'Kunde', kundeId:w.substring(2)};
@@ -197,14 +202,14 @@ function stempeln(name, typ, ortWert){
 }
 
 function renderLogin(){
-  $('app').innerHTML = '<div class="card"><h2>PIN eingeben</h2><div class="meta">Version 07.11. 12:00 &middot; Stempeln</div>' +
+  $('app').innerHTML = '<div class="card"><h2>PIN eingeben</h2><div class="meta">Version 13.11. 17:45 &middot; Stempeln</div>' +
     '<input type="password" id="pin" inputmode="numeric" placeholder="PIN" autocomplete="off">' +
     '<button class="btn" id="ok">Anmelden</button></div>';
   $('ok').onclick = function(){
     var p = $('pin').value.trim();
     var pw = p ? pinPruefwert(p) : '';
     if(pw && pw === CHEF_PIN_PRUEFWERT){ me = {name:'Janiba Wolfgang', chef:true}; }
-    else { var m = MITARBEITER.filter(function(x){ return x.pw === pw; })[0]; if(m) me = {name:m.name, chef:false}; }
+    else { var m = MITARBEITER.filter(function(x){ return x.pw === pw; })[0]; if(m) me = {name:m.name, chef:false, voll:(STUNDEN_VOLL.indexOf(m.name) >= 0)}; }
     if(!me){ toast('PIN falsch'); return; }
     zielName = me.name; render();
   };
@@ -213,10 +218,13 @@ function renderLogin(){
 
 function aktionen(name, st){
   var l = st.liste.length ? st.liste[st.liste.length - 1] : null;
-  var vor = l && l.ort ? (l.ort === 'Kunde' ? 'k:' + l.kundeId : (l.ort === 'Lager' ? 'lager' : (l.ort === 'Arzt' ? 'arzt' : 'sonst'))) : '';
-  var h = '<label>Wo? (Kunde / Lager / Arzt)</label><select id="ort">' + ortOptionen(vor) + '</select>';
+  var vor = l && l.ort ? (l.ort === 'Kunde' ? 'k:' + l.kundeId : (l.ort === 'Lager' ? 'lager' : (l.ort === 'Teleworking' ? 'teleworking' : (l.ort === 'Arzt' ? 'arzt' : 'sonst')))) : '';
+  var h = '<label>Wo? (Kunde / Lager / Teleworking / Arzt)</label><select id="ort">' + ortOptionen(vor) + '</select>';
   var b = function(t, c){ return '<button class="btn ' + (c || '') + '" data-st="' + t + '">' + TYPEN[t] + '</button>'; };
-  if(st.key === 'ab' || st.key === 'ge') h += b('kommen');
+  if(st.key === 'ab' || st.key === 'ge'){
+    h += b('kommen');
+    if(TELEWORKING.indexOf(name) >= 0) h += '<button class="btn" style="background:#6a4fb0;" data-st="kommen" data-ortfix="teleworking">Kommen - Teleworking</button>';
+  }
   else if(st.key === 'ar') h += b('pause_start', 'amber') + b('gehen', 'red');
   else h += b('pause_ende') + b('gehen', 'red');
   return h;
@@ -230,7 +238,7 @@ function zeitenHeute(){
     h += '<div class="meta"><b>Arbeitszeit heute: ' + dauer(b.arbeit) + '</b> &middot; Pause: ' + dauer(b.pause) + '</div>';
   }
   h += aktionen(name, st) + '</div>';
-  if(me.chef){
+  if(me.chef || me.voll){
     h += '<div class="card"><div class="meta" style="margin-bottom:6px;">Alle Mitarbeiter heute</div>';
     namen().forEach(function(n){ var s = status(n); var bb = berechne(s.liste, true); h += '<div class="row" style="padding:5px 0;border-bottom:1px solid #eee;"><div>' + esc(n) + '</div><div style="color:' + s.farbe + ';text-align:right;">' + s.label + ' &middot; ' + dauer(bb.arbeit) + '</div></div>'; });
     h += '</div>';
@@ -253,13 +261,13 @@ function monat(){
       var orte = []; l.forEach(function(z){ var t = ortText(z); if(t && orte.indexOf(t) < 0) orte.push(t); });
       var d = new Date(k + 'T12:00:00'), wt = ['So','Mo','Di','Mi','Do','Fr','Sa'][d.getDay()];
       h += '<tr><td>' + wt + ' ' + k.substring(8) + '.' + k.substring(5, 7) + '.' + (orte.length ? '<div class="meta">' + orte.map(esc).join(', ') + '</div>' : '') + '</td><td>' + (ko ? uhr(ko.zeit) : '-') + '</td><td>' + (ge ? uhr(ge.zeit) : ((b.offen && k !== heute) ? '<span style="color:#b02a2a;">fehlt</span>' : '-')) + '</td><td>' + dauer(b.pause) + '</td><td><b>' + dauer(b.arbeit) + '</b></td></tr>';
-      if(me.chef){ h += '<tr><td colspan="5">'; l.forEach(function(z){ h += '<span class="chip" data-del="' + z.id + '">' + uhr(z.zeit) + ' ' + TYPEN[z.typ] + (z.ort ? ' (' + esc(ortText(z)) + ')' : '') + ' &times;</span>'; }); h += '</td></tr>'; }
+      if(me.chef || me.voll){ h += '<tr><td colspan="5">'; l.forEach(function(z){ h += '<span class="chip" data-del="' + z.id + '">' + uhr(z.zeit) + ' ' + TYPEN[z.typ] + (z.ort ? ' (' + esc(ortText(z)) + ')' : '') + ' &times;</span>'; }); h += '</td></tr>'; }
     });
     h += '<tr><td colspan="3"><b>Summe</b></td><td><b>' + dauer(sp) + '</b></td><td><b>' + dauer(sum) + '</b></td></tr></table>';
     if(sa > 0) h += '<div class="meta">davon Arzt (in der Pause enthalten): ' + dauer(sa) + '</div>';
   }
   h += '<button class="btn grey" id="druck">Drucken / PDF</button></div>';
-  if(me.chef) h += nachtragenHtml();
+  if(me.chef || me.voll) h += nachtragenHtml();
   return h;
 }
 
@@ -277,14 +285,14 @@ function nachtragenHtml(){
 function render(){
   if(!me){ renderLogin(); return; }
   var h = '<div class="row" style="margin-bottom:8px;"><div class="meta">Angemeldet: <b>' + esc(me.name) + '</b></div><button class="btn grey" id="out" style="margin:0;padding:8px;">Abmelden</button></div>';
-  if(me.chef){ h += '<select id="wer" style="margin-bottom:10px;">' + namen().map(function(n){ return '<option' + (n === zielName ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>'; }
+  if(me.chef || me.voll){ h += '<select id="wer" style="margin-bottom:10px;">' + namen().map(function(n){ return '<option' + (n === zielName ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>'; }
   h += '<div class="tabs"><button data-an="heute" class="' + (ansicht === 'heute' ? 'on' : '') + '">Stempeln</button><button data-an="monat" class="' + (ansicht === 'monat' ? 'on' : '') + '">Monatsliste</button></div>';
   h += ansicht === 'heute' ? zeitenHeute() : monat();
   $('app').innerHTML = h;
   $('out').onclick = function(){ me = null; render(); };
   var w = $('wer'); if(w) w.onchange = function(){ zielName = w.value; render(); };
   document.querySelectorAll('[data-an]').forEach(function(b){ b.onclick = function(){ ansicht = b.getAttribute('data-an'); render(); }; });
-  document.querySelectorAll('[data-st]').forEach(function(b){ b.onclick = function(){ b.disabled = true; stempeln(zielName, b.getAttribute('data-st'), $('ort').value); }; });
+  document.querySelectorAll('[data-st]').forEach(function(b){ b.onclick = function(){ b.disabled = true; stempeln(zielName, b.getAttribute('data-st'), b.getAttribute('data-ortfix') || $('ort').value); }; });
   if(ansicht === 'monat'){
     $('mz').onclick = function(){ mMonat--; if(mMonat < 0){ mMonat = 11; mJahr--; } render(); };
     $('mv').onclick = function(){ mMonat++; if(mMonat > 11){ mMonat = 0; mJahr++; } render(); };
@@ -309,7 +317,7 @@ function nachtragen(){
   ['kommen','pause_start','pause_ende','gehen'].forEach(function(t){
     if(!f[t]) return;
     var oo = (t === 'pause_start' && pg === 'arzt') ? {ort:'Arzt', kundeId:null} : o;
-    neu.push({id: uid(), mitarbeiter: zielName, typ: t, zeit: new Date(((kVgl && t !== 'kommen' && f[t] < kVgl) ? folgeTag(dat) : dat) + 'T' + f[t] + ':00').toISOString(), ort: oo.ort, kundeId: oo.kundeId, erstelltVon: 'Chef (nachgetragen)'});
+    neu.push({id: uid(), mitarbeiter: zielName, typ: t, zeit: new Date(((kVgl && t !== 'kommen' && f[t] < kVgl) ? folgeTag(dat) : dat) + 'T' + f[t] + ':00').toISOString(), ort: oo.ort, kundeId: oo.kundeId, erstelltVon: (me.chef ? 'Chef' : me.name) + ' (nachgetragen)'});
   });
   if(!neu.length){ toast('Bitte mindestens eine Uhrzeit eingeben'); return; }
   $('nSave').disabled = true; var fertig = 0;
