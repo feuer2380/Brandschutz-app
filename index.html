@@ -10374,6 +10374,7 @@ var ZEIT_ABW_TYPEN = ['urlaub', 'zeitausgleich', 'feiertag'];
 function zeitOrtOptionenHtml(auswahl){
   var h = '';
   h += '<option value="lager"' + (auswahl === 'lager' ? ' selected' : '') + '>Lager</option>';
+  h += '<option value="teleworking"' + (auswahl === 'teleworking' ? ' selected' : '') + '>Teleworking</option>';
   h += '<option value="arzt"' + (auswahl === 'arzt' ? ' selected' : '') + '>Arzt</option>';
   h += '<option value="sonst"' + (auswahl === 'sonst' ? ' selected' : '') + '>Sonstiges</option>';
   var ks = state.kunden.filter(function(k){ return !k.geloescht && kundeIstAktiv(k.id); })
@@ -10391,6 +10392,7 @@ function zeitOrtOptionenHtml(auswahl){
 function zeitOrtAusWert(wert){
   if(!wert) return {};
   if(wert === 'lager') return { ort: 'Lager' };
+  if(wert === 'teleworking') return { ort: 'Teleworking' };
   if(wert === 'arzt') return { ort: 'Arzt' };
   if(wert === 'sonst') return { ort: 'Sonstiges' };
   if(wert.indexOf('k:') === 0) return { ort: 'Kunde', kundeId: wert.substring(2) };
@@ -10493,7 +10495,7 @@ function zeitEintraege(name, tagKey){
 
 // Berechnet Arbeits- und Pausenzeit aus einer Liste Stempel eines Tages
 function zeitBerechne(liste, bisJetzt){
-  var arbeit = 0, pause = 0, arzt = 0, start = null, pStart = null, pArzt = false, gArzt = null, offen = false, arztTexte = [];
+  var arbeit = 0, pause = 0, arzt = 0, telew = 0, start = null, pStart = null, pArzt = false, gArzt = null, offen = false, arztTexte = [], twAktiv = false;
   var arztEintrag = function(von, bis){ arztTexte.push(zeitUhr(von.toISOString()) + '–' + zeitUhr(bis.toISOString())); };
   var jetzt = new Date();
   liste.forEach(function(z){
@@ -10501,26 +10503,26 @@ function zeitBerechne(liste, bisJetzt){
     if(z.typ === 'kommen'){
       // Kommen nach "Gehen (Arzt)": die Zeit dazwischen zählt als Arztzeit
       if(gArzt){ arbeit += t - gArzt; arzt += t - gArzt; arztEintrag(gArzt, t); gArzt = null; }
-      start = t; pStart = null;
+      start = t; pStart = null; twAktiv = (z.ort === 'Teleworking');
     }
     else if(z.typ === 'pause_start'){
-      if(start){ arbeit += t - start; start = null; }
+      if(start){ arbeit += t - start; if(twAktiv) telew += t - start; start = null; }
       pStart = t; pArzt = (z.ort === 'Arzt');
     } else if(z.typ === 'pause_ende'){
       if(pStart){ if(pArzt){ arbeit += t - pStart; arzt += t - pStart; arztEintrag(pStart, t); } else { pause += t - pStart; } pStart = null; }
       start = t;
     } else if(z.typ === 'gehen'){
       gArzt = (z.ort === 'Arzt') ? t : null;
-      if(start){ arbeit += t - start; start = null; }
+      if(start){ arbeit += t - start; if(twAktiv) telew += t - start; start = null; }
       if(pStart){ if(pArzt){ arbeit += t - pStart; arzt += t - pStart; arztEintrag(pStart, t); } else { pause += t - pStart; } pStart = null; }
     }
   });
   if(start || pStart) offen = true;
   if(bisJetzt){
-    if(start) arbeit += jetzt - start;
+    if(start){ arbeit += jetzt - start; if(twAktiv) telew += jetzt - start; }
     if(pStart){ if(pArzt){ arbeit += jetzt - pStart; arzt += jetzt - pStart; } else { pause += jetzt - pStart; } }
   }
-  return { arbeit: arbeit, pause: pause, arzt: arzt, offen: offen, arztTexte: arztTexte };
+  return { arbeit: arbeit, pause: pause, arzt: arzt, telew: telew, offen: offen, arztTexte: arztTexte };
 }
 
 function zeitStatus(name){
@@ -10598,12 +10600,12 @@ function zeitAktionenHtml(name, st){
     h += btn('gehen', 'Gehen', '#b02a2a');
   }
   var letzteOrt = st.liste.length ? st.liste[st.liste.length - 1] : null;
-  var vorwahl = letzteOrt && letzteOrt.ort ? (letzteOrt.ort === 'Kunde' ? 'k:' + letzteOrt.kundeId : (letzteOrt.ort === 'Lager' ? 'lager' : (letzteOrt.ort === 'Arzt' ? 'arzt' : 'sonst'))) : '';
+  var vorwahl = letzteOrt && letzteOrt.ort ? (letzteOrt.ort === 'Kunde' ? 'k:' + letzteOrt.kundeId : (letzteOrt.ort === 'Lager' ? 'lager' : (letzteOrt.ort === 'Teleworking' ? 'teleworking' : (letzteOrt.ort === 'Arzt' ? 'arzt' : 'sonst')))) : '';
   if(vorwahl === 'arzt') vorwahl = '';
   h += '<details style="margin-top:12px;"><summary class="meta" style="cursor:pointer; padding:6px 0;">Uhrzeit ändern / Wo war ich? / Notiz (optional)</summary>';
   h += '<label style="margin-top:8px;">Uhrzeit (nur ausfüllen, wenn du das Stempeln vergessen hast)</label>';
   h += '<input type="time" data-zeitzeit="' + escapeHtml(name) + '">';
-  h += '<label style="margin-top:8px;">Wo? (Kunde / Lager / Arzt)</label>';
+  h += '<label style="margin-top:8px;">Wo? (Kunde / Lager / Teleworking / Arzt)</label>';
   h += '<select data-zeitort="' + escapeHtml(name) + '"><option value="">– nicht angegeben –</option>' + zeitOrtOptionenHtml(vorwahl) + '</select>';
   h += '<label style="margin-top:8px;">Notiz: wo war ich? (frei eintragen)</label>';
   h += '<input type="text" data-zeitnotiz="' + escapeHtml(name) + '" placeholder="z.B. Brandschutzbegehung Schule Mödling">';
@@ -10688,7 +10690,7 @@ function renderZeit(){
     html += '<div class="row"><h3>' + escapeHtml(name) + '</h3><span style="font-weight:600; color:' + st.farbe + ';">' + st.label + '</span></div>';
     if(st.liste.length > 0){
       html += '<div class="meta">' + zeitZeilenText(st.liste).join(' &middot; ') + '</div>';
-      html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + (b.arzt ? ' &middot; davon Arzt: ' + zeitDauer(b.arzt) : '') + '</div>';
+      html += '<div class="meta"><b>Arbeitszeit heute: ' + zeitDauer(b.arbeit) + '</b> &middot; Pause: ' + zeitDauer(b.pause) + (b.arzt ? ' &middot; davon Arzt: ' + zeitDauer(b.arzt) : '') + (b.telew ? ' &middot; davon Teleworking: ' + zeitDauer(b.telew) : '') + '</div>';
     }
     var zukunft = zeitEintraege(name, null).filter(zeitIstZukunft);
     zukunft.forEach(function(z){
@@ -10789,14 +10791,14 @@ function zeitMonatDaten(name, jahr, monat){
     (tage[key] = tage[key] || []).push(z);
   });
   var keys = Object.keys(tage).sort();
-  var summe = 0, summePause = 0, summeArzt = 0, abwSumme = {};
+  var summe = 0, summePause = 0, summeArzt = 0, summeTelew = 0, abwSumme = {};
   var zeilen = keys.map(function(key){
     var liste = tage[key].sort(function(a, b){ return new Date(a.zeit) - new Date(b.zeit); });
     var abwArten = [];
     liste.forEach(function(z){ if(ZEIT_ABW_TYPEN.indexOf(z.typ) >= 0 && abwArten.indexOf(ZEIT_TYPEN[z.typ]) < 0){ abwArten.push(ZEIT_TYPEN[z.typ]); abwSumme[ZEIT_TYPEN[z.typ]] = (abwSumme[ZEIT_TYPEN[z.typ]] || 0) + 1; } });
     var offenK = zeitOffeneSchichtKey(name);
     var b = zeitBerechne(liste, key === zeitTagKey(new Date().toISOString()) || key === offenK);
-    summe += b.arbeit; summePause += b.pause; summeArzt += b.arzt;
+    summe += b.arbeit; summePause += b.pause; summeArzt += b.arzt; summeTelew += b.telew;
     var kommen = liste.filter(function(z){ return z.typ === 'kommen'; })[0];
     var gehen = liste.filter(function(z){ return z.typ === 'gehen'; }).pop();
     var orte = []; liste.forEach(function(z){ var t = zeitOrtText(z); if(t && orte.indexOf(t) < 0) orte.push(t); });
@@ -10826,7 +10828,7 @@ function zeitMonatDaten(name, jahr, monat){
     return { key: key, liste: liste, kommen: kommen, gehen: gehen, abwText: abwArten.join(', '), kommenListe: segKommen, gehenListe: segGehen, laeuft: b.offen && (key === heuteKey || key === offenK), orte: orte, arztText: b.arztTexte.length ? 'Arzt ' + b.arztTexte.join(', ') + ' (' + zeitDauer(b.arzt) + ')' : '', notizen: notizen, tagesNotiz: tagesNotizen[key] ? tagesNotizen[key].text : '', arbeit: b.arbeit, pause: b.pause, arzt: b.arzt, offen: b.offen && key !== zeitTagKey(new Date().toISOString()) };
   });
   var abwZeile = Object.keys(abwSumme).map(function(k){ return k + ': ' + abwSumme[k] + (abwSumme[k] === 1 ? ' Tag' : ' Tage'); }).join(' · ');
-  return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt, abwZeile: abwZeile };
+  return { zeilen: zeilen, summe: summe, summePause: summePause, summeArzt: summeArzt, summeTelew: summeTelew, abwZeile: abwZeile };
 }
 
 function modalZeitMonat(name, jahr, monat){
@@ -10972,6 +10974,7 @@ function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen, bearbeiten)
   h += '<tr style="font-weight:700;"><td colspan="3" style="padding-top:8px;">Summe</td><td style="padding-top:8px;">' + zeitDauer(daten.summePause) + '</td><td style="padding-top:8px;">' + zeitDauer(daten.summe) + '</td></tr>';
   if(daten.abwZeile) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px; font-weight:700; color:#2a6fb0;">' + daten.abwZeile + '</td></tr>';
   if(daten.summeArzt > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Arzt (als Arbeitszeit gerechnet): ' + zeitDauer(daten.summeArzt) + '</td></tr>';
+  if(daten.summeTelew > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Teleworking: ' + zeitDauer(daten.summeTelew) + '</td></tr>';
   h += '</table>';
   return h;
 }
