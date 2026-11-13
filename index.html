@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-13 20:20';
-var APP_VERSION_TEXT = '13.11. 20:20';
+var APP_VERSION = '2026-11-13 20:50';
+var APP_VERSION_TEXT = '13.11. 20:50';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -3861,7 +3861,18 @@ function modalStempelKarten(){
 }
 
 // ---------- Treueprogramm (nur Privatkunden mit Haekchen "Treueprogramm") ----------
-var TREUE_PUNKTE_PRO_EURO = 10; // Punkte je 1 EUR netto
+var TREUE_PUNKTE_PRO_EURO = 10; // Punkte je 1 EUR netto bei CO2-Fuellungen
+var TREUE_PPE_WAREN = 3;   // Neukauf, Waren, Material, Betrag-Feld
+var TREUE_PPE_DIENST = 5;  // Ueberpruefung, Innenrevision, Arbeitszeit, Fahrt
+// Punkte je 1 EUR netto fuer einen Artikel (eigener Wert aus der Preisliste, sonst nach Art)
+function treuePPE(a){
+  if(!a) return TREUE_PPE_WAREN;
+  if(a.ppe > 0) return a.ppe;
+  if(a.co2) return TREUE_PUNKTE_PRO_EURO;
+  if(/pr\u00fcfung|innenrevision|arbeitszeit|fahrt/i.test(a.name || '')) return TREUE_PPE_DIENST;
+  return TREUE_PPE_WAREN;
+}
+function treueArtikelPunkte(a){ return Math.round((a.netto || 0) * treuePPE(a)); }
 var TREUE_PRAEMIEN = [
   { id: 'co2', name: '1 CO2-Füllung gratis', punkte: 1000 },
   { id: 'pruef', name: '1 Überprüfung gratis', punkte: 3000 },
@@ -3954,15 +3965,16 @@ function modalTreuePreise(){
   var gruppen = JSON.parse(JSON.stringify(treuePreisliste()));
   var zeichnen = function(){
     var html = '<div class="modal-head"><h3>Preisliste Treuepunkte</h3><button class="close" id="mClose">&times;</button></div>';
-    html += '<div class="meta" style="margin-bottom:8px;">Nettopreise. Punkte = Preis &times; ' + TREUE_PUNKTE_PRO_EURO + '. Bereits gebuchte Punkte bleiben bei einer Preisänderung unverändert. Feld &bdquo;CO2 g&ldquo; nur bei CO2-Füllungen ausfüllen (z.B. 425).</div>';
+    html += '<div class="meta" style="margin-bottom:8px;">Nettopreise. &bdquo;P/&euro;&ldquo; = Punkte je 1 &euro; netto (leer = automatisch: CO2 10, \u00dcberpr\u00fcfung/Arbeit/Fahrt 5, Waren 3). Bereits gebuchte Punkte bleiben bei einer Preisänderung unverändert. Feld &bdquo;CO2 g&ldquo; nur bei CO2-Füllungen ausfüllen (z.B. 425).</div>';
     gruppen.forEach(function(gr, gi){
       html += '<div class="card" style="padding:10px 12px; margin-top:10px;">';
       html += '<div class="row" style="gap:6px;"><input type="text" class="tpGruppe" data-gi="' + gi + '" value="' + escapeHtml(gr.gruppe) + '" style="flex:1; font-weight:700; min-width:0;"><button type="button" class="btn small secondary tpGrDel" data-gi="' + gi + '" style="flex:0 0 auto; color:#c23f12;">&times;</button></div>';
       (gr.artikel || []).forEach(function(a, ai){
-        html += '<div style="display:grid; grid-template-columns:1fr 84px 60px auto; gap:5px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); align-items:center;">';
+        html += '<div style="display:grid; grid-template-columns:1fr 76px 46px 54px auto; gap:5px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); align-items:center;">';
         html += '<input type="text" class="tpName" data-gi="' + gi + '" data-ai="' + ai + '" value="' + escapeHtml(a.name) + '" placeholder="Bezeichnung" style="grid-column:1 / -1; min-width:0; padding:7px 8px; font-size:14px;">';
         html += '<div class="meta" style="text-align:right;">Preis netto &euro;</div>';
         html += '<input type="text" inputmode="decimal" class="tpPreis" data-gi="' + gi + '" data-ai="' + ai + '" value="' + treueEur(a.netto || 0) + '" style="text-align:right; padding:7px 6px; font-size:14px;">';
+ html += '<input type="text" inputmode="numeric" class="tpPpe" data-gi="' + gi + '" data-ai="' + ai + '" value="' + (a.ppe || '') + '" placeholder="' + treuePPE(a) + ' P/&euro;" style="text-align:center; padding:7px 2px; font-size:12px;">';
         html += '<input type="text" inputmode="numeric" class="tpCo2" data-gi="' + gi + '" data-ai="' + ai + '" value="' + (a.co2 || '') + '" placeholder="CO2 g" style="text-align:center; padding:7px 3px; font-size:12px;">';
         html += '<button type="button" class="btn small secondary tpDel" data-gi="' + gi + '" data-ai="' + ai + '" style="padding:4px 9px; color:#c23f12;">&times;</button>';
         html += '</div>';
@@ -3982,6 +3994,11 @@ function modalTreuePreise(){
         var roh = String(el.value).replace(/[^0-9,.]/g, '');
         if(roh.indexOf(',') !== -1) roh = roh.replace(/\./g, '').replace(',', '.');
         gruppen[+el.getAttribute('data-gi')].artikel[+el.getAttribute('data-ai')].netto = Math.round((parseFloat(roh) || 0) * 100) / 100;
+      });
+      document.querySelectorAll('.tpPpe').forEach(function(el){
+        var v = parseInt(el.value, 10);
+        var a = gruppen[+el.getAttribute('data-gi')].artikel[+el.getAttribute('data-ai')];
+        if(v > 0) a.ppe = v; else delete a.ppe;
       });
       document.querySelectorAll('.tpCo2').forEach(function(el){
         var g = parseInt(el.value, 10);
@@ -4031,12 +4048,12 @@ function treuePunkteText(n){
   while(s.length > 3){ out = '.' + s.substring(s.length - 3) + out; s = s.substring(0, s.length - 3); }
   return (n < 0 ? '-' : '') + s + out;
 }
-function treuePunkteAusBrutto(brutto){ return Math.round((Number(brutto) || 0) / 1.2 * TREUE_PUNKTE_PRO_EURO); }
+function treuePunkteAusBrutto(brutto){ return Math.round((Number(brutto) || 0) / 1.2 * TREUE_PPE_WAREN); }
 function treueCo2Punkte(posten){
   var p = 0;
-  var netto = {};
-  treuePreisliste().forEach(function(gr){ (gr.artikel || []).forEach(function(a){ if(a.co2 && !netto[a.co2]) netto[a.co2] = a.netto; }); });
-  (posten || []).forEach(function(x){ var n = netto[x.gramm]; if(n) p += Math.round(n * TREUE_PUNKTE_PRO_EURO) * (x.anzahl || 0); });
+  var art = {};
+  treuePreisliste().forEach(function(gr){ (gr.artikel || []).forEach(function(a){ if(a.co2 && !art[a.co2]) art[a.co2] = a; }); });
+  (posten || []).forEach(function(x){ var a = art[x.gramm]; if(a) p += treueArtikelPunkte(a) * (x.anzahl || 0); });
   return p;
 }
 // Buchung nur an das Kundenobjekt haengen (Speichern macht der Aufrufer)
@@ -4119,7 +4136,7 @@ function treuePortalSync(k, melden){
 }
 
 // --- Karte zeichnen (85,6 x 54 mm) ---
-function treueKarteCanvas(code, nr, logoImg){
+function treueKarteCanvas(code, nr, logoImg, kdnr){
   var f = LAGERKARTE_PXMM;
   var c = document.createElement('canvas');
   c.width = Math.round(LAGERKARTE_B * f); c.height = Math.round(LAGERKARTE_H * f);
@@ -4168,7 +4185,8 @@ function treueKarteCanvas(code, nr, logoImg){
   }catch(eQ){}
   ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff'; ctx.font = 'bold ' + mm(2.4) + 'px ' + schrift;
   ctx.fillText('Scannen: Punktestand', mm(fx + feld / 2), mm(fy + feld + 4));
-  if(nr){ ctx.textAlign = 'right'; ctx.fillStyle = '#ffffff'; ctx.font = 'bold ' + mm(2.6) + 'px ' + schrift; ctx.fillText('Nr. ' + nr, mm(LAGERKARTE_B - 3), mm(sy - 1.4)); }
+  if(kdnr){ ctx.textAlign = 'right'; ctx.fillStyle = '#ffffff'; ctx.font = 'bold ' + mm(2.6) + 'px ' + schrift; ctx.fillText('Kd.-Nr. ' + kdnr, mm(LAGERKARTE_B - 3), mm(sy - 1.4)); }
+  else if(nr){ ctx.textAlign = 'right'; ctx.fillStyle = '#ffffff'; ctx.font = 'bold ' + mm(2.6) + 'px ' + schrift; ctx.fillText('Nr. ' + nr, mm(LAGERKARTE_B - 3), mm(sy - 1.4)); }
   return c;
 }
 function treueKartenPdf(karten){
@@ -4181,7 +4199,7 @@ function treueKartenPdf(karten){
         var pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: [LAGERKARTE_H, LAGERKARTE_B], compress: true });
         karten.forEach(function(kt, i){
           if(i > 0) pdf.addPage([LAGERKARTE_H, LAGERKARTE_B], 'landscape');
-          pdf.addImage(karteMitBeschnitt(treueKarteCanvas(kt.code, kt.nr, logo)).toDataURL('image/jpeg', 0.95), 'JPEG', -LAGERKARTE_BESCHNITT, -LAGERKARTE_BESCHNITT, LAGERKARTE_B + 2 * LAGERKARTE_BESCHNITT, LAGERKARTE_H + 2 * LAGERKARTE_BESCHNITT, undefined, 'FAST');
+          pdf.addImage(karteMitBeschnitt(treueKarteCanvas(kt.code, kt.nr, logo, kt.kdnr)).toDataURL('image/jpeg', 0.95), 'JPEG', -LAGERKARTE_BESCHNITT, -LAGERKARTE_BESCHNITT, LAGERKARTE_B + 2 * LAGERKARTE_BESCHNITT, LAGERKARTE_H + 2 * LAGERKARTE_BESCHNITT, undefined, 'FAST');
         });
         lagerKartenPdfAusgeben(pdf.output('blob'), karten.length === 1 ? ('Treuekarte ' + karten[0].nr + '.pdf') : 'Treuekarten.pdf');
       }catch(e){ console.error('Treuekarten', e); toast('Fehler beim Erstellen der Karten'); }
@@ -4267,12 +4285,12 @@ function modalTreueKunde(kundeId){
   // Leistung / Kauf aus der Preisliste buchen
   html += '<div class="card" style="margin-top:10px; padding:10px 12px;">';
   html += '<div style="font-weight:700; margin-bottom:2px;">Leistung / Kauf buchen</div>';
-  html += '<div class="meta" style="margin-bottom:6px;">Anzahl einstellen &ndash; die Punkte rechnet die App (10 Punkte je 1 &euro; netto).</div>';
+  html += '<div class="meta" style="margin-bottom:6px;">Anzahl einstellen &ndash; die Punkte rechnet die App (je 1 &euro; netto: CO2-F\u00fcllung 10, \u00dcberpr\u00fcfung/Arbeit 5, Waren/Einkauf 3 Punkte).</div>';
   treuePreisliste().forEach(function(gr, gi){
     var inner = '';
     gr.artikel.forEach(function(a){
       inner += '<div class="row" style="align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line);">';
-      inner += '<div style="flex:1; min-width:0; font-size:14px;"><b>' + escapeHtml(a.name) + '</b><div class="meta">' + treueEur(a.netto) + ' &euro; netto &middot; +' + treuePunkteText(Math.round(a.netto * TREUE_PUNKTE_PRO_EURO)) + ' P.</div></div>';
+      inner += '<div style="flex:1; min-width:0; font-size:14px;"><b>' + escapeHtml(a.name) + '</b><div class="meta">' + treueEur(a.netto) + ' &euro; netto &middot; +' + treuePunkteText(treueArtikelPunkte(a)) + ' P.</div></div>';
       inner += '<button type="button" class="btn secondary tkArtM" data-a="' + a.id + '" style="margin:0; width:40px; padding:5px 0; font-size:19px;">&minus;</button>';
       inner += '<div class="tkArtN" data-a="' + a.id + '" style="width:30px; text-align:center; font-size:18px; font-weight:800; color:var(--muted);">0</div>';
       inner += '<button type="button" class="btn tkArtP" data-a="' + a.id + '" style="margin:0; width:40px; padding:5px 0; font-size:19px;">+</button>';
@@ -4281,6 +4299,8 @@ function modalTreueKunde(kundeId){
     if(gi === 0) html += inner;
     else html += '<details style="margin-top:6px;"><summary style="padding:8px 0; font-weight:700; cursor:pointer;">' + escapeHtml(gr.gruppe) + '</summary>' + inner + '</details>';
   });
+  html += '<div style="font-weight:700; margin-top:12px;">Oder einfach den bezahlten Betrag</div>';
+  html += '<div class="row" style="gap:6px; margin-top:4px;"><input type="text" inputmode="decimal" id="tkBrutto" placeholder="z.B. 196,00 (brutto, inkl. USt.)" style="flex:1; min-width:0;"><span style="flex:0 0 auto; font-weight:700;">&euro;</span></div>';
   html += '<div class="row" style="gap:6px; margin-top:10px;"><input type="text" id="tkFreiT" placeholder="Sonstiges (Text)" style="flex:2; min-width:0;"><input type="text" inputmode="decimal" id="tkFreiB" placeholder="&euro; netto" style="flex:1; min-width:0;"></div>';
   html += '<div id="tkSumme" style="margin-top:10px; padding:10px 12px; border-radius:10px; background:#e5f4ea; color:#1e8449; font-weight:700;">Noch nichts ausgewählt</div>';
   html += '<button type="button" class="btn block" id="tkBuchen" style="margin-top:8px;">Punkte gutschreiben</button>';
@@ -4311,6 +4331,12 @@ function modalTreueKunde(kundeId){
   document.getElementById('tkZumKunden').onclick = function(){ closeModal(); state.activeKundeId = k.id; state.tab = 'kundeDetail'; render(); window.scrollTo(0, 0); };
   var neuZeigen = function(){ modalTreueKunde(k.id); if(state.tab === 'kundeDetail') render(); };
   var tkAuswahl = {};
+  var tkZahl = function(id){
+    var roh = String(document.getElementById(id).value || '').replace(/\s/g, '').replace(/[^0-9,.]/g, '');
+    if(roh.indexOf(',') !== -1) roh = roh.replace(/\./g, '').replace(',', '.');
+    var v = parseFloat(roh);
+    return v > 0 ? v : 0;
+  };
   var tkFreiBetrag = function(){
     var roh = String(document.getElementById('tkFreiB').value || '').replace(/\s/g, '').replace(/[^0-9,.]/g, '');
     if(roh.indexOf(',') !== -1) roh = roh.replace(/\./g, '').replace(',', '.');
@@ -4318,16 +4344,19 @@ function modalTreueKunde(kundeId){
     return v > 0 ? v : 0;
   };
   var tkRechnen = function(){
-    var netto = 0, teile = [];
+    var netto = 0, punkte = 0, teile = [];
     Object.keys(tkAuswahl).forEach(function(id){
       var n = tkAuswahl[id], a = treueArtikel(id);
       if(!a || !n) return;
       netto += a.netto * n;
+      punkte += treueArtikelPunkte(a) * n;
       teile.push(n + 'x ' + a.name);
     });
     var fb = tkFreiBetrag();
-    if(fb > 0){ netto += fb; teile.push((document.getElementById('tkFreiT').value.trim() || 'Sonstiges') + ' ' + treueEur(fb) + ' EUR'); }
-    return { netto: netto, punkte: Math.round(netto * TREUE_PUNKTE_PRO_EURO), text: teile.join(', ') };
+    if(fb > 0){ netto += fb; punkte += Math.round(fb * TREUE_PPE_WAREN); teile.push((document.getElementById('tkFreiT').value.trim() || 'Sonstiges') + ' ' + treueEur(fb) + ' EUR'); }
+    var bb = tkZahl('tkBrutto');
+    if(bb > 0){ netto += bb / 1.2; punkte += treuePunkteAusBrutto(bb); teile.push('Einkauf ' + treueEur(bb) + ' EUR'); }
+    return { netto: netto, punkte: punkte, text: teile.join(', ') };
   };
   var tkAnzeigen = function(){
     var r = tkRechnen();
@@ -4345,6 +4374,7 @@ function modalTreueKunde(kundeId){
     };
   });
   document.getElementById('tkFreiB').oninput = tkAnzeigen;
+  document.getElementById('tkBrutto').oninput = tkAnzeigen;
   document.getElementById('tkFreiT').oninput = tkAnzeigen;
   document.getElementById('tkBuchen').onclick = function(){
     var r = tkRechnen();
@@ -4422,7 +4452,7 @@ function bindTreueKunde(){
   var d = document.getElementById('tkKarteDruck');
   if(d) d.onclick = function(){
     customConfirm('Neue Treuekarte für ' + kundeAnzeigeName(k) + ' anlegen und drucken?', function(){
-      treueKartenAnlegen(1, k.id, function(neu){ treuePortalSync(k); treueKartenPdf(neu); render(); });
+      treueKartenAnlegen(1, k.id, function(neu){ neu.forEach(function(x){ x.kdnr = k.kundennummer || ''; }); treuePortalSync(k); treueKartenPdf(neu); render(); });
     });
   };
   var s = document.getElementById('tkSperren');
@@ -4446,7 +4476,7 @@ function modalTreueUebersicht(){
   var frei = Object.keys(reg.karten).filter(function(c){ return !reg.karten[c].kundeId && !reg.karten[c].gesperrt; }).length;
   var html = '<div class="modal-head"><h3>Treueprogramm</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
-  html += '<div class="meta" style="margin-top:6px;">' + TREUE_PUNKTE_PRO_EURO + ' Punkte je 1 &euro; netto. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
+  html += '<div class="meta" style="margin-top:6px;">Punkte je 1 &euro; netto: CO2-F\u00fcllung ' + TREUE_PUNKTE_PRO_EURO + ', \u00dcberpr\u00fcfung/Arbeit ' + TREUE_PPE_DIENST + ', Waren/Einkauf ' + TREUE_PPE_WAREN + '. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
   html += '<div class="row" style="gap:8px; margin-top:12px;"><input type="number" inputmode="numeric" id="tuAnz" value="10" min="1" max="100" style="flex:0 0 80px;"><button type="button" class="btn" id="tuDruck" style="flex:1;">Leere Karten auf Vorrat drucken</button></div>';
   html += '<button type="button" class="btn block secondary" id="tuRueck" style="margin-top:8px;">R\u00fcckseiten drucken</button>';
   html += '<button type="button" class="btn block secondary" id="tuPreise" style="margin-top:8px;">Preisliste bearbeiten</button>';
