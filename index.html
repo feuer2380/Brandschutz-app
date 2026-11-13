@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-13 18:30';
-var APP_VERSION_TEXT = '13.11. 18:30';
+var APP_VERSION = '2026-11-13 19:00';
+var APP_VERSION_TEXT = '13.11. 19:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -3830,6 +3830,149 @@ var TREUE_BONUS = [
 ];
 // Netto-Preis je CO2-Fuellung nach Groesse (Gramm) - nur diese Groessen bringen Punkte
 var TREUE_CO2_NETTO = { 425: 5.75 };
+// Preisliste (netto, Preise ab 01.01.2025) fuer die Treuepunkte - Punkte = netto x 10
+var TREUE_PREISLISTE = [
+  { gruppe: 'Häufig', artikel: [
+    { id: 'co2_425', name: 'CO2-Füllung 425 g', netto: 5.75, co2: 425 },
+    { id: 'pr_2_12', name: 'Überprüfung Feuerlöscher 2-12 kg', netto: 16.00 },
+    { id: 'pr_12_50', name: 'Überprüfung Feuerlöscher 12-50 kg', netto: 61.60 },
+    { id: 'pr_protex', name: 'Überprüfung Feuerlöscher Protex neu', netto: 16.50 }
+  ]},
+  { gruppe: 'Pulverlöscher', artikel: [
+    { id: '1000', name: 'Pulverlöscher Gloria P2G (Auto)', netto: 50.00 },
+    { id: '1001', name: 'Pulverlöscher Gloria PD6GA', netto: 80.00 },
+    { id: '1002', name: 'Pulverlöscher Gloria PD12GA', netto: 115.00 },
+    { id: '1753', name: 'Innenrevision Pulverlöscher PD6GA', netto: 38.08 },
+    { id: '1754', name: 'Innenrevision Pulverlöscher PD12GA', netto: 65.92 }
+  ]},
+  { gruppe: 'Wasserlöscher', artikel: [
+    { id: 'wdpf9', name: 'Wasserlöscher Gloria WDPF9 (frostsicher)', netto: 120.00 },
+    { id: '1060', name: 'Wasserlöscher Gloria WD9', netto: 85.00 },
+    { id: '1759', name: 'Innenrevision Wasserlöscher WD9', netto: 45.75 }
+  ]},
+  { gruppe: 'Schaumlöscher', artikel: [
+    { id: '1009', name: 'Schaumlöscher Gloria SD6E fluorfrei', netto: 113.00 },
+    { id: '1010', name: 'Schaumlöscher Gloria SD9E fluorfrei', netto: 123.00 },
+    { id: '1031', name: 'Schaumlöscher Gloria SDB6P fluorfrei', netto: 120.00 },
+    { id: '1052', name: 'Schaumlöscher Gloria SDB9P fluorfrei', netto: 136.00 },
+    { id: '1094', name: 'Schaumlöscher Bavaria Graffit SF6 (frosts.)', netto: 145.00 },
+    { id: 'csd6', name: 'Schaumlöscher tyco CSD6', netto: 66.00 },
+    { id: 'csd9', name: 'Schaumlöscher tyco CSD9', netto: 82.50 },
+    { id: 'sd6f', name: 'Schaumlöscher tyco SD6F-Feutec (frostsicher)', netto: 112.20 }
+  ]},
+  { gruppe: 'Rauchmelder / Löschdecke', artikel: [
+    { id: '4056', name: 'Rauchmelder HDv Senys2 (10 Jahre)', netto: 45.00 },
+    { id: 'funkrm', name: 'Funk-Rauchmelder Wireless inkl. Batterie', netto: 88.00 },
+    { id: 'bat9v', name: '9-V-Batterie für Rauchmelder', netto: 13.50 },
+    { id: '1100', name: 'Löschdecke P100 mit Softbox', netto: 36.00 }
+  ]},
+  { gruppe: 'Material', artikel: [
+    { id: '1703', name: 'CO2-Dichtung', netto: 2.20 },
+    { id: '1700', name: 'Ventilkappe', netto: 2.40 },
+    { id: '1706', name: 'Prüfplakette', netto: 2.10 },
+    { id: '1701', name: 'Kleinmaterial', netto: 2.50 },
+    { id: '1709', name: 'Kleinmaterial klein', netto: 1.40 },
+    { id: 'dicht', name: 'Dichtsatz', netto: 2.50 },
+    { id: 'sstift', name: 'Sicherungsstift', netto: 5.00 },
+    { id: 'sstiftg', name: 'Sicherungsstift gelb', netto: 6.10 },
+    { id: 'n2', name: 'Stickstoff-Füllung', netto: 30.00 }
+  ]},
+  { gruppe: 'Beschilderung', artikel: [
+    { id: '5050', name: 'Schild Feuerlöschersymbol 200x200', netto: 7.70 },
+    { id: 'schbrand', name: 'Schild Verhalten im Brandfall', netto: 12.10 },
+    { id: 'schco2', name: 'Schild CO2', netto: 7.70 },
+    { id: 'schflucht', name: 'Fluchtwegsbeschilderung 194x194', netto: 23.10 }
+  ]},
+  { gruppe: 'Arbeitszeit / Fahrt', artikel: [
+    { id: '6051', name: 'Arbeitszeit Brandschutztechniker (Std.)', netto: 108.00 },
+    { id: '6050', name: 'Arbeitszeit Servicetechniker (Std.)', netto: 87.00 },
+    { id: '6001', name: 'Fahrtkostenanteil Wien', netto: 30.00 },
+    { id: '6000', name: 'Fahrtkostenanteil Bezirk Mödling', netto: 24.00 },
+    { id: '6003', name: 'Fahrtkilometer (km)', netto: 0.50 }
+  ]}
+];
+function treueArtikel(id){
+  var pl = treuePreisliste();
+  for(var i = 0; i < pl.length; i++){
+    for(var j = 0; j < pl[i].artikel.length; j++){ if(pl[i].artikel[j].id === id) return pl[i].artikel[j]; }
+  }
+  return null;
+}
+
+// Preisliste aus den Einstellungen (vom Chef bearbeitbar), sonst die Standardliste oben
+function treuePreisliste(){
+  var e = (state.einstellungen || []).filter(function(x){ return x && x.id === 'treuepreise'; })[0];
+  return (e && e.gruppen && e.gruppen.length) ? e.gruppen : TREUE_PREISLISTE;
+}
+function modalTreuePreise(){
+  if(!istVollsicht()){ toast('Keine Berechtigung'); return; }
+  var gruppen = JSON.parse(JSON.stringify(treuePreisliste()));
+  var zeichnen = function(){
+    var html = '<div class="modal-head"><h3>Preisliste Treuepunkte</h3><button class="close" id="mClose">&times;</button></div>';
+    html += '<div class="meta" style="margin-bottom:8px;">Nettopreise. Punkte = Preis &times; ' + TREUE_PUNKTE_PRO_EURO + '. Bereits gebuchte Punkte bleiben bei einer Preisänderung unverändert. Feld &bdquo;CO2 g&ldquo; nur bei CO2-Füllungen ausfüllen (z.B. 425).</div>';
+    gruppen.forEach(function(gr, gi){
+      html += '<div class="card" style="padding:10px 12px; margin-top:10px;">';
+      html += '<div class="row" style="gap:6px;"><input type="text" class="tpGruppe" data-gi="' + gi + '" value="' + escapeHtml(gr.gruppe) + '" style="flex:1; font-weight:700; min-width:0;"><button type="button" class="btn small secondary tpGrDel" data-gi="' + gi + '" style="flex:0 0 auto; color:#c23f12;">&times;</button></div>';
+      (gr.artikel || []).forEach(function(a, ai){
+        html += '<div style="display:grid; grid-template-columns:1fr 84px 60px auto; gap:5px; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); align-items:center;">';
+        html += '<input type="text" class="tpName" data-gi="' + gi + '" data-ai="' + ai + '" value="' + escapeHtml(a.name) + '" placeholder="Bezeichnung" style="grid-column:1 / -1; min-width:0; padding:7px 8px; font-size:14px;">';
+        html += '<div class="meta" style="text-align:right;">Preis netto &euro;</div>';
+        html += '<input type="text" inputmode="decimal" class="tpPreis" data-gi="' + gi + '" data-ai="' + ai + '" value="' + treueEur(a.netto || 0) + '" style="text-align:right; padding:7px 6px; font-size:14px;">';
+        html += '<input type="text" inputmode="numeric" class="tpCo2" data-gi="' + gi + '" data-ai="' + ai + '" value="' + (a.co2 || '') + '" placeholder="CO2 g" style="text-align:center; padding:7px 3px; font-size:12px;">';
+        html += '<button type="button" class="btn small secondary tpDel" data-gi="' + gi + '" data-ai="' + ai + '" style="padding:4px 9px; color:#c23f12;">&times;</button>';
+        html += '</div>';
+      });
+      html += '<button type="button" class="btn small secondary tpAdd" data-gi="' + gi + '" style="margin-top:8px;">+ Artikel</button>';
+      html += '</div>';
+    });
+    html += '<button type="button" class="btn block secondary" id="tpGrAdd" style="margin-top:10px;">+ Neue Gruppe</button>';
+    html += '<button type="button" class="btn block" id="tpSpeichern" style="margin-top:10px;">Preisliste speichern</button>';
+    html += '<button type="button" class="btn block secondary" id="tpStandard" style="margin-top:8px;">Auf Standard-Preisliste zurücksetzen</button>';
+    openModal(html);
+    document.getElementById('mClose').onclick = closeModal;
+    var uebernehmen = function(){
+      document.querySelectorAll('.tpGruppe').forEach(function(el){ gruppen[parseInt(el.getAttribute('data-gi'), 10)].gruppe = el.value.trim() || 'Gruppe'; });
+      document.querySelectorAll('.tpName').forEach(function(el){ gruppen[+el.getAttribute('data-gi')].artikel[+el.getAttribute('data-ai')].name = el.value.trim(); });
+      document.querySelectorAll('.tpPreis').forEach(function(el){
+        var roh = String(el.value).replace(/[^0-9,.]/g, '');
+        if(roh.indexOf(',') !== -1) roh = roh.replace(/\./g, '').replace(',', '.');
+        gruppen[+el.getAttribute('data-gi')].artikel[+el.getAttribute('data-ai')].netto = Math.round((parseFloat(roh) || 0) * 100) / 100;
+      });
+      document.querySelectorAll('.tpCo2').forEach(function(el){
+        var g = parseInt(el.value, 10);
+        var a = gruppen[+el.getAttribute('data-gi')].artikel[+el.getAttribute('data-ai')];
+        if(g > 0) a.co2 = g; else delete a.co2;
+      });
+    };
+    document.querySelectorAll('.tpAdd').forEach(function(b){ b.onclick = function(){ uebernehmen(); gruppen[+b.getAttribute('data-gi')].artikel.push({ id: 'a' + Date.now(), name: '', netto: 0 }); zeichnen(); }; });
+    document.querySelectorAll('.tpDel').forEach(function(b){ b.onclick = function(){ uebernehmen(); gruppen[+b.getAttribute('data-gi')].artikel.splice(+b.getAttribute('data-ai'), 1); zeichnen(); }; });
+    document.querySelectorAll('.tpGrDel').forEach(function(b){
+      b.onclick = function(){
+        uebernehmen();
+        var gi = +b.getAttribute('data-gi');
+        customConfirm('Gruppe "' + gruppen[gi].gruppe + '" mit allen Artikeln entfernen?', function(){ gruppen.splice(gi, 1); zeichnen(); });
+      };
+    });
+    document.getElementById('tpGrAdd').onclick = function(){ uebernehmen(); gruppen.push({ gruppe: 'Neue Gruppe', artikel: [{ id: 'a' + Date.now(), name: '', netto: 0 }] }); zeichnen(); };
+    document.getElementById('tpSpeichern').onclick = function(){
+      uebernehmen();
+      gruppen.forEach(function(gr){ gr.artikel = gr.artikel.filter(function(a){ return a.name; }); });
+      var obj = { id: 'treuepreise', gruppen: gruppen, geaendertAm: new Date().toISOString() };
+      dbPut('einstellungen', obj, function(){
+        state.einstellungen = (state.einstellungen || []).filter(function(x){ return x.id !== 'treuepreise'; }).concat([obj]);
+        toast('Preisliste gespeichert');
+        modalTreueUebersicht();
+      });
+    };
+    document.getElementById('tpStandard').onclick = function(){
+      customConfirm('Alle eigenen Änderungen verwerfen und die Standard-Preisliste (Preise ab 01.01.2025) laden? Erst mit "Preisliste speichern" wird es übernommen.', function(){
+        gruppen = JSON.parse(JSON.stringify(TREUE_PREISLISTE)); zeichnen();
+      });
+    };
+  };
+  zeichnen();
+}
+function treueEur(n){ return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); }
 var TREUE_KARTEN_ID = 'treuekarten';
 
 function treueAktiv(k){ return !!(k && k.treueAktiv && !k.geloescht); }
@@ -3846,7 +3989,9 @@ function treuePunkteText(n){
 function treuePunkteAusBrutto(brutto){ return Math.round((Number(brutto) || 0) / 1.2 * TREUE_PUNKTE_PRO_EURO); }
 function treueCo2Punkte(posten){
   var p = 0;
-  (posten || []).forEach(function(x){ var n = TREUE_CO2_NETTO[x.gramm]; if(n) p += Math.round(n * TREUE_PUNKTE_PRO_EURO) * (x.anzahl || 0); });
+  var netto = {};
+  treuePreisliste().forEach(function(gr){ (gr.artikel || []).forEach(function(a){ if(a.co2 && !netto[a.co2]) netto[a.co2] = a.netto; }); });
+  (posten || []).forEach(function(x){ var n = netto[x.gramm]; if(n) p += Math.round(n * TREUE_PUNKTE_PRO_EURO) * (x.anzahl || 0); });
   return p;
 }
 // Buchung nur an das Kundenobjekt haengen (Speichern macht der Aufrufer)
@@ -4069,16 +4214,26 @@ function modalTreueKunde(kundeId){
   html += '<div style="font-size:19px; font-weight:800;">' + escapeHtml(kundeAnzeigeName(k)) + '</div>';
   if(!treueAktiv(k)) html += '<div class="meta" style="color:#c23f12;">Treueprogramm bei diesem Kunden nicht aktiv (Kunde bearbeiten &rarr; Häkchen).</div>';
   html += '<div style="text-align:center; margin:10px 0 4px;"><div style="font-size:42px; font-weight:800; color:#c23f12; line-height:1;">' + treuePunkteText(punkte) + '</div><div class="meta">Punkte</div></div>';
-  // CO2-Fuellung buchen
+  // Leistung / Kauf aus der Preisliste buchen
   html += '<div class="card" style="margin-top:10px; padding:10px 12px;">';
-  html += '<div style="font-weight:700; margin-bottom:6px;">CO2-Füllung buchen</div>';
-  Object.keys(TREUE_CO2_NETTO).forEach(function(g){
-    html += '<div class="row" style="align-items:center; gap:10px; padding:4px 0;"><div style="flex:1; font-weight:700;">' + sfGrammText(Number(g)) + ' <span class="meta">(+' + Math.round(TREUE_CO2_NETTO[g] * TREUE_PUNKTE_PRO_EURO) + ' P.)</span></div>';
-    html += '<button type="button" class="btn secondary tkCo2M" data-g="' + g + '" style="margin:0; width:46px; padding:6px 0; font-size:20px;">&minus;</button>';
-    html += '<div class="tkCo2N" data-g="' + g + '" style="width:34px; text-align:center; font-size:20px; font-weight:800;">1</div>';
-    html += '<button type="button" class="btn tkCo2P" data-g="' + g + '" style="margin:0; width:46px; padding:6px 0; font-size:20px;">+</button></div>';
+  html += '<div style="font-weight:700; margin-bottom:2px;">Leistung / Kauf buchen</div>';
+  html += '<div class="meta" style="margin-bottom:6px;">Anzahl einstellen &ndash; die Punkte rechnet die App (10 Punkte je 1 &euro; netto).</div>';
+  treuePreisliste().forEach(function(gr, gi){
+    var inner = '';
+    gr.artikel.forEach(function(a){
+      inner += '<div class="row" style="align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line);">';
+      inner += '<div style="flex:1; min-width:0; font-size:14px;"><b>' + escapeHtml(a.name) + '</b><div class="meta">' + treueEur(a.netto) + ' &euro; netto &middot; +' + treuePunkteText(Math.round(a.netto * TREUE_PUNKTE_PRO_EURO)) + ' P.</div></div>';
+      inner += '<button type="button" class="btn secondary tkArtM" data-a="' + a.id + '" style="margin:0; width:40px; padding:5px 0; font-size:19px;">&minus;</button>';
+      inner += '<div class="tkArtN" data-a="' + a.id + '" style="width:30px; text-align:center; font-size:18px; font-weight:800; color:var(--muted);">0</div>';
+      inner += '<button type="button" class="btn tkArtP" data-a="' + a.id + '" style="margin:0; width:40px; padding:5px 0; font-size:19px;">+</button>';
+      inner += '</div>';
+    });
+    if(gi === 0) html += inner;
+    else html += '<details style="margin-top:6px;"><summary style="padding:8px 0; font-weight:700; cursor:pointer;">' + escapeHtml(gr.gruppe) + '</summary>' + inner + '</details>';
   });
-  html += '<button type="button" class="btn block" id="tkCo2Buchen" style="margin-top:8px;">Füllung speichern &amp; Punkte gutschreiben</button>';
+  html += '<div class="row" style="gap:6px; margin-top:10px;"><input type="text" id="tkFreiT" placeholder="Sonstiges (Text)" style="flex:2; min-width:0;"><input type="text" inputmode="decimal" id="tkFreiB" placeholder="&euro; netto" style="flex:1; min-width:0;"></div>';
+  html += '<div id="tkSumme" style="margin-top:10px; padding:10px 12px; border-radius:10px; background:#e5f4ea; color:#1e8449; font-weight:700;">Noch nichts ausgewählt</div>';
+  html += '<button type="button" class="btn block" id="tkBuchen" style="margin-top:8px;">Punkte gutschreiben</button>';
   html += '</div>';
   html += '<div style="font-weight:700; margin-top:14px;">Prämien</div>';
   html += treueFortschrittHtml(punkte, true);
@@ -4101,26 +4256,61 @@ function modalTreueKunde(kundeId){
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('tkZumKunden').onclick = function(){ closeModal(); state.activeKundeId = k.id; state.tab = 'kundeDetail'; render(); window.scrollTo(0, 0); };
   var neuZeigen = function(){ modalTreueKunde(k.id); if(state.tab === 'kundeDetail') render(); };
-  document.querySelectorAll('.tkCo2P, .tkCo2M').forEach(function(b){
+  var tkAuswahl = {};
+  var tkFreiBetrag = function(){
+    var roh = String(document.getElementById('tkFreiB').value || '').replace(/\s/g, '').replace(/[^0-9,.]/g, '');
+    if(roh.indexOf(',') !== -1) roh = roh.replace(/\./g, '').replace(',', '.');
+    var v = parseFloat(roh);
+    return v > 0 ? v : 0;
+  };
+  var tkRechnen = function(){
+    var netto = 0, teile = [];
+    Object.keys(tkAuswahl).forEach(function(id){
+      var n = tkAuswahl[id], a = treueArtikel(id);
+      if(!a || !n) return;
+      netto += a.netto * n;
+      teile.push(n + 'x ' + a.name);
+    });
+    var fb = tkFreiBetrag();
+    if(fb > 0){ netto += fb; teile.push((document.getElementById('tkFreiT').value.trim() || 'Sonstiges') + ' ' + treueEur(fb) + ' EUR'); }
+    return { netto: netto, punkte: Math.round(netto * TREUE_PUNKTE_PRO_EURO), text: teile.join(', ') };
+  };
+  var tkAnzeigen = function(){
+    var r = tkRechnen();
+    document.getElementById('tkSumme').innerHTML = r.netto > 0 ? ('Netto ' + treueEur(r.netto) + ' &euro; &rarr; <span style="font-size:18px;">+' + treuePunkteText(r.punkte) + ' Punkte</span>') : 'Noch nichts ausgewählt';
+  };
+  document.querySelectorAll('.tkArtP, .tkArtM').forEach(function(b){
     b.onclick = function(){
-      var el = document.querySelector('.tkCo2N[data-g="' + b.getAttribute('data-g') + '"]');
-      var n = (parseInt(el.textContent, 10) || 0) + (b.classList.contains('tkCo2P') ? 1 : -1);
-      el.textContent = n < 0 ? 0 : n;
+      var id = b.getAttribute('data-a');
+      var n = (tkAuswahl[id] || 0) + (b.classList.contains('tkArtP') ? 1 : -1);
+      tkAuswahl[id] = n < 0 ? 0 : n;
+      var el = document.querySelector('.tkArtN[data-a="' + id + '"]');
+      el.textContent = tkAuswahl[id];
+      el.style.color = tkAuswahl[id] ? '#1e8449' : 'var(--muted)';
+      tkAnzeigen();
     };
   });
-  document.getElementById('tkCo2Buchen').onclick = function(){
-    var posten = [];
-    document.querySelectorAll('.tkCo2N').forEach(function(el){ var n = parseInt(el.textContent, 10) || 0; if(n > 0) posten.push({ gramm: Number(el.getAttribute('data-g')), anzahl: n }); });
-    if(!posten.length){ toast('Bitte Anzahl einstellen'); return; }
-    this.disabled = true;
-    var jetzt = new Date();
-    var e = { id: uid(), datum: kalHeuteKey() + 'T' + ('0' + jetzt.getHours()).slice(-2) + ':' + ('0' + jetzt.getMinutes()).slice(-2), posten: posten, kundeId: k.id, kundeFrei: '', notiz: 'Treuekarte', erstelltVon: lagerAktuellerBenutzer(), erstelltAm: jetzt.toISOString() };
-    dbPut('schnellfuellungen', e, function(){
-      if(!state.schnellfuellungen) state.schnellfuellungen = [];
-      state.schnellfuellungen.push(e);
-      var p = treueAktiv(k) ? treueCo2Punkte(posten) : 0;
-      if(p > 0) treueBuchen(k, p, sfFlaschen(e) + ' x CO2-Füllung', 'sf:' + e.id, function(){ toast('+' + p + ' Punkte'); neuZeigen(); });
-      else { toast('Füllung gespeichert'); neuZeigen(); }
+  document.getElementById('tkFreiB').oninput = tkAnzeigen;
+  document.getElementById('tkFreiT').oninput = tkAnzeigen;
+  document.getElementById('tkBuchen').onclick = function(){
+    var r = tkRechnen();
+    if(!(r.punkte > 0)){ toast('Bitte zuerst etwas auswählen'); return; }
+    if(!treueAktiv(k)){ toast('Treueprogramm bei diesem Kunden nicht aktiv'); return; }
+    var knopf = this;
+    customConfirm('+' + treuePunkteText(r.punkte) + ' Punkte gutschreiben? (' + r.text + ')', function(){
+      knopf.disabled = true;
+      // CO2-Fuellungen zusaetzlich in der CO2-Liste speichern
+      var posten = [];
+      Object.keys(tkAuswahl).forEach(function(id){ var a = treueArtikel(id); if(a && a.co2 && tkAuswahl[id]) posten.push({ gramm: a.co2, anzahl: tkAuswahl[id] }); });
+      var fertig = function(){ treueBuchen(k, r.punkte, r.text, '', function(){ toast('+' + treuePunkteText(r.punkte) + ' Punkte'); neuZeigen(); }); };
+      if(!posten.length){ fertig(); return; }
+      var jetzt = new Date();
+      var e = { id: uid(), datum: kalHeuteKey() + 'T' + ('0' + jetzt.getHours()).slice(-2) + ':' + ('0' + jetzt.getMinutes()).slice(-2), posten: posten, kundeId: k.id, kundeFrei: '', notiz: 'Treuekarte', erstelltVon: lagerAktuellerBenutzer(), erstelltAm: jetzt.toISOString() };
+      dbPut('schnellfuellungen', e, function(){
+        if(!state.schnellfuellungen) state.schnellfuellungen = [];
+        state.schnellfuellungen.push(e);
+        fertig();
+      });
     });
   };
   document.querySelectorAll('.treueEinl').forEach(function(b){
@@ -4163,7 +4353,7 @@ function treueKundenKarteHtml(k){
   }
   h += '<div class="meta" style="margin-top:6px;">' + (karten.length ? 'Karten: ' + karten.map(function(c){ return 'Nr. ' + c.nr + (c.gesperrt ? ' (gesperrt)' : ''); }).join(', ') : 'Noch keine Karte ausgegeben') + '</div>';
   h += '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">';
-  h += '<button type="button" class="btn small" id="tkOeffnen">Punkte / Prämien</button>';
+  h += '<button type="button" class="btn small" id="tkOeffnen">Punkte buchen / Prämien</button>';
   h += '<button type="button" class="btn small secondary" id="tkKarteDruck">Neue Karte drucken</button>';
   if(karten.some(function(c){ return !c.gesperrt; })) h += '<button type="button" class="btn small secondary" id="tkSperren" style="color:#c23f12;">Karte verloren / sperren</button>';
   h += '</div></div>';
@@ -4202,6 +4392,7 @@ function modalTreueUebersicht(){
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
   html += '<div class="meta" style="margin-top:6px;">' + TREUE_PUNKTE_PRO_EURO + ' Punkte je 1 &euro; netto. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
   html += '<div class="row" style="gap:8px; margin-top:12px;"><input type="number" inputmode="numeric" id="tuAnz" value="10" min="1" max="100" style="flex:0 0 80px;"><button type="button" class="btn" id="tuDruck" style="flex:1;">Leere Karten auf Vorrat drucken</button></div>';
+  html += '<button type="button" class="btn block secondary" id="tuPreise" style="margin-top:8px;">Preisliste bearbeiten</button>';
   html += '<div class="meta" style="margin-top:4px;">Leere Karte an Kunden ausgeben: Karte im Reiter Scan scannen &rarr; Kunden auswählen.</div>';
   if(frei){
     html += '<button type="button" class="btn block secondary" id="tuNochmal" style="margin-top:8px;">Leere Karten nochmal drucken (' + frei + ')</button>';
@@ -4228,6 +4419,7 @@ function modalTreueUebersicht(){
     treueKartenPdf(l);
   };
   document.querySelectorAll('.tuKunde').forEach(function(b){ b.onclick = function(){ modalTreueKunde(b.getAttribute('data-kid')); }; });
+  document.getElementById('tuPreise').onclick = modalTreuePreise;
 }
 
 function renderScan(){
@@ -16835,8 +17027,7 @@ function bindUmsatz(){
     if(!k.rechnungen) k.rechnungen = [];
     var rgId = uid();
     k.rechnungen.push({ id: rgId, datum: datum, betrag: Math.round(betrag * 100) / 100, notiz: document.getElementById('rgNotiz').value.trim(), bezahlt: document.getElementById('rgStatus').value === 'bezahlt', bezahltAm: document.getElementById('rgStatus').value === 'bezahlt' ? datum : null });
-    var tP = treueAktiv(k) ? treuePunkteAusBrutto(betrag) : 0;
-    if(tP > 0) treueBuchungAnhaengen(k, tP, 'Rechnung ' + eurText(betrag), 'rg:' + rgId);
+    var tP = 0; // Treuepunkte werden ueber die Treuekarte (Preisliste) gebucht, nicht ueber die Rechnung
     dbPut('kunden', k, function(){ if(tP > 0) treuePortalSync(k); render(); toast('Rechnung gespeichert' + (tP > 0 ? ' (+' + treuePunkteText(tP) + ' Treuepunkte)' : '')); });
   };
   document.querySelectorAll('[data-rgpaid]').forEach(function(b){
