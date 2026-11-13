@@ -15287,8 +15287,7 @@ function lieferscheinDaten(berichte, k){
       if(kat === 'Brandschutzbegehung'){
         // Begehung: kein Geraet -> Art, Objekt/Datum und Befund sinnvoll eintragen
         begehung = true;
-        var objBeg = (k && k.objekt) ? String(k.objekt).trim() : (g.standort ? String(g.standort).trim() : '');
-        z = { fabrikat: 'Brandschutzbegehung', type: objBeg ? objBeg : lsDatum(sb.datum) };
+        z = { fabrikat: 'Brandschutzbegehung', type: 'am ' + lsDatum(sb.datum) };
         var mTxt = String(g.maengel || '').replace(/\s+/g, ' ').trim();
         if(mTxt){
           befund = 'Mängel festgestellt';
@@ -15317,6 +15316,13 @@ function lieferscheinDaten(berichte, k){
     }
   }
   var adr = lsAdresseZerlegen(k ? k.adresse : '');
+  // Objekt (falls beim Kunden eingetragen) gut sichtbar als eigene Zeile
+  var objektZeile = '';
+  if(k){
+    var oName = String(k.objekt || '').replace(/^\s*objekt\s*:?\s*/i, '').trim();
+    var oAdr = String(k.objektAdresse || '').trim();
+    if(oName || oAdr) objektZeile = 'Objekt: ' + oName + (oName && oAdr ? ', ' : '') + oAdr;
+  }
   return {
     firma: k ? kundeAnzeigeName(k) : '',
     anschrift1: adr[0],
@@ -15328,6 +15334,7 @@ function lieferscheinDaten(berichte, k){
     plaketten: plaketten,
     berichtNummern: nummern,
     begehung: begehung,
+    objektZeile: objektZeile,
     zusatz: zusatz,
     maengel: maengel,
     sigKunde: sigKunde,
@@ -15466,6 +15473,27 @@ function lieferscheinPdfErzeugen(daten, vorlageBytes, opt){
     var frei = [];
     for(var wj = deviceWide; wj < 4; wj++) frei.push({ anz: breitAnz[wj], txt: breitTxt[wj], preis: breitPreis[wj], betrag: breitBetrag[wj] });
     for(var mj = deviceMain; mj < 5; mj++) frei.push({ anz: anzFelder[mj], txt: 'TYPERow' + (mj + 1), preis: mainPreis[mj], betrag: mainBetrag[mj] });
+    // Objekt-Zeile: erste freie Zeile direkt unter den Geraeten, ueber die ganze Breite
+    if(daten.objektZeile && frei.length){
+      var oi = -1;
+      for(var fo = 0; fo < frei.length; fo++){ if(frei[fo].txt.indexOf('TYPERow') === 0){ oi = fo; break; } }
+      if(oi === -1) oi = 0;
+      var oSlot = frei.splice(oi, 1)[0];
+      var oRect = null;
+      try{
+        var oFeld = oSlot.txt.indexOf('TYPERow') === 0 ? form.getTextField('FABRIKATRow' + oSlot.txt.substring(7)) : form.getTextField(oSlot.txt);
+        oRect = oFeld.acroField.getWidgets()[0].getRectangle();
+      }catch(eO){ oRect = null; }
+      if(oRect){
+        var oTxt = String(daten.objektZeile).replace(/[^\x20-\x7E\u00A0-\u00FF\u2013\u2014\u20AC]/g, '');
+        var oGr = 10;
+        var oBreite = function(t, g){ return helv ? helv.widthOfTextAtSize(t, g) : t.length * g * 0.5; };
+        while(oGr > 7 && oBreite(oTxt, oGr) > 272) oGr -= 0.5;
+        var oOpt = { x: 86, y: oRect.y + (oRect.height - oGr * 0.72) / 2, size: oGr, color: PL.rgb(0, 0, 0) };
+        if(helv) oOpt.font = helv;
+        try{ seite.drawText(oTxt, oOpt); }catch(eOT){}
+      }
+    }
     (opt.positionen || []).forEach(function(pos){
       if(!pos || (!lsNum(pos.anz) && !lsNum(pos.preis))) return;
       if(!frei.length) return;
