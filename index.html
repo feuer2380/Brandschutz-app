@@ -33,8 +33,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-13 20:10';
-var APP_VERSION_TEXT = '13.11. 20:10';
+var APP_VERSION = '2026-11-13 20:20';
+var APP_VERSION_TEXT = '13.11. 20:20';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -11869,19 +11869,22 @@ function modalStempelQr(){
   var namen = zeitMitarbeiterNamen();
   var html = '';
   html += '<div class="modal-head no-print"><h3>Stempel-QR</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="no-print" style="margin-bottom:10px;"><button class="btn block" id="zeitKartenBtn">Alle Stempel-Karten drucken (Kartendrucker)</button>';
+  html += '<div class="meta" style="margin-top:4px;">Oder unten bei einer Person auf &bdquo;Karte drucken&ldquo; tippen.</div></div>';
   html += '<div id="zeitQrInhalt">';
   namen.forEach(function(n, i){
     html += '<div style="display:inline-block; width:46%; margin:2%; padding:12px; border:1px solid #333; border-radius:8px; text-align:center; vertical-align:top;">';
     html += '<div style="font-size:16px; font-weight:700; margin-bottom:8px;">' + escapeHtml(n) + '</div>';
     html += '<div id="zeitqr_' + i + '" style="display:inline-block;"></div>';
     html += '<div style="font-size:11px; margin-top:6px;">Stempeln: Kommen / Pause / Gehen</div>';
+    html += '<button type="button" class="btn small no-print zeitKarteEinzeln" data-zn="' + escapeHtml(n) + '" style="margin-top:8px;">Karte drucken</button>';
     html += '</div>';
   });
   html += '</div>';
   html += '<div class="no-print" style="margin-top:16px;"><button class="btn block" id="zeitQrDruckBtn">Drucken / Als PDF teilen</button></div>';
-  html += '<div class="no-print" style="margin-top:8px;"><button class="btn block secondary" id="zeitKartenBtn">Stempel-Karten drucken (Kartendrucker)</button></div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  document.querySelectorAll('.zeitKarteEinzeln').forEach(function(b){ b.onclick = function(){ stempelKartenPdf([b.getAttribute('data-zn')], 1); }; });
   document.getElementById('zeitKartenBtn').onclick = function(){ closeModal(); setTimeout(modalStempelKarten, 50); };
   var qrErzeugen = function(prefix){
     namen.forEach(function(n, i){
