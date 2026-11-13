@@ -1229,6 +1229,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
         sammle('.pb-kundenbox', 'oben');
         sammle('.pb-kundenbox', 'unten');
         sammle('.card', 'oben');
+        sammle('.pos-karte', 'oben');
         sammle('.bericht-fuss', 'oben');
         liste.sort(function(x, y){ return x - y; });
         wurzel.querySelectorAll('table').forEach(function(t){
@@ -1740,6 +1741,18 @@ function kundeAnzeigeName(k){
   if(!person) return basis;
   if(basis.toLowerCase().indexOf(person.toLowerCase()) > -1) return basis;
   return basis + ' ' + person;
+}
+// Dateiname für Berichte: enthält Kundenname und -nummer, damit man es im Mail/Ausdruck zuordnen kann
+function berichtDateiname(k, nr, prefix){
+  var teile = [prefix || 'Pruefbericht'];
+  if(k){
+    var nm = kundeAnzeigeName(k);
+    if(nm) teile.push(nm);
+    if(k.kundennummer) teile.push('Nr' + k.kundennummer);
+  }
+  if(nr) teile.push(nr);
+  var s = teile.join('_').replace(/[\/\\:*?"<>|]+/g, ' ').replace(/\s+/g, '-');
+  return s + '.pdf';
 }
 function kundeFuerPruefung(p){
   if(p.geraetId){
@@ -2967,7 +2980,13 @@ function darfLagerbuch(){
 function darfStundenSehen(){
   if(state.rolle === 'chef') return true;
   var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
-  return !!(m && m.stundenSehen);
+  return !!(m && (m.stundenSehen || m.stundenVoll));
+}
+// Voller Zugriff auf die Zeiterfassung (ansehen + korrigieren/nachtragen), wie der Chef
+function darfStundenVoll(){
+  if(state.rolle === 'chef') return true;
+  var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
+  return !!(m && m.stundenVoll);
 }
 
 // Statistik ausblenden fuer Mitarbeiter mit keineStatistik: true
@@ -5265,7 +5284,7 @@ var CHEF_NAME = 'Janiba Wolfgang';
 var MITARBEITER_LISTE = [
   { name: 'Janiba Wolfgang sen.', pinPruefwert: 'b1b89ef39b06b58a21533ed951b596ec651fa17a89b69523f05cf6558777a9da', lagerbuch: true, vollzugriff: true, statistik: true },
   { name: 'Mayerhofer Tobias', pinPruefwert: '9da01b608532bf4ef06f762aabc0a6a5783e9d3142410337ed3fe50021de91fd', kalenderAnlegen: true },
-  { name: 'Holakovsky Manuela', pinPruefwert: 'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38', aufgabenVergeben: true, vollzugriff: true, statistik: true },
+  { name: 'Holakovsky Manuela', pinPruefwert: 'acaf2507f69e9b939694c4751f6bfc7725012f9fcccb6585ca10c9a5f980ea38', aufgabenVergeben: true, vollzugriff: true, statistik: true, stundenVoll: true },
   { name: 'Henke Alexander', pinPruefwert: '82e8e2870105ec7f465aa8c8e99b0e0a65c9713bb2ac845d48b9d51c1bfc723f' },
   { name: 'Harris Sandra', pinPruefwert: 'af0757f3208d062e6a6e80e4c771fce69f9dbc951daec8378c3788710015180c', aufgabenVergeben: true, vollzugriff: true, lagerbuch: true, stundenSehen: true, keineStatistik: true }
 ];
@@ -9284,7 +9303,7 @@ function modalKombiBericht(sbs, kundeId){
     var b = document.getElementById('druckBtnKombi');
     b.disabled = true; b.textContent = 'Bereite vor...';
     try{
-      bsvDruckenOderTeilen(buildSammelberichtHtml(sb, k), (sb.berichtNr || 'Pruefbericht') + '.pdf', function(){
+      bsvDruckenOderTeilen(buildSammelberichtHtml(sb, k), berichtDateiname(k, sb.berichtNr), function(){
         b.disabled = false; b.textContent = 'Drucken / Als PDF teilen';
       });
     }catch(err){
@@ -9351,7 +9370,7 @@ function modalBerichtAnsicht(pruefungId){
   document.getElementById('mClose').onclick = closeModal;
 
   document.getElementById('druckBtn').onclick = function(){
-    bsvDruckenOderTeilen(buildBerichtHtml(p, k), fArtAns === 'anschluss' ? 'Anschlussbericht.pdf' : (fArtAns === 'abfuellung' ? 'Abfuellbericht.pdf' : 'Pruefbericht.pdf'));
+    bsvDruckenOderTeilen(buildBerichtHtml(p, k), berichtDateiname(k, (p && p.berichtNr) || '', fArtAns === 'anschluss' ? 'Anschlussbericht' : (fArtAns === 'abfuellung' ? 'Abfuellbericht' : 'Pruefbericht')));
   };
 
   document.getElementById('mailBtn').onclick = function(){
@@ -10668,9 +10687,10 @@ function modalStempeln(name){
 function renderZeit(){
   var html = '';
   var istChef = state.rolle === 'chef';
-  var namen = istChef ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
+  var zeitVoll = istChef || darfStundenVoll();
+  var namen = zeitVoll ? zeitMitarbeiterNamen() : [state.mitarbeiterName || 'Mitarbeiter'];
   html += '<div class="row" style="align-items:center; margin-bottom:12px;"><div class="section-title" style="margin:0;">Zeiterfassung</div><span class="meta">Version ' + APP_VERSION_TEXT + '</span></div>';
-  if(istChef){
+  if(zeitVoll){
     html += '<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">';
     html += '<button class="btn small secondary" id="zeitQrBtn">Stempel-QR drucken</button>';
     html += '<button class="btn small secondary" id="zeitMonatBtn">Monatsliste</button>';
@@ -10837,6 +10857,7 @@ function modalZeitMonat(name, jahr, monat){
   if(monat === null || monat === undefined) monat = jetzt.getMonth();
   var monatNamen = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   var istChef = state.rolle === 'chef';
+  var zeitVoll = istChef || darfStundenVoll();
   var daten = zeitMonatDaten(name, jahr, monat);
   var html = '';
   html += '<div class="modal-head"><h3>Zeitliste</h3><button class="close" id="mClose">&times;</button></div>';
@@ -10854,10 +10875,10 @@ function modalZeitMonat(name, jahr, monat){
   html += '<div style="flex:1; text-align:center; font-weight:700;">' + monatNamen[monat] + ' ' + jahr + '</div>';
   html += '<button class="btn small secondary" id="zmVor">&rsaquo;</button>';
   html += '</div>';
-  html += '<div id="zeitMonatInhalt">' + zeitMonatTabelleHtml(name, jahr, monat, daten, istChef, true) + '</div>';
+  html += '<div id="zeitMonatInhalt">' + zeitMonatTabelleHtml(name, jahr, monat, daten, zeitVoll, true) + '</div>';
   html += '<div style="margin-top:14px; display:flex; gap:8px;">';
   html += '<button class="btn" id="zmDruck" style="flex:1;">Drucken / PDF</button>';
-  if(istChef) html += '<button class="btn secondary" id="zmNeu" style="flex:1;">Eintrag nachtragen</button>';
+  if(zeitVoll) html += '<button class="btn secondary" id="zmNeu" style="flex:1;">Eintrag nachtragen</button>';
   html += '</div>';
   var sgm = zeitSigHole(name, jahr, monat);
   html += '<button class="btn block" id="zmSign" style="margin-top:8px; background:#2f7a4f;">&#9998; Unterschreiben</button>';
@@ -15081,7 +15102,7 @@ function modalSammelberichtAnsicht(sbId){
     druckBtnSbEl.disabled = true;
     druckBtnSbEl.textContent = 'Bereite vor...';
     try {
-      bsvDruckenOderTeilen(buildSammelberichtHtml(sb, k), (sb.berichtNr || 'Sammelbericht') + '.pdf', function(){
+      bsvDruckenOderTeilen(buildSammelberichtHtml(sb, k), berichtDateiname(k, sb.berichtNr), function(){
         druckBtnSbEl.disabled = false;
         druckBtnSbEl.textContent = 'Drucken / Als PDF teilen';
       });
