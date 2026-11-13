@@ -15672,6 +15672,7 @@ function modalLieferschein(berichte, k){
     knopf.disabled = true;
     var alterText = knopf.innerHTML;
     knopf.textContent = 'Bitte warten...';
+    lsBetreffKopieren(lsMailBetreff(berichte, k, true, opt().modus));
     lsKombiErstellen(berichte, k, daten, opt(), document.getElementById('lsStatus'), function(){
       var kn = document.getElementById('lsKombi');
       if(kn){ kn.disabled = false; kn.innerHTML = alterText; }
@@ -15680,34 +15681,65 @@ function modalLieferschein(berichte, k){
   document.getElementById('lsTeilen').onclick = function(){
     var st = document.getElementById('lsStatus');
     st.textContent = 'Wird erstellt...';
+    var betreffLs = lsMailBetreff(berichte, k, false, opt().modus);
+    lsBetreffKopieren(betreffLs);
     lsPdfLibLaden(function(err){
       if(err){ st.innerHTML = '<span style="color:#c23f12;">Fehler: ' + escapeHtml(err.message || String(err)) + '</span>'; return; }
       lsVorlageLaden(function(err2, vorlage){
         if(err2){ st.innerHTML = '<span style="color:#c23f12;">Fehler: ' + escapeHtml(err2.message || String(err2)) + '</span>'; return; }
         lieferscheinPdfErzeugen(daten, vorlage.slice(0), opt()).then(function(bytes){
           var blob = new Blob([bytes], { type: 'application/pdf' });
-          st.textContent = '';
-          var datei = null;
-          try{ datei = new File([blob], dateiname, { type: 'application/pdf' }); }catch(e){ datei = null; }
-          if(datei && navigator.canShare && navigator.share && navigator.canShare({ files: [datei] })){
-            navigator.share({ files: [datei], title: dateiname }).catch(function(e2){
-              if(e2 && e2.name === 'AbortError') return;
-              lsOeffnenOderLaden(blob, dateiname);
-            });
-          } else {
-            lsOeffnenOderLaden(blob, dateiname);
-          }
+          st.innerHTML = '<span style="color:#1e8449;">Betreff kopiert: <b>' + escapeHtml(betreffLs) + '</b><br>In der Mail ins Feld „Betreff“ tippen &rarr; Einsetzen.</span>';
+          var dnLs = (opt().modus === 'rechnung' ? 'Rechnung' : 'Lieferschein') + (nr ? '-' + lsDateiTeil(nr) : '') + (k ? '-' + lsDateiTeil(kundeAnzeigeName(k)) : '') + '.pdf';
+          lsTeilenMitBetreff(blob, dnLs, betreffLs);
         }).catch(function(e3){ st.innerHTML = '<span style="color:#c23f12;">Fehler: ' + escapeHtml(e3 && e3.message ? e3.message : String(e3)) + '</span>'; });
       });
     });
   };
 }
+// Betreff fuer die Mail: Pruefbericht-Nr. + Kunde
+function lsBerichtNr(berichte){
+  var nrs = [];
+  for(var i = 0; i < berichte.length; i++){ if(berichte[i].berichtNr && nrs.indexOf(berichte[i].berichtNr) === -1) nrs.push(berichte[i].berichtNr); }
+  return nrs.join(', ');
+}
+function lsMailBetreff(berichte, k, mitLieferschein, modus){
+  var nr = lsBerichtNr(berichte);
+  var name = k ? kundeAnzeigeName(k) : '';
+  var obj = (k && k.objekt) ? String(k.objekt).trim() : '';
+  var art = modus === 'rechnung' ? 'Rechnung' : 'Lieferschein';
+  var teil = mitLieferschein ? ('Prüfbericht' + (nr ? ' Nr. ' + nr : '') + ' und ' + art) : (art + (nr ? ' zu Prüfbericht Nr. ' + nr : ''));
+  return teil + (name ? ' – ' + name : '') + (obj && name.indexOf(obj) === -1 ? ', ' + obj : '');
+}
+function lsDateiTeil(t){
+  return String(t || '').replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 50);
+}
+// iOS uebernimmt beim Teilen mit Datei keinen Betreff -> Betreff in die Zwischenablage (zum Einfuegen) und in den Mailtext
+function lsBetreffKopieren(betreff){
+  try{ if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(betreff).catch(function(){}); }catch(e){}
+}
+function lsTeilenMitBetreff(blob, dateiname, betreff){
+  var datei = null;
+  try{ datei = new File([blob], dateiname, { type: 'application/pdf' }); }catch(e){ datei = null; }
+  if(datei && navigator.canShare && navigator.share && navigator.canShare({ files: [datei] })){
+    var daten = { files: [datei], title: betreff, text: betreff };
+    if(!navigator.canShare(daten)) daten = { files: [datei], title: betreff };
+    navigator.share(daten).catch(function(e2){
+      if(e2 && e2.name === 'AbortError') return;
+      lsOeffnenOderLaden(blob, dateiname);
+    });
+  } else {
+    lsOeffnenOderLaden(blob, dateiname);
+  }
+}
+
 // Lieferschein (pdf-lib) + Pruefbericht (html2canvas/jsPDF) zu einer Datei zusammenfuegen und teilen
 function lsKombiErstellen(berichte, k, daten, optWerte, statusEl, fertig){
   var meld = function(t, fehler){ if(statusEl) statusEl.innerHTML = fehler ? '<span style="color:#c23f12;">' + escapeHtml(t) + '</span>' : escapeHtml(t); };
   var nr = '';
   for(var ni = 0; ni < berichte.length; ni++){ if(berichte[ni].berichtNr){ nr = berichte[ni].berichtNr; break; } }
-  var dateiname = 'Pruefbericht-Lieferschein' + (nr ? '-' + nr.replace(/[^A-Za-z0-9_-]/g, '') : '') + '.pdf';
+  var betreff = lsMailBetreff(berichte, k, true, optWerte.modus);
+  var dateiname = (optWerte.modus === 'rechnung' ? 'Pruefbericht-Rechnung' : 'Pruefbericht-Lieferschein') + (nr ? '-' + lsDateiTeil(nr) : '') + (k ? '-' + lsDateiTeil(kundeAnzeigeName(k)) : '') + '.pdf';
   meld('Lieferschein wird erstellt...');
   lsPdfLibLaden(function(err){
     if(err){ meld('Fehler: ' + (err.message || err), true); fertig(); return; }
@@ -15732,19 +15764,10 @@ function lsKombiErstellen(berichte, k, daten, optWerte, statusEl, fertig){
               .then(function(seiten1){ seiten1.forEach(function(sp){ ziel.addPage(sp); }); return ziel.copyPages(pbDoc, pbDoc.getPageIndices()); })
               .then(function(seiten2){ seiten2.forEach(function(sp){ ziel.addPage(sp); }); return ziel.save(); });
           }).then(function(bytes){
-            meld('');
+            if(statusEl) statusEl.innerHTML = '<span style="color:#1e8449;">Betreff kopiert: <b>' + escapeHtml(betreff) + '</b><br>In der Mail ins Feld „Betreff“ tippen &rarr; Einsetzen.</span>';
             fertig();
             var gesamt = new Blob([bytes], { type: 'application/pdf' });
-            var datei = null;
-            try{ datei = new File([gesamt], dateiname, { type: 'application/pdf' }); }catch(e){ datei = null; }
-            if(datei && navigator.canShare && navigator.share && navigator.canShare({ files: [datei] })){
-              navigator.share({ files: [datei], title: dateiname }).catch(function(e2){
-                if(e2 && e2.name === 'AbortError') return;
-                lsOeffnenOderLaden(gesamt, dateiname);
-              });
-            } else {
-              lsOeffnenOderLaden(gesamt, dateiname);
-            }
+            lsTeilenMitBetreff(gesamt, dateiname, betreff);
           }).catch(function(e3){ meld('Fehler beim Zusammenfügen: ' + (e3 && e3.message ? e3.message : e3), true); fertig(); });
         };
         try{
