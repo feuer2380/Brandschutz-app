@@ -15203,6 +15203,8 @@ function lieferscheinDaten(berichte, k){
   var nummern = [];
   var datum = null;
   var sigKunde = '', sigTechniker = '';
+  var begehung = false;
+  var zusatz = [];
   for(var b = 0; b < berichte.length; b++){
     var sb = berichte[b];
     if(sb.berichtNr && nummern.indexOf(sb.berichtNr) === -1) nummern.push(sb.berichtNr);
@@ -15218,8 +15220,30 @@ function lieferscheinDaten(berichte, k){
         if(g.ergebnis === 'In Ordnung') plaketten++;
       }
       var z = lsTypZerlegen(g.typ);
-      if(!z.type) z.type = kat;
       var befund = g.ergebnis || '';
+      if(kat === 'Brandschutzbegehung'){
+        // Begehung: kein Geraet -> Art, Objekt/Datum und Befund sinnvoll eintragen
+        begehung = true;
+        var objBeg = (k && k.objekt) ? String(k.objekt).trim() : (g.standort ? String(g.standort).trim() : '');
+        z = { fabrikat: 'Brandschutzbegehung', type: objBeg ? objBeg + ' am ' + lsDatum(sb.datum) : 'durchgeführt am ' + lsDatum(sb.datum) };
+        var mTxt = String(g.maengel || '').replace(/\s+/g, ' ').trim();
+        if(mTxt){
+          befund = 'Mängel festgestellt';
+          if(zusatz.indexOf('Mängel: ' + mTxt) === -1) zusatz.push('Mängel: ' + mTxt);
+        } else if(befund === 'Reparatur nötig'){
+          befund = 'Mängel festgestellt';
+        } else if(!befund || befund === 'In Ordnung'){
+          befund = 'keine Mängel';
+        }
+        var nTxt = String(g.notiz || '').replace(/\s+/g, ' ').trim();
+        if(nTxt && zusatz.indexOf('Bemerkung: ' + nTxt) === -1) zusatz.push('Bemerkung: ' + nTxt);
+      } else if(kat !== 'Feuerlöscher' && !z.fabrikat){
+        // andere Anlagen (RWA, Notbeleuchtung, Brandschutztueren ...): Kategorie in die Spalte Fabrikat
+        z.fabrikat = kat;
+        if(z.type === kat) z.type = '';
+        if(!z.type && g.standort) z.type = String(g.standort).trim();
+      }
+      if(!z.type && !z.fabrikat) z.type = kat;
       var schluessel = (z.fabrikat + '|' + z.type + '|' + befund).toLowerCase();
       if(index[schluessel] === undefined){
         index[schluessel] = gruppen.length;
@@ -15239,6 +15263,8 @@ function lieferscheinDaten(berichte, k){
     gruppen: gruppen,
     plaketten: plaketten,
     berichtNummern: nummern,
+    begehung: begehung,
+    zusatz: zusatz,
     sigKunde: sigKunde,
     sigTechniker: sigTechniker
   };
@@ -15340,6 +15366,14 @@ function lieferscheinPdfErzeugen(daten, vorlageBytes, opt){
     var frei = [];
     for(var wj = deviceWide; wj < 4; wj++) frei.push({ anz: breitAnz[wj], txt: breitTxt[wj], preis: breitPreis[wj], betrag: breitBetrag[wj] });
     for(var mj = deviceMain; mj < 5; mj++) frei.push({ anz: anzFelder[mj], txt: 'TYPERow' + (mj + 1), preis: mainPreis[mj], betrag: mainBetrag[mj] });
+    // Maengel / Bemerkung einer Begehung in die freien breiten Zeilen schreiben
+    (daten.zusatz || []).forEach(function(txt){
+      var si = -1;
+      for(var fi = 0; fi < frei.length; fi++){ if(frei[fi].txt.indexOf('Row') === 0){ si = fi; break; } }
+      if(si === -1) return;
+      var slotZ = frei.splice(si, 1)[0];
+      setze(slotZ.txt, txt.length > 95 ? txt.substring(0, 92) + '...' : txt);
+    });
     (opt.positionen || []).forEach(function(pos){
       if(!pos || (!lsNum(pos.anz) && !lsNum(pos.preis))) return;
       if(!frei.length) return;
@@ -15450,7 +15484,7 @@ function modalLieferschein(berichte, k){
     + '<label style="font-weight:400;"><input type="checkbox" class="lsIr" value="18"> 18 Jahre</label>'
     + '<label style="font-weight:400;"><input type="checkbox" class="lsIr" value="fab"> Fabrikat</label></div>';
   html += leistungZeile('Füllung / Austausch / Reparatur', 'lsFuell', '');
-  html += leistungZeile('Arbeitszeit / Pauschale', 'lsArb', '');
+  html += leistungZeile('Arbeitszeit / Pauschale', 'lsArb', daten.begehung ? '1' : '');
   html += leistungZeile('Fahrtkostenanteil', 'lsFahr', '');
   html += '</div>';
   html += '<div style="margin-top:14px;"><div style="font-weight:600; font-size:14px; margin-bottom:2px;">Weitere Positionen</div>';
