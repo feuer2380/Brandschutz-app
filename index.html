@@ -15257,7 +15257,7 @@ function lieferscheinDaten(berichte, k){
         // Begehung: kein Geraet -> Art, Objekt/Datum und Befund sinnvoll eintragen
         begehung = true;
         var objBeg = (k && k.objekt) ? String(k.objekt).trim() : (g.standort ? String(g.standort).trim() : '');
-        z = { fabrikat: 'Brandschutzbegehung', type: objBeg ? objBeg + ' am ' + lsDatum(sb.datum) : 'durchgeführt am ' + lsDatum(sb.datum) };
+        z = { fabrikat: 'Brandschutzbegehung', type: objBeg ? objBeg : lsDatum(sb.datum) };
         var mTxt = String(g.maengel || '').replace(/\s+/g, ' ').trim();
         if(mTxt){
           befund = 'Mängel festgestellt';
@@ -15486,8 +15486,10 @@ function lieferscheinPdfErzeugen(daten, vorlageBytes, opt){
       setze(' 20  MwSt', lsEur(netto * 0.2));
       setze('Endbetrag', lsEur(netto * 1.2));
     }
-    if(opt.bezahlt === 'ja') haken('bezahlt');
-    else if(opt.bezahlt === 'nein') haken('nicht bezahlt');
+    if(rechnung){
+      if(opt.bezahlt === 'ja') haken('bezahlt');
+      else if(opt.bezahlt === 'nein') haken('nicht bezahlt');
+    }
     if(daten.berichtNummern.length){
       setze('CO2DichtungRow1', 'Lt. Prüfbericht Nr. ' + daten.berichtNummern.join(', '), daten.berichtNummern.length > 2 ? 7 : 9);
     }
@@ -15573,10 +15575,11 @@ function modalLieferschein(berichte, k){
   html += '<div id="lsPosListe"></div>';
   html += '<button type="button" class="btn small secondary" id="lsPosAdd">+ Position hinzufügen</button></div>';
   html += '<div id="lsSummen" style="margin-top:12px; padding:10px 12px; background:#f6efe2; border-radius:10px; font-size:14px;"></div>';
-  html += '<div id="lsBezahltBox" style="margin-top:10px;"><label style="font-weight:400;">Zahlung:</label> ';
-  html += '<label style="font-weight:400; margin-left:6px;"><input type="radio" name="lsBez" value="" checked> offen</label>';
-  html += '<label style="font-weight:400; margin-left:10px;"><input type="radio" name="lsBez" value="ja"> bezahlt</label>';
-  html += '<label style="font-weight:400; margin-left:10px;"><input type="radio" name="lsBez" value="nein"> nicht bezahlt</label></div>';
+  html += '<div id="lsBezahltHinweis" class="meta" style="margin-top:10px;">Lieferschein: Zahlung bleibt offen (kein Kreuz bei bezahlt).</div>';
+  html += '<div id="lsBezahltBox" style="margin-top:10px; display:none; flex-wrap:wrap; align-items:center; gap:8px 0;"><span style="font-weight:600; margin-right:12px;">Zahlung:</span>';
+  html += '<label style="display:inline-flex; align-items:center; gap:6px; font-weight:400; margin:0 14px 0 0; width:auto;"><input type="radio" name="lsBez" value="" checked style="width:auto; margin:0;"> offen</label>';
+  html += '<label style="display:inline-flex; align-items:center; gap:6px; font-weight:400; margin:0 14px 0 0; width:auto;"><input type="radio" name="lsBez" value="ja" style="width:auto; margin:0;"> bezahlt</label>';
+  html += '<label style="display:inline-flex; align-items:center; gap:6px; font-weight:400; margin:0 14px 0 0; width:auto;"><input type="radio" name="lsBez" value="nein" style="width:auto; margin:0;"> nicht bezahlt</label></div>';
   html += '<div id="lsStatus" class="meta" style="margin:12px 0;"></div>';
   html += '<button class="btn block" id="lsTeilen">Erstellen &amp; teilen / drucken</button>';
   html += '<button class="btn block secondary" id="lsSchliessen" style="margin-top:10px;">Schließen</button>';
@@ -15623,7 +15626,18 @@ function modalLieferschein(berichte, k){
     }
   };
   document.querySelectorAll('.lsPreis, .lsLz').forEach(function(el){ el.oninput = summenAktualisieren; });
-  document.querySelectorAll('.lsIr, input[name="lsModus"]').forEach(function(el){ el.onchange = summenAktualisieren; });
+  document.querySelectorAll('.lsIr').forEach(function(el){ el.onchange = summenAktualisieren; });
+  // Lieferschein = immer offen, Rechnung = standardmaessig bezahlt
+  var zahlungNachModus = function(){
+    var mEl = document.querySelector('input[name="lsModus"]:checked');
+    var istRechnung = mEl && mEl.value === 'rechnung';
+    document.getElementById('lsBezahltBox').style.display = istRechnung ? 'flex' : 'none';
+    document.getElementById('lsBezahltHinweis').style.display = istRechnung ? 'none' : '';
+    var ziel = document.querySelector('input[name="lsBez"][value="' + (istRechnung ? 'ja' : '') + '"]');
+    if(ziel) ziel.checked = true;
+    summenAktualisieren();
+  };
+  document.querySelectorAll('input[name="lsModus"]').forEach(function(el){ el.onchange = zahlungNachModus; });
   var posZeileHinzu = function(presetBez){
     var div = document.createElement('div');
     div.style.cssText = 'display:grid; grid-template-columns:44px 1fr 86px auto; gap:6px; align-items:center; margin-bottom:6px;';
@@ -15640,7 +15654,7 @@ function modalLieferschein(berichte, k){
   posZeileHinzu('Ventilkappen');
   posZeileHinzu('Kleinmaterial');
   posZeileHinzu('CO2-Dichtung');
-  summenAktualisieren();
+  zahlungNachModus();
 
   document.getElementById('lsTeilen').onclick = function(){
     var st = document.getElementById('lsStatus');
