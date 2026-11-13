@@ -15341,7 +15341,7 @@ function lieferscheinPdfErzeugen(daten, vorlageBytes, opt){
     for(var wj = deviceWide; wj < 4; wj++) frei.push({ anz: breitAnz[wj], txt: breitTxt[wj], preis: breitPreis[wj], betrag: breitBetrag[wj] });
     for(var mj = deviceMain; mj < 5; mj++) frei.push({ anz: anzFelder[mj], txt: 'TYPERow' + (mj + 1), preis: mainPreis[mj], betrag: mainBetrag[mj] });
     (opt.positionen || []).forEach(function(pos){
-      if(!pos || (!pos.bez && !lsNum(pos.preis))) return;
+      if(!pos || (!lsNum(pos.anz) && !lsNum(pos.preis))) return;
       if(!frei.length) return;
       var slot = frei.shift();
       var anz = lsNum(pos.anz), pr = lsNum(pos.preis);
@@ -15349,16 +15349,23 @@ function lieferscheinPdfErzeugen(daten, vorlageBytes, opt){
       setze(slot.txt, pos.bez || '');
       if(anz > 0) setze(slot.anz, anz);
       if(pr > 0 && anz > 0) setze(slot.preis, lsEur(pr));
-      if(bet > 0){ setze(slot.betrag, lsEur(bet)); netto += bet; }
+      if(pr > 0){ setze(slot.betrag, lsEur(bet)); netto += bet; }
     });
-    if(daten.plaketten > 0) setze('Text34', daten.plaketten);
-    // Zusatzposten (Beträge)
-    var plakPreis = lsNum(opt.plakettePreis);
-    if(plakPreis > 0 && daten.plaketten > 0){ var pb = plakPreis * daten.plaketten; setze('PREIS €Prüfplakette', lsEur(plakPreis)); setze('Text20', lsEur(pb)); netto += pb; }
-    var innen = lsNum(opt.innenrevision); if(innen > 0){ setze('Text16', lsEur(innen)); netto += innen; }
-    var arb = lsNum(opt.arbeitszeit); if(arb > 0){ setze('Text18', lsEur(arb)); netto += arb; }
-    var fahr = lsNum(opt.fahrtkosten); if(fahr > 0){ setze('Text19', lsEur(fahr)); netto += fahr; }
-    var fuell = lsNum(opt.fuellung); if(fuell > 0){ setze('Text17', lsEur(fuell)); netto += fuell; }
+    // Leistungszeilen: Anzahl immer, Preis/Betrag nur wenn ein Preis eingegeben wurde
+    var leistung = function(o, anzF, preisF, betragF){
+      if(!o) return;
+      var a = lsNum(o.anz), pr = lsNum(o.preis);
+      if(a > 0) setze(anzF, a);
+      if(pr > 0){ var b = a > 0 ? a * pr : pr; setze(preisF, lsEur(pr)); if(betragF) setze(betragF, lsEur(b)); netto += b; }
+    };
+    var plakAnz = (opt.plakette && lsNum(opt.plakette.anz)) ? lsNum(opt.plakette.anz) : daten.plaketten;
+    if(plakAnz > 0) setze('Text34', plakAnz);
+    if(opt.plakette){ var pPr = lsNum(opt.plakette.preis); if(pPr > 0 && plakAnz > 0){ var pBet = pPr * plakAnz; setze('PREIS €Prüfplakette', lsEur(pPr)); setze('Text20', lsEur(pBet)); netto += pBet; } }
+    leistung(opt.innen, 'Text30', 'PREIS €I', 'Text16');
+    if(opt.innen && opt.innen.jahre){ if(opt.innen.jahre['6']) haken('6 Jahre'); if(opt.innen.jahre['12']) haken('12 Jahre'); if(opt.innen.jahre['18']) haken('18 Jahre'); if(opt.innen.jahre['fab']) haken('Fabrikat'); }
+    leistung(opt.fuellung, 'Text31', 'PREIS €Füllung', 'Text17');
+    leistung(opt.arbeitszeit, 'Text32', 'PREIS €Arbeitszeit', 'Text18');
+    leistung(opt.fahrtkosten, 'Text33', 'PREIS €Fahrtkostenanteil', 'Text19');
     if(netto > 0){
       setze('Netto', lsEur(netto));
       setze(' 20  MwSt', lsEur(netto * 0.2));
@@ -15425,17 +15432,29 @@ function modalLieferschein(berichte, k){
     html += '<div style="font-size:13px; min-width:0;">' + escapeHtml(bez) + '</div>';
     html += '<input type="text" inputmode="decimal" class="lsPreis" data-gi="' + i + '" placeholder="Preis/St. €" style="' + inpStil + '">';
   }
-  if(daten.plaketten > 0){
-    html += '<div style="font-size:13px;">' + daten.plaketten + '× Prüfplakette</div>';
-    html += '<input type="text" inputmode="decimal" id="lsPlak" placeholder="Preis/St. €" style="' + inpStil + '">';
-  }
-  html += '<div style="font-size:13px;">Innenrevision</div><input type="text" inputmode="decimal" id="lsInnen" placeholder="€" style="' + inpStil + '">';
-  html += '<div style="font-size:13px;">Füllung / Austausch / Reparatur</div><input type="text" inputmode="decimal" id="lsFuell" placeholder="€" style="' + inpStil + '">';
-  html += '<div style="font-size:13px;">Arbeitszeit / Pauschale</div><input type="text" inputmode="decimal" id="lsArb" placeholder="€" style="' + inpStil + '">';
-  html += '<div style="font-size:13px;">Fahrtkostenanteil</div><input type="text" inputmode="decimal" id="lsFahr" placeholder="€" style="' + inpStil + '">';
+  html += '</div>';
+  html += '<div style="margin-top:14px; font-weight:600; font-size:14px;">Leistungen</div>';
+  html += '<div class="meta" style="margin-bottom:4px;">Anzahl eintragen, Preis nur bei einer Rechnung nötig.</div>';
+  html += '<div style="display:grid; grid-template-columns:1fr 54px 88px; gap:6px 8px; align-items:center;">';
+  html += '<div></div><div class="meta" style="text-align:center;">Anzahl</div><div class="meta" style="text-align:right;">Preis €</div>';
+  var leistungZeile = function(label, idBase, anzVor){
+    return '<div style="font-size:13px;">' + label + '</div>'
+      + '<input type="text" inputmode="numeric" id="' + idBase + 'Anz" class="lsLz" placeholder="Anz." value="' + (anzVor || '') + '" style="text-align:center; padding:6px 3px;">'
+      + '<input type="text" inputmode="decimal" id="' + idBase + 'Pr" class="lsLz" placeholder="€" style="text-align:right; padding:6px 6px;">';
+  };
+  html += leistungZeile('Prüfplakette', 'lsPlak', daten.plaketten > 0 ? daten.plaketten : '');
+  html += leistungZeile('Innenrevision', 'lsInnen', '');
+  html += '<div style="grid-column:1 / -1; font-size:12px; display:flex; gap:14px; flex-wrap:wrap; margin:-2px 0 2px 2px;">'
+    + '<label style="font-weight:400;"><input type="checkbox" class="lsIr" value="6"> 6 Jahre</label>'
+    + '<label style="font-weight:400;"><input type="checkbox" class="lsIr" value="12"> 12 Jahre</label>'
+    + '<label style="font-weight:400;"><input type="checkbox" class="lsIr" value="18"> 18 Jahre</label>'
+    + '<label style="font-weight:400;"><input type="checkbox" class="lsIr" value="fab"> Fabrikat</label></div>';
+  html += leistungZeile('Füllung / Austausch / Reparatur', 'lsFuell', '');
+  html += leistungZeile('Arbeitszeit / Pauschale', 'lsArb', '');
+  html += leistungZeile('Fahrtkostenanteil', 'lsFahr', '');
   html += '</div>';
   html += '<div style="margin-top:14px;"><div style="font-weight:600; font-size:14px; margin-bottom:2px;">Weitere Positionen</div>';
-  html += '<div class="meta" style="margin-bottom:6px;">z. B. Neukauf Löscher, Kleinmaterial, Ventilkappen, CO2-Dichtung</div>';
+  html += '<div class="meta" style="margin-bottom:6px;">Anzahl + Bezeichnung (Preis optional). Nicht benötigte Zeilen einfach leer lassen.</div>';
   html += '<div id="lsPosListe"></div>';
   html += '<button type="button" class="btn small secondary" id="lsPosAdd">+ Position hinzufügen</button></div>';
   html += '<div id="lsSummen" style="margin-top:12px; padding:10px 12px; background:#f6efe2; border-radius:10px; font-size:14px;"></div>';
@@ -15459,25 +15478,28 @@ function modalLieferschein(berichte, k){
     document.querySelectorAll('#lsPosListe > div').forEach(function(dd){
       pos.push({ bez: dd.querySelector('.lsPosBez').value, anz: dd.querySelector('.lsPosAnz').value, preis: dd.querySelector('.lsPosPreis').value });
     });
+    var val = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
+    var jahre = {};
+    document.querySelectorAll('.lsIr:checked').forEach(function(cb){ jahre[cb.value] = true; });
     return {
       modus: modusEl ? modusEl.value : 'lieferschein',
       gpreise: gp,
-      plakettePreis: (document.getElementById('lsPlak') || {}).value,
-      innenrevision: (document.getElementById('lsInnen') || {}).value,
-      arbeitszeit: (document.getElementById('lsArb') || {}).value,
-      fuellung: (document.getElementById('lsFuell') || {}).value,
-      fahrtkosten: (document.getElementById('lsFahr') || {}).value,
+      plakette: { anz: val('lsPlakAnz'), preis: val('lsPlakPr') },
+      innen: { anz: val('lsInnenAnz'), preis: val('lsInnenPr'), jahre: jahre },
+      fuellung: { anz: val('lsFuellAnz'), preis: val('lsFuellPr') },
+      arbeitszeit: { anz: val('lsArbAnz'), preis: val('lsArbPr') },
+      fahrtkosten: { anz: val('lsFahrAnz'), preis: val('lsFahrPr') },
       positionen: pos,
       bezahlt: bezEl ? bezEl.value : ''
     };
   };
+  var zeileNetto = function(o){ var a = lsNum(o.anz), pr = lsNum(o.preis); return pr > 0 ? (a > 0 ? a * pr : pr) : 0; };
   var summenAktualisieren = function(){
     var o = opt();
     var netto = 0;
     for(var i = 0; i < anzeigen; i++) netto += lsNum(o.gpreise[i]) * g[i].anz;
-    if(daten.plaketten > 0) netto += lsNum(o.plakettePreis) * daten.plaketten;
-    netto += lsNum(o.innenrevision) + lsNum(o.arbeitszeit) + lsNum(o.fuellung) + lsNum(o.fahrtkosten);
-    o.positionen.forEach(function(pz){ var a = lsNum(pz.anz), pr = lsNum(pz.preis); netto += a > 0 ? a * pr : pr; });
+    netto += zeileNetto(o.plakette) + zeileNetto(o.innen) + zeileNetto(o.fuellung) + zeileNetto(o.arbeitszeit) + zeileNetto(o.fahrtkosten);
+    o.positionen.forEach(function(pz){ var a = lsNum(pz.anz), pr = lsNum(pz.preis); netto += pr > 0 ? (a > 0 ? a * pr : pr) : 0; });
     var box = document.getElementById('lsSummen');
     if(netto > 0){
       box.innerHTML = 'Netto: <b>' + lsEur(netto) + '</b><br>+ 20 % USt.: ' + lsEur(netto * 0.2) + '<br>Endbetrag: <b>' + lsEur(netto * 1.2) + '</b>';
@@ -15485,20 +15507,24 @@ function modalLieferschein(berichte, k){
       box.innerHTML = '<span class="meta">Keine Preise eingetragen &ndash; reiner Lieferschein.</span>';
     }
   };
-  document.querySelectorAll('.lsPreis, #lsPlak, #lsInnen, #lsArb, #lsFuell, #lsFahr').forEach(function(el){ el.oninput = summenAktualisieren; });
-  document.querySelectorAll('input[name="lsModus"]').forEach(function(el){ el.onchange = summenAktualisieren; });
-  var posZeileHinzu = function(){
+  document.querySelectorAll('.lsPreis, .lsLz').forEach(function(el){ el.oninput = summenAktualisieren; });
+  document.querySelectorAll('.lsIr, input[name="lsModus"]').forEach(function(el){ el.onchange = summenAktualisieren; });
+  var posZeileHinzu = function(presetBez){
     var div = document.createElement('div');
-    div.style.cssText = 'display:grid; grid-template-columns:1fr 44px 86px auto; gap:6px; align-items:center; margin-bottom:6px;';
-    div.innerHTML = '<input type="text" class="lsPosBez" placeholder="Bezeichnung" style="padding:6px 8px; min-width:0;">'
-      + '<input type="text" inputmode="numeric" class="lsPosAnz" placeholder="Anz." style="padding:6px 3px; text-align:center;">'
+    div.style.cssText = 'display:grid; grid-template-columns:44px 1fr 86px auto; gap:6px; align-items:center; margin-bottom:6px;';
+    div.innerHTML = '<input type="text" inputmode="numeric" class="lsPosAnz" placeholder="Anz." style="padding:6px 3px; text-align:center;">'
+      + '<input type="text" class="lsPosBez" placeholder="Bezeichnung" value="' + escapeHtml(presetBez || '') + '" style="padding:6px 8px; min-width:0;">'
       + '<input type="text" inputmode="decimal" class="lsPosPreis" placeholder="€/St." style="padding:6px 6px; text-align:right;">'
       + '<button type="button" class="btn small secondary lsPosDel" style="padding:4px 9px; color:#c23f12;">&times;</button>';
     document.getElementById('lsPosListe').appendChild(div);
     div.querySelectorAll('input').forEach(function(el){ el.oninput = summenAktualisieren; });
     div.querySelector('.lsPosDel').onclick = function(){ div.parentNode.removeChild(div); summenAktualisieren(); };
   };
-  document.getElementById('lsPosAdd').onclick = posZeileHinzu;
+  document.getElementById('lsPosAdd').onclick = function(){ posZeileHinzu(''); };
+  // Häufige Material-Positionen schon vorbereiten (leer lassen = kommt nicht aufs Blatt)
+  posZeileHinzu('Ventilkappen');
+  posZeileHinzu('Kleinmaterial');
+  posZeileHinzu('CO2-Dichtung');
   summenAktualisieren();
 
   document.getElementById('lsTeilen').onclick = function(){
