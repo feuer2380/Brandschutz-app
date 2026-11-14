@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-14 10:00';
-var APP_VERSION_TEXT = '14.11. 10:00';
+var APP_VERSION = '2026-11-14 10:15';
+var APP_VERSION_TEXT = '14.11. 10:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -15761,7 +15761,13 @@ function buildSammelberichtHtml(sb, k){
       var istOk = g.ergebnis === 'In Ordnung';
       html += '<div class="pos-karte">';
       html += '<div class="pos-kopf">';
-      html += '<div><div class="titel">' + g.nr + '. ' + escapeHtml(g.typ) + bioHinweisHtml(g) + '</div>';
+      // Brandschutzbegehung: im Typ-Feld steht oft das Anlage-Datum (z.B. "10.09.2026") -> als Titel "Brandschutzbegehung" zeigen, Datum weglassen
+      var posTitel = g.typ || '';
+      if(kat === 'Brandschutzbegehung'){
+        var rest = String(posTitel).replace(/^\s*\d{1,2}\.\s*\d{1,2}\.\s*\d{2,4}\s*[-:,]?\s*/, '').trim();
+        posTitel = 'Brandschutzbegehung' + (rest && rest.toLowerCase() !== 'brandschutzbegehung' ? ' \u2013 ' + rest : '');
+      }
+      html += '<div><div class="titel">' + g.nr + '. ' + escapeHtml(posTitel) + bioHinweisHtml(g) + '</div>';
       html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
       var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
       if(istFuellKategorie(kat)){
