@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-14 10:15';
-var APP_VERSION_TEXT = '14.11. 10:15';
+var APP_VERSION = '2026-11-14 19:10';
+var APP_VERSION_TEXT = '14.11. 19:10';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -707,19 +707,23 @@ function dbPut(store, obj, cb){
     if(cb) cb();
   };
   var offline = (navigator.onLine === false);
-  var timer = setTimeout(function(){
-    if(fertig) return;
+  var bestaetigt = false;
+  // Die Aenderung ist sofort lokal gespeichert -> nach kurzer Zeit weitermachen, nicht auf den Server warten
+  var timer = setTimeout(function(){ weiter(); }, offline ? 300 : 700);
+  var timerHinweis = setTimeout(function(){
+    if(bestaetigt) return;
     toast(offline ? 'Offline gespeichert – wird hochgeladen, sobald Netz da ist' : 'Schwache Verbindung – wird gespeichert, sobald Internet da ist');
     offlineHinweisAktualisieren(true);
-    weiter();
-  }, offline ? 300 : 4000);
+  }, offline ? 300 : 5000);
   db.collection(store).doc(obj.id).set(mitZeitstempel(obj)).then(function(){
-    clearTimeout(timer);
+    bestaetigt = true;
+    clearTimeout(timer); clearTimeout(timerHinweis);
     if(store === 'geraete') syncOeffentlichesGeraet(obj);
     if(store === 'kunden') syncOeffentlichFuerKunde(obj);
     weiter();
   }).catch(function(err){
-    clearTimeout(timer);
+    bestaetigt = true;
+    clearTimeout(timer); clearTimeout(timerHinweis);
     console.error('dbPut Fehler', err);
     zeigeSpeicherFehler(err);
   });
@@ -735,7 +739,8 @@ function dbDelete(store, id, cb){
   if(store === 'zeiten' && typeof zeitSchichtCache !== 'undefined') zeitSchichtCache.ref = null;
   var fertigD = false;
   var weiterD = function(){ if(fertigD) return; fertigD = true; if(cb) cb(); };
-  var timerD = setTimeout(function(){ offlineHinweisAktualisieren(true); weiterD(); }, (navigator.onLine === false) ? 300 : 4000);
+  var timerD = setTimeout(function(){ weiterD(); }, (navigator.onLine === false) ? 300 : 700);
+  var timerD2 = setTimeout(function(){ offlineHinweisAktualisieren(true); }, (navigator.onLine === false) ? 300 : 5000);
   if(store === 'geraete'){ try{ portalGeraetSchreiben({ id: id }, null); }catch(e){} }
   if(DATEI_STORES.indexOf(store) > -1){
     try{
@@ -745,10 +750,10 @@ function dbDelete(store, id, cb){
   }
   loeschVermerkSchreiben(store, id);
   db.collection(store).doc(id).delete().then(function(){
-    clearTimeout(timerD);
+    clearTimeout(timerD); clearTimeout(timerD2);
     weiterD();
   }).catch(function(err){
-    clearTimeout(timerD);
+    clearTimeout(timerD); clearTimeout(timerD2);
     console.error('dbDelete Fehler', err);
     zeigeSpeicherFehler(err);
   });
@@ -12203,32 +12208,59 @@ function modalZeitUnterschrift(name, jahr, monat){
 }
 
 function zeitMonatTabelleHtml(name, jahr, monat, daten, mitLoeschen, bearbeiten){
-  var h = '';
+  // Bildschirm-Ansicht: je Tag eine Karte mit gut sichtbarem Datum/Wochentag (Ausdruck bleibt die Tabelle)
   if(daten.zeilen.length === 0) return '<div class="empty">Keine Stempelzeiten in diesem Monat</div>';
-  var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
-  h += '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
-  h += '<tr style="text-align:left; border-bottom:1px solid #999;"><th>Tag</th><th>Kommen</th><th>Gehen</th><th>Pause</th><th>Netto</th></tr>';
+  var wtLang = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+  var h = '';
   daten.zeilen.forEach(function(z){
     var d = new Date(z.key + 'T12:00:00');
-    h += '<tr style="border-bottom:1px solid #ddd; vertical-align:top;">';
-    h += '<td style="padding:6px 2px;">' + wt[d.getDay()] + ' ' + fmtDate(z.key + 'T12:00:00').substring(0, 6) + (z.orte.length ? '<div style="font-size:11px; color:#666;">' + z.orte.map(escapeHtml).join(', ') + '</div>' : '') + (z.arztText ? '<div style="font-size:11px; color:#2a6fb0;">' + z.arztText + '</div>' : '') + (z.abwText ? '<div style="font-size:12px; font-weight:700; color:#2a6fb0;">' + z.abwText + '</div>' : '') + (z.notizen.length ? '<div style="font-size:11px; color:#444;">' + z.notizen.map(escapeHtml).join(' &middot; ') + '</div>' : '') + (bearbeiten ? '<button class="btn small secondary" style="font-size:11px; padding:2px 8px; margin-top:3px;" data-zeitnotiztag="' + z.key + '">Notiz</button>' : '') + '</td>';
-    h += '<td>' + (z.kommenListe.length ? z.kommenListe.join('<br>') : '-') + '</td>';
-    h += '<td>' + (z.gehenListe.length ? z.gehenListe.join('<br>') : '') + (z.laeuft ? (z.gehenListe.length ? '<br>' : '') + '<span style="color:#2e7d4f;">läuft</span>' : (z.offen ? (z.gehenListe.length ? '<br>' : '') + '<span style="color:#b02a2a;">fehlt</span>' : (z.gehenListe.length ? '' : '-'))) + '</td>';
-    h += '<td>' + zeitDauer(z.pause) + '</td>';
-    h += '<td><b>' + zeitDauer(z.arbeit) + '</b></td></tr>';
-    if(mitLoeschen){
-      h += '<tr><td colspan="5" style="padding-bottom:6px;">';
-      z.liste.forEach(function(s){
-        h += '<button class="btn small secondary" style="margin:2px; font-size:11px;" data-zeitloeschen="' + s.id + '">' + (ZEIT_ABW_TYPEN.indexOf(s.typ) >= 0 ? '' : zeitUhr(s.zeit) + ' ') + ZEIT_TYPEN[s.typ] + (s.ort ? ' (' + escapeHtml(zeitOrtText(s)) + ')' : '') + ' &times;</button>';
-      });
-      h += '</td></tr>';
+    var we = (d.getDay() === 0 || d.getDay() === 6);
+    h += '<div style="border:1px solid #d8d0c4; border-radius:12px; overflow:hidden; margin-bottom:10px; background:#fff;">';
+    // Kopfzeile: Wochentag + Datum gross, Netto rechts
+    h += '<div style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:' + (we ? '#c23f12' : '#2a2622') + '; color:#fff;">';
+    h += '<div style="font-size:24px; font-weight:800; line-height:1; min-width:44px;">' + fmtDate(z.key + 'T12:00:00').substring(0, 3) + '</div>';
+    h += '<div style="flex:1; line-height:1.15;"><div style="font-size:16px; font-weight:800;">' + wtLang[d.getDay()] + '</div><div style="font-size:12px; opacity:0.85;">' + fmtDate(z.key + 'T12:00:00') + '</div></div>';
+    h += '<div style="text-align:right; line-height:1.1;"><div style="font-size:20px; font-weight:800;">' + zeitDauer(z.arbeit) + '</div><div style="font-size:11px; opacity:0.85;">Pause ' + zeitDauer(z.pause) + '</div></div>';
+    h += '</div>';
+    // Zeiten: je Zeile Kommen -> Gehen
+    h += '<div style="padding:8px 12px 6px; font-size:15px; color:#2a2622;">';
+    var n = Math.max(z.kommenListe.length, z.gehenListe.length, 1);
+    for(var i = 0; i < n; i++){
+      var ko = z.kommenListe[i] || '&ndash;';
+      var ge = z.gehenListe[i];
+      if(!ge){
+        if(i === n - 1 && z.laeuft) ge = '<span style="color:#2e7d4f; font-weight:700;">läuft</span>';
+        else if(i === n - 1 && z.offen) ge = '<span style="color:#b02a2a; font-weight:700;">Gehen fehlt</span>';
+        else ge = '&ndash;';
+      }
+      h += '<div style="display:flex; align-items:baseline; gap:8px; padding:2px 0;"><span style="color:#2e7d4f; font-weight:800; width:16px;">&#9654;</span><b>' + ko + '</b><span style="color:#8a7d70;">bis</span><b>' + ge + '</b></div>';
     }
+    if(z.orte.length) h += '<div style="font-size:12px; color:#666; margin-top:4px;">' + z.orte.map(escapeHtml).join(', ') + '</div>';
+    if(z.arztText) h += '<div style="font-size:12px; color:#2a6fb0; margin-top:2px;">' + z.arztText + '</div>';
+    if(z.abwText) h += '<div style="font-size:13px; font-weight:700; color:#2a6fb0; margin-top:2px;">' + z.abwText + '</div>';
+    if(z.notizen.length) h += '<div style="font-size:12px; color:#444; margin-top:2px;">&#128221; ' + z.notizen.map(escapeHtml).join(' &middot; ') + '</div>';
+    h += '</div>';
+    if(bearbeiten || mitLoeschen){
+      h += '<div style="display:flex; gap:8px; align-items:flex-start; padding:0 12px 10px;">';
+      if(bearbeiten) h += '<button class="btn small secondary" style="font-size:12px; padding:4px 10px; flex:0 0 auto;" data-zeitnotiztag="' + z.key + '">Notiz</button>';
+      if(mitLoeschen && z.liste.length){
+        h += '<details style="flex:1;"><summary style="font-size:12px; color:#8a7d70; padding:5px 0; cursor:pointer;">Stempel bearbeiten / löschen (' + z.liste.length + ')</summary>';
+        z.liste.forEach(function(s){
+          h += '<button class="btn small secondary" style="margin:2px; font-size:11px;" data-zeitloeschen="' + s.id + '">' + (ZEIT_ABW_TYPEN.indexOf(s.typ) >= 0 ? '' : zeitUhr(s.zeit) + ' ') + ZEIT_TYPEN[s.typ] + (s.ort ? ' (' + escapeHtml(zeitOrtText(s)) + ')' : '') + ' &times;</button>';
+        });
+        h += '</details>';
+      }
+      h += '</div>';
+    }
+    h += '</div>';
   });
-  h += '<tr style="font-weight:700;"><td colspan="3" style="padding-top:8px;">Summe</td><td style="padding-top:8px;">' + zeitDauer(daten.summePause) + '</td><td style="padding-top:8px;">' + zeitDauer(daten.summe) + '</td></tr>';
-  if(daten.abwZeile) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px; font-weight:700; color:#2a6fb0;">' + daten.abwZeile + '</td></tr>';
-  if(daten.summeArzt > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Arzt (als Arbeitszeit gerechnet): ' + zeitDauer(daten.summeArzt) + '</td></tr>';
-  if(daten.summeTelew > 0) h += '<tr><td colspan="5" style="font-size:12px; padding-top:4px;">davon Teleworking: ' + zeitDauer(daten.summeTelew) + '</td></tr>';
-  h += '</table>';
+  // Summe
+  h += '<div style="border-radius:12px; background:#2e7d4f; color:#fff; padding:12px 14px; display:flex; align-items:center; gap:10px;">';
+  h += '<div style="flex:1; font-size:16px; font-weight:800;">Summe Monat</div>';
+  h += '<div style="text-align:right;"><div style="font-size:22px; font-weight:800;">' + zeitDauer(daten.summe) + '</div><div style="font-size:11px; opacity:0.9;">Pause ' + zeitDauer(daten.summePause) + '</div></div></div>';
+  if(daten.abwZeile) h += '<div style="font-size:13px; margin-top:6px; font-weight:700; color:#2a6fb0;">' + daten.abwZeile + '</div>';
+  if(daten.summeArzt > 0) h += '<div style="font-size:13px; margin-top:4px;">davon Arzt (als Arbeitszeit gerechnet): ' + zeitDauer(daten.summeArzt) + '</div>';
+  if(daten.summeTelew > 0) h += '<div style="font-size:13px; margin-top:4px;">davon Teleworking: ' + zeitDauer(daten.summeTelew) + '</div>';
   return h;
 }
 
@@ -13290,7 +13322,9 @@ document.addEventListener('click', function(ev){
   if(!f) return;
   if(b){ f.privat = b.getAttribute('data-p') === '1'; if(f.privat && f.kundeVorschlag){ f.kundeId = ''; f.kundeVorschlag = false; } }
   if(o){ f.zuPruefen = false; f.kundeVorschlag = false; }
-  dbPut('fahrten', f, function(){ render(); if(o) toast('Fahrt geprüft'); });
+  render(); // sofort anzeigen, Speichern laeuft im Hintergrund
+  if(o) toast('Fahrt geprüft');
+  dbPut('fahrten', f, function(){ render(); });
 }, true);
 
 function renderFahrtenbuch(){
