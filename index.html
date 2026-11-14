@@ -16,25 +16,46 @@
 <link rel="icon" href="data:image/png;base64,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">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-  // Grosse Zusatzprogramme werden im Hintergrund geladen (defer) - der Start wartet nicht darauf
-  document.addEventListener('DOMContentLoaded', function(){
-    if(window.pdfjsLib){
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    }
-  });
+  // Grosse Zusatzprogramme (PDF, Druck, Texterkennung) erst NACH dem Start nachladen,
+  // damit die App beim Oeffnen nicht ruckelt. Sie sind nach ca. 2-3 Sekunden da.
+  var ZUSATZ_SKRIPTE = [
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js'
+  ];
+  var zusatzGeladen = false;
+  function zusatzSkripteLaden(){
+    if(zusatzGeladen) return;
+    zusatzGeladen = true;
+    var i = 0;
+    var naechstes = function(){
+      if(i >= ZUSATZ_SKRIPTE.length) return;
+      var sc = document.createElement('script');
+      sc.src = ZUSATZ_SKRIPTE[i++];
+      sc.onload = function(){
+        if(window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions.workerSrc){
+          pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        }
+        setTimeout(naechstes, 150);
+      };
+      sc.onerror = function(){ setTimeout(naechstes, 150); };
+      document.head.appendChild(sc);
+    };
+    naechstes();
+  }
+  window.addEventListener('load', function(){ setTimeout(zusatzSkripteLaden, 1500); });
+  // Sicherheitsnetz: spaetestens nach 4 Sekunden laden, auch wenn "load" ausbleibt
+  setTimeout(zusatzSkripteLaden, 4000);
 </script>
-<script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-14 06:00';
-var APP_VERSION_TEXT = '14.11. 06:00';
+var APP_VERSION = '2026-11-14 10:00';
+var APP_VERSION_TEXT = '14.11. 10:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -967,6 +988,7 @@ function tsMillis(t){
   return 0;
 }
 function stateEintragSetzen(store, obj){
+  stateGeaendert();
   var liste = state[store] || [];
   for(var i = 0; i < liste.length; i++){
     if(liste[i] && liste[i].id === obj.id){ liste[i] = obj; state[store] = liste; return; }
@@ -975,6 +997,7 @@ function stateEintragSetzen(store, obj){
   state[store] = liste;
 }
 function stateEintragEntfernen(store, id){
+  stateGeaendert();
   var liste = state[store] || [];
   var neu = [];
   for(var i = 0; i < liste.length; i++){ if(!(liste[i] && liste[i].id === id)) neu.push(liste[i]); }
@@ -990,11 +1013,61 @@ function dbGetKundeGeraete(kundeId, cb){
     dbGetAll('geraete', cb, 'cache');
   });
 }
-var renderGeplant = null;
+// Hintergrund-Aktualisierung (neue Daten vom Server): ruhig neu zeichnen
+// - beim Start werden viele Datenpakete zu einem Neuzeichnen zusammengefasst
+// - nicht waehrend man tippt (Tastatur bleibt offen) und nicht im Scan / Geraete-Check (Kamera, Formular)
+// - Scrollposition bleibt erhalten, unveraenderte Seiten werden gar nicht neu gezeichnet
+// ---------- Schnelle Suche nach ID (statt jedes Mal alle Eintraege durchzugehen) ----------
+var stateVersion = 0, idIndexCache = {};
+function stateGeaendert(){ stateVersion++; }
+function idIndex(store){
+  var arr = state[store] || [];
+  var c = idIndexCache[store];
+  if(!c || c.arr !== arr || c.len !== arr.length || c.ver !== stateVersion){
+    var map = {}, proKunde = {};
+    for(var i = 0; i < arr.length; i++){
+      var x = arr[i];
+      if(!x) continue;
+      if(x.id != null && !map[x.id]) map[x.id] = x;
+      if(x.kundeId != null){ (proKunde[x.kundeId] || (proKunde[x.kundeId] = [])).push(x); }
+    }
+    c = idIndexCache[store] = { arr: arr, len: arr.length, ver: stateVersion, map: map, proKunde: proKunde };
+  }
+  return c;
+}
+function eintragById(store, id){
+  if(id == null) return undefined;
+  var x = idIndex(store).map[id];
+  if(x && x.id === id) return x;
+  var arr = state[store] || [];
+  for(var i = 0; i < arr.length; i++){ if(arr[i] && arr[i].id === id) return arr[i]; }
+  return undefined;
+}
+function geraetById(id){ return eintragById('geraete', id); }
+function kundeById(id){ return eintragById('kunden', id); }
+function geraeteVonKunde(kid){ return (idIndex('geraete').proKunde[kid] || []).slice(); }
+var renderGeplant = null, renderWartet = false, appStartZeit = Date.now();
+function renderTipptGerade(){
+  var a = document.activeElement;
+  var m = document.getElementById('main');
+  return !!(a && m && m.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+}
 function renderBald(){
   if(renderGeplant) return;
-  renderGeplant = setTimeout(function(){ renderGeplant = null; render(); }, 150);
+  var warte = (Date.now() - appStartZeit < 6000) ? 700 : 250;
+  renderGeplant = setTimeout(function(){
+    renderGeplant = null;
+    if(state.tab === 'scan' || state.tab === 'geraetCheck' || renderTipptGerade() || (typeof scannerInstance !== 'undefined' && scannerInstance)){ renderWartet = true; return; }
+    renderWartet = false;
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    renderHintergrund = true;
+    try{ render(); } finally { renderHintergrund = false; }
+    if(y) window.scrollTo(0, y);
+  }, warte);
 }
+var renderHintergrund = false;
+// verschobenes Neuzeichnen nachholen, sobald man mit Tippen fertig ist
+document.addEventListener('focusout', function(){ setTimeout(function(){ if(renderWartet && !renderTipptGerade()) renderBald(); }, 300); });
 function aenderungsListener(store, beiAenderung){
   var stand = syncStandLesen(store);
   var ab = new Date(Math.max(0, stand - SYNC_SICHERHEIT_MS));
@@ -1125,6 +1198,7 @@ function loadAllQuelle(quelle, cb){
   });
 }
 function loadAllUebernehmen(ergebnis){
+  stateGeaendert();
   LADE_STORES.forEach(function(store){ state[store] = ergebnis[store] || []; });
   try{ zeitNamenMigrieren(); }catch(e){}
 }
@@ -1636,6 +1710,7 @@ function renderLogin(){
 }
 
 function renderInner(){
+  stateGeaendert();
   var m = document.getElementById('main');
   var tabsEl = document.querySelector('.tabs');
   var fabEl = document.getElementById('fabBtn');
@@ -1673,25 +1748,31 @@ function renderInner(){
     var istAktiv = (dt === state.tab) || (dt === 'mehr' && (state.tab === 'auslastung' || state.tab === 'berichte' || state.tab === 'statistik' || state.tab === 'lager' || state.tab === 'zeit' || state.tab === 'aufgaben' || state.tab === 'kalender' || state.tab === 'fahrtenbuch' || state.tab === 'schnellfuell' || state.tab === 'infodok'));
     b.className = 'tabbtn' + (istAktiv ? ' active' : '');
   });
-  if(state.tab === 'dashboard') m.innerHTML = renderDashboard();
-  else if(state.tab === 'kunden') m.innerHTML = renderKunden();
-  else if(state.tab === 'pruefungen') m.innerHTML = renderPruefungen();
-  else if(state.tab === 'berichte') m.innerHTML = renderBerichte();
-  else if(state.tab === 'statistik') m.innerHTML = darfStatistik() ? renderStatistik() : '<div class="empty">Keine Berechtigung</div>';
-  else if(state.tab === 'kundeDetail') m.innerHTML = renderKundeDetail(state.activeKundeId);
-  else if(state.tab === 'scan') m.innerHTML = renderScan();
-  else if(state.tab === 'geraetCheck') m.innerHTML = renderGeraetCheck(state.activeGeraetId);
-  else if(state.tab === 'lager') m.innerHTML = renderLager();
-  else if(state.tab === 'zeit') m.innerHTML = renderZeit();
-  else if(state.tab === 'aufgaben') m.innerHTML = renderAufgaben();
-  else if(state.tab === 'kalender') m.innerHTML = renderKalender();
-  else if(state.tab === 'fahrtenbuch') m.innerHTML = renderFahrtenbuch();
-  else if(state.tab === 'schnellfuell') m.innerHTML = renderSchnellfuell();
-  else if(state.tab === 'infodok') m.innerHTML = renderInfoDok();
-  else if(state.tab === 'auslastung') m.innerHTML = istVollsicht() ? renderAuslastung() : '<div class="empty">Keine Berechtigung</div>';
+  var neuHtml = '';
+  if(state.tab === 'dashboard') neuHtml = renderDashboard();
+  else if(state.tab === 'kunden') neuHtml = renderKunden();
+  else if(state.tab === 'pruefungen') neuHtml = renderPruefungen();
+  else if(state.tab === 'berichte') neuHtml = renderBerichte();
+  else if(state.tab === 'statistik') neuHtml = darfStatistik() ? renderStatistik() : '<div class="empty">Keine Berechtigung</div>';
+  else if(state.tab === 'kundeDetail') neuHtml = renderKundeDetail(state.activeKundeId);
+  else if(state.tab === 'scan') neuHtml = renderScan();
+  else if(state.tab === 'geraetCheck') neuHtml = renderGeraetCheck(state.activeGeraetId);
+  else if(state.tab === 'lager') neuHtml = renderLager();
+  else if(state.tab === 'zeit') neuHtml = renderZeit();
+  else if(state.tab === 'aufgaben') neuHtml = renderAufgaben();
+  else if(state.tab === 'kalender') neuHtml = renderKalender();
+  else if(state.tab === 'fahrtenbuch') neuHtml = renderFahrtenbuch();
+  else if(state.tab === 'schnellfuell') neuHtml = renderSchnellfuell();
+  else if(state.tab === 'infodok') neuHtml = renderInfoDok();
+  else if(state.tab === 'auslastung') neuHtml = istVollsicht() ? renderAuslastung() : '<div class="empty">Keine Berechtigung</div>';
 
+  // Hintergrund-Aktualisierung ohne Aenderung -> nichts tun (kein Flackern)
+  if(renderHintergrund && m._letztesHtml === neuHtml && m._letzterTab === state.tab) return;
+  m.innerHTML = neuHtml;
+  m._letztesHtml = neuHtml; m._letzterTab = state.tab;
   if(state.tab !== 'scan') stopScanner();
   bindDynamic();
+  document.querySelectorAll('[data-dashalle]').forEach(function(b){ b.onclick = function(){ state.dashUebAlle = true; render(); }; });
   document.querySelectorAll('[data-dashtermin]').forEach(function(c){
     c.onclick = function(){ state.kalTag = c.getAttribute('data-dashtermin'); state.kalMonat = state.kalTag.substring(0, 7); state.tab = 'kalender'; render(); };
   });
@@ -1765,18 +1846,18 @@ function berichtDateiname(k, nr, prefix){
 }
 function kundeFuerPruefung(p){
   if(p.geraetId){
-    var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    var g = geraetById(p.geraetId);
     if(g){
-      var kg = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+      var kg = kundeById(g.kundeId);
       if(kg) return kg;
     }
   }
-  return state.kunden.filter(function(x){ return x.id === p.kundeId; })[0];
+  return kundeById(p.kundeId);
 }
 
 function geraetFuerPruefung(p){
   if(!p.geraetId) return null;
-  return state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] || null;
+  return geraetById(p.geraetId) || null;
 }
 
 function istVollsicht(){
@@ -2146,7 +2227,7 @@ function pruefungAnzeigeText(p, ohnePerson){
 }
 
 function kundeIstAktiv(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   return !!(k && !k.geloescht && !k.stillgelegt);
 }
 
@@ -2316,7 +2397,7 @@ function renderDashboard(){
     if(routeAnz) html += '<button type="button" class="btn block secondary" id="routeHeuteBtn" data-routetag="' + routeTag + '" style="margin-bottom:10px;">&#128506; Route für ' + (routeTag === 0 ? 'heute' : 'morgen') + ' (' + routeAnz + ' ' + (routeAnz === 1 ? 'Stopp' : 'Stopps') + ')</button>';
     terminTage.forEach(function(e){
       var t = e.t;
-      var kT = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+      var kT = t.kundeId ? kundeById(t.kundeId) : null;
       var tagText = e.offset === 0 ? 'Heute' : (e.offset === 1 ? 'Morgen' : fmtDate(e.key + 'T12:00:00').substring(0, 6));
       var wer = (t.personen || []).indexOf('alle') >= 0 ? 'Alle' : (t.personen || []).map(function(n){ return zustaendigKurz(n); }).join(', ');
       // Termin-Karte im gleichen Aussehen wie die Kundenkarten unten
@@ -2392,7 +2473,7 @@ function renderDashboard(){
   var htmlOkt = html;
   html = htmlVorOkt;
 
-  function renderPruefungsGruppenHtml(list){
+  function renderPruefungsGruppenHtml(list, maxKunden){
     var innerHtml = '';
     var gruppen = {};
     var reihenfolge = [];
@@ -2410,6 +2491,8 @@ function renderDashboard(){
       var minB = Math.min.apply(null, gruppen[b].eintraege.map(function(p){ return daysUntil(p.datum); }));
       return minA - minB;
     });
+    var ausgeblendet = 0;
+    if(maxKunden && reihenfolge.length > maxKunden){ ausgeblendet = reihenfolge.length - maxKunden; reihenfolge = reihenfolge.slice(0, maxKunden); }
     reihenfolge.forEach(function(key){
       var gr = gruppen[key];
       var schlimmsteCls = 'blau';
@@ -2420,13 +2503,15 @@ function renderDashboard(){
       });
       innerHtml += kundeAufgabeKarteHtml(gr.kunde, gr.eintraege, statusFuerBaldFaellig);
     });
+    if(ausgeblendet) innerHtml += '<button type="button" class="btn block secondary" data-dashalle="1" style="margin-top:8px;">Weitere ' + ausgeblendet + ' Kunden anzeigen</button>';
     return innerHtml;
   }
 
   var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
   if(ueberfaelligPruefungen.length > 0){
     html += '<div class="monatBox ueb"><div class="monatKopf ueberKopf">Überfällig <span class="monatAnz">' + ueberfaelligPruefungen.length + '</span></div>';
-    html += renderPruefungsGruppenHtml(ueberfaelligPruefungen);
+    // nur die dringendsten Kunden sofort zeigen (Seite bleibt schnell), Rest auf Knopfdruck
+    html += renderPruefungsGruppenHtml(ueberfaelligPruefungen, state.dashUebAlle ? 0 : 40);
     html += '</div>';
   }
   html += htmlOkt;
@@ -2454,7 +2539,7 @@ function renderDashboard(){
     var innenrevGruppen = {};
     var innenrevReihenfolge = [];
     innenrevListe.forEach(function(item){
-      var k = state.kunden.filter(function(x){ return x.id === item.geraet.kundeId; })[0];
+      var k = kundeById(item.geraet.kundeId);
       var key = k ? k.id : 'unbekannt';
       if(!innenrevGruppen[key]){
         innenrevGruppen[key] = { kunde: k, eintraege: [] };
@@ -2525,7 +2610,7 @@ function renderDashboard(){
     });
     geraeteKundenReihenfolge.forEach(function(kid){
       var liste = geraeteProKunde[kid];
-      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+      var k = kundeById(kid);
       var kName = k ? k.name : 'Unbekannt';
       var aufgeklappt = !!(state.alleGeraeteAufgeklappt && state.alleGeraeteAufgeklappt[kid]);
       html += '<div class="card" style="border-left:4px solid #8e8e8e;">';
@@ -2770,7 +2855,7 @@ function sfGrammText(g){ return g >= 1000 ? (String(Math.round(g / 100) / 10).re
 function sfFlaschen(e){ var n = 0; (e.posten || []).forEach(function(x){ n += x.anzahl || 0; }); return n; }
 function sfGramm(e){ var n = 0; (e.posten || []).forEach(function(x){ n += (x.anzahl || 0) * (x.gramm || 0); }); return n; }
 function sfKundeName(e){
-  var k = e.kundeId ? state.kunden.filter(function(x){ return x.id === e.kundeId; })[0] : null;
+  var k = e.kundeId ? kundeById(e.kundeId) : null;
   return k ? k.name : (e.kundeFrei || '');
 }
 function renderSchnellfuell(){
@@ -2877,7 +2962,7 @@ function bindSchnellfuell(){
       customConfirm('Diesen Eintrag löschen?', function(){
         dbDelete('schnellfuellungen', id, function(){
           var sfE = (state.schnellfuellungen || []).filter(function(x){ return x.id === id; })[0];
-          var sfK = sfE && sfE.kundeId ? state.kunden.filter(function(x){ return x.id === sfE.kundeId; })[0] : null;
+          var sfK = sfE && sfE.kundeId ? kundeById(sfE.kundeId) : null;
           if(sfK && treueBuchungenEntfernen(sfK, 'sf:' + id)) dbPut('kunden', sfK, function(){ treuePortalSync(sfK); });
           state.schnellfuellungen = (state.schnellfuellungen || []).filter(function(x){ return x.id !== id; });
           render();
@@ -4239,7 +4324,7 @@ function modalTreueKarteZuordnen(code){
     document.getElementById('tkListe').innerHTML = h;
     document.querySelectorAll('.tkWahl').forEach(function(b){
       b.onclick = function(){
-        var k = state.kunden.filter(function(x){ return x.id === b.getAttribute('data-kid'); })[0];
+        var k = kundeById(b.getAttribute('data-kid'));
         if(!k) return;
         customConfirm('Karte Nr. ' + kt.nr + ' an ' + kundeAnzeigeName(k) + ' ausgeben?', function(){
           var r2 = treueKartenDaten();
@@ -4275,7 +4360,7 @@ function treueFortschrittHtml(punkte, gross){
   return h;
 }
 function modalTreueKunde(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k){ toast('Kunde nicht gefunden'); return; }
   var punkte = treuePunkte(k);
   var html = '<div class="modal-head"><h3>Treuekarte</h3><button class="close" id="mClose">&times;</button></div>';
@@ -4445,7 +4530,7 @@ function treueKundenKarteHtml(k){
   return h;
 }
 function bindTreueKunde(){
-  var k = state.kunden.filter(function(x){ return x.id === state.activeKundeId; })[0];
+  var k = kundeById(state.activeKundeId);
   if(!k) return;
   var o = document.getElementById('tkOeffnen'); if(o) o.onclick = function(){ modalTreueKunde(k.id); };
   var rk = document.getElementById('tkRueck'); if(rk) rk.onclick = function(){ modalRueckseiten(1); };
@@ -4631,7 +4716,7 @@ function zeigeGeraetAuswahl(matches){
   html += '<div class="modal-head"><h3>Mehrere Treffer</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:10px;">Diese Nummer ist bei mehreren Kunden vergeben (altes Aufkleber-System). Bitte auswählen, um wen es sich handelt:</div>';
   matches.forEach(function(g){
-    var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+    var k = kundeById(g.kundeId);
     html += '<button class="btn block secondary auswahlGeraetBtn" data-gid="' + g.id + '" style="text-align:left; margin-bottom:8px;">' + escapeHtml(k ? k.name : 'Unbekannter Kunde') + ' &middot; ' + escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + (g.ausgeschieden ? ' <span class="badge warn" style="margin-left:6px;">ausgeschieden ' + fmtDate(g.ausgeschiedenAm) + '</span>' : ' <span class="badge ok" style="margin-left:6px;">aktiv</span>') + '</button>';
   });
   openModal(html);
@@ -4688,7 +4773,7 @@ function verarbeiteScan(text){
   if(id.indexOf('BSV-GERAET:') === 0) id = id.substring('BSV-GERAET:'.length);
   else if(id.indexOf('BSV-KUNDE:') === 0){
     var kid = id.substring('BSV-KUNDE:'.length);
-    var kExists = state.kunden.filter(function(x){ return x.id === kid; })[0];
+    var kExists = kundeById(kid);
     if(kExists){
       state.activeKundeId = kid;
       state.tab = 'kundeDetail';
@@ -4734,7 +4819,7 @@ function verarbeiteScan(text){
   }
   var treffer = state.geraete.filter(function(x){ return x.id === id || x.externeId === id; });
   if(treffer.length === 0){
-    var kundeTreffer = state.kunden.filter(function(x){ return x.id === id && !x.geloescht; })[0];
+    var kundeTreffer = (function(){ var x = kundeById(id); return (x && !x.geloescht) ? x : undefined; })();
     if(kundeTreffer){
       state.activeKundeId = kundeTreffer.id;
       state.tab = 'kundeDetail';
@@ -4844,9 +4929,9 @@ function naechsteGeraeteNummer(kundeId, kategorie){
 }
 
 function renderGeraetCheck(geraetId){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return '<div class="empty">Gerät nicht gefunden</div>';
-  var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+  var k = kundeById(g.kundeId);
   var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
 
   var html = '';
@@ -5190,7 +5275,7 @@ function modalFehlendeAngaben(){
   var html = '<div class="modal-head"><h3>Fehlende Angaben</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:10px;">' + akt.length + ' Geräte bei ' + kids.length + ' Kunden. Gibt es am Gerät keine Angabe, bitte &bdquo;keine&ldquo; eintragen.</div>';
   kids.forEach(function(kid){
-    var k = state.kunden.filter(function(x){ return x.id === kid; })[0] || {};
+    var k = kundeById(kid) || {};
     html += '<div class="card fehltKunde" data-kid="' + escapeHtml(kid) + '" style="cursor:pointer; margin-bottom:8px;"><div class="row"><b>' + escapeHtml(k.name || '') + '</b><span class="badge warn">' + proK[kid].length + '</span></div>';
     proK[kid].slice(0, 8).forEach(function(g){
       html += '<div style="font-size:13px; padding:3px 0; border-top:1px solid #eee; margin-top:3px;">Nr. ' + escapeHtml(String(geraeteNummerWert(g))) + ' &middot; ' + escapeHtml(g.typ || g.kategorie || '') + ' &ndash; <b style="color:#c23f12;">' + abDatenFehlen(g).join(', ') + '</b></div>';
@@ -5471,7 +5556,7 @@ function irKundenHtml(liste){
   var kids = Object.keys(pk).sort(function(a, b){ return pk[b].length - pk[a].length; });
   var h = '<div class="section-title" style="margin-top:14px;">Bei welchen Kunden (' + kids.length + ')</div>';
   kids.forEach(function(kid){
-    var k = state.kunden.filter(function(x){ return x.id === kid; })[0] || {};
+    var k = kundeById(kid) || {};
     h += '<div class="card irKunde" data-kid="' + escapeHtml(kid) + '" style="cursor:pointer; padding:9px 12px; margin-bottom:6px;"><div class="row"><b style="color:#2a2622;">' + escapeHtml(k.name || '') + '</b><span class="badge">' + pk[kid].length + '</span></div>';
     var z = {};
     pk[kid].forEach(function(x){ var key = (x.g.typ || 'ohne Typ').trim() + ' (' + x.stufe + ' J.)'; z[key] = (z[key] || 0) + 1; });
@@ -5521,7 +5606,7 @@ function fluorGesamtDaten(){
     if(g.ausgeschieden) return;
     var st = bioStufe(g);
     if(!st) return;
-    var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+    var k = kundeById(g.kundeId);
     if(!k || k.geloescht || k.papierkorb) return;
     var istJetzt = bioJetzt(g);
     var jahr = istJetzt ? jetztJahr : (bioNaechstesJahr(g) || BIO_FRIST_JAHR);
@@ -5799,7 +5884,7 @@ function letzteErledigungInnerhalb24h(geraetId){
 
 function nurTerminVerschieben(geraetId, neuesDatum){
   if(!neuesDatum){ toast('Bitte zuerst ein Datum wählen'); return; }
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
   g.naechstePruefung = neuesDatum;
   dbPut('geraete', g, function(){
@@ -5818,7 +5903,7 @@ function nurTerminVerschieben(geraetId, neuesDatum){
 }
 
 function korrigiereZuAbfuellung(geraetId, pruefungId){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g){ toast('Gerät nicht gefunden'); return; }
   customConfirm('Alle heutigen "Angeschlossen"-Einträge für dieses Gerät werden rückgängig gemacht, der Anschluss-Termin wird auf den ursprünglichen Stand zurückgesetzt, und (falls noch nicht geschehen) wird stattdessen eine Abfüllung erfasst. Fortfahren?', function(){
     try {
@@ -5896,7 +5981,7 @@ function zeigeDebugErgebnis(titel, textHtml){
 
 function nurAbfuelldatumAktualisieren(geraetId, neuesDatum){
   if(!neuesDatum){ toast('Bitte zuerst ein Datum wählen'); return; }
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
   g.abfuelldatum = neuesDatum;
   g.leer = false;
@@ -5921,7 +6006,7 @@ document.addEventListener('click', function(ev){
   var el = ev.target && ev.target.closest ? ev.target.closest('[data-bioumstellen]') : null;
   if(!el || (el.closest && el.closest('#printArea'))) return;
   ev.preventDefault(); ev.stopPropagation();
-  var g = state.geraete.filter(function(x){ return x.id === el.getAttribute('data-bioumstellen'); })[0];
+  var g = geraetById(el.getAttribute('data-bioumstellen'));
   if(!g) return;
   bioUmstellungFragen(g, function(){ render(); }, true);
 }, true);
@@ -6030,7 +6115,7 @@ function ausscheideGrundFragen(g, weiter){
 // Liste aller ausgeschiedenen + getauschten Geraete eines Kunden (fuer Anzeige und Ausdruck)
 function rueckblickEintraege(kundeId, abJahr){
   var e = [];
-  var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId; });
+  var geraete = geraeteVonKunde(kundeId);
   geraete.forEach(function(g){
     if(g.ausgeschieden && g.ausgeschiedenAm){
       // Ersatzgeraet suchen: gleicher Kunde, gleiche Kategorie, gleiche Nr. oder gleicher Standort, danach angelegt
@@ -6059,7 +6144,7 @@ function rueckblickEintraege(kundeId, abJahr){
   return e;
 }
 function rueckblickDruckHtml(kundeId, abJahr){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0] || {};
+  var k = kundeById(kundeId) || {};
   var liste = rueckblickEintraege(kundeId, abJahr);
   var html = '<div class="bericht-brief ausstattung">';
   html += '<div class="pb-kopfzeile" style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #c23f12; padding-bottom:6px; margin-bottom:8px;"><div><div style="font-family:Georgia,serif; font-size:20px; font-weight:700;">Nachweis ausgeschiedene / getauschte Geräte</div><div class="meta">' + (abJahr ? 'Zeitraum ab ' + abJahr : 'Gesamter Zeitraum') + ' &middot; Stand: ' + fmtDate(new Date().toISOString()) + '</div></div>' + (typeof LOGO_DATA !== 'undefined' ? '<img src="' + LOGO_DATA + '" style="height:42px;">' : '') + '</div>';
@@ -6106,11 +6191,11 @@ function modalRueckblick(kundeId, abJahr){
 
 function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
   if(ergebnis === 'ausscheiden' && !ausscheideFrageLaeuft){
-    var gA = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    var gA = geraetById(geraetId);
     if(gA){ ausscheideGrundFragen(gA, function(){ ausscheideFrageLaeuft = true; try{ schnellErgebnisSetzen(geraetId, ergebnis, datumOverride); } finally { ausscheideFrageLaeuft = false; } }); return; }
   }
   if(ergebnis === 'in_ordnung' && !bioFrageLaeuft){
-    var gBio = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    var gBio = geraetById(geraetId);
     if(gBio && bioJetzt(gBio)){
       bioUmstellungFragen(gBio, function(){ bioFrageLaeuft = true; try{ schnellErgebnisSetzen(geraetId, ergebnis, datumOverride); } finally { bioFrageLaeuft = false; } });
       return;
@@ -6127,7 +6212,7 @@ function schnellErgebnisSetzen(geraetId, ergebnis, datumOverride){
 }
 
 function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
   var pruefDatumKurz = datumOverride || new Date().toISOString().substring(0,10);
   var istRueckwirkend = pruefDatumKurz !== new Date().toISOString().substring(0,10);
@@ -6193,7 +6278,7 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
 }
 
 function checkAbgefuellt(geraetId){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
   var standortEl = document.getElementById('checkStandort');
   if(standortEl) g.standort = standortEl.value.trim();
@@ -6218,11 +6303,11 @@ function checkAbgefuellt(geraetId){
 
 function checkAbschliessen(geraetId, ergebnis){
   if(ergebnis === 'ausscheiden' && !ausscheideFrageLaeuft){
-    var gA = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    var gA = geraetById(geraetId);
     if(gA){ ausscheideGrundFragen(gA, function(){ ausscheideFrageLaeuft = true; try{ checkAbschliessen(geraetId, ergebnis); } finally { ausscheideFrageLaeuft = false; } }); return; }
   }
   if(ergebnis === 'in_ordnung' && !bioFrageLaeuft){
-    var gBio = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+    var gBio = geraetById(geraetId);
     if(gBio && bioJetzt(gBio)){
       bioUmstellungFragen(gBio, function(){ bioFrageLaeuft = true; try{ checkAbschliessen(geraetId, ergebnis); } finally { bioFrageLaeuft = false; } });
       return;
@@ -6240,7 +6325,7 @@ function checkAbschliessen(geraetId, ergebnis){
 }
 
 function checkAbschliessenAusfuehren(geraetId, ergebnis){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   var standortEl = document.getElementById('checkStandort');
   if(standortEl) g.standort = standortEl.value.trim();
   var bemerkungEl = document.getElementById('checkBemerkung');
@@ -6472,7 +6557,7 @@ function renderKundenListe(query){
     var sKompakt = function(t){ return sNorm(t).replace(/ /g,''); };
     var qWorte = sNorm(q).split(' ').filter(function(w){ return w; });
     var qKompakt = sKompakt(q);
-    var sFeld = function(k){ return sNorm((k.name || '') + ' ' + (k.kundennummer || '') + ' ' + (k.objekt || '') + ' ' + (k.adresse || '')); };
+    var sFeld = function(k){ return sNorm((k.name || '') + ' ' + (k.vorname || '') + ' ' + (k.nachname || '') + ' ' + (k.kundennummer || '') + ' ' + (k.objekt || '') + ' ' + (k.adresse || '') + ' ' + (k.plz || '') + ' ' + (k.ort || '') + ' ' + (k.ansprechpartner || '') + ' ' + (k.telefon || '') + ' ' + (k.email || '')); };
     // 1) normale Suche: alle Suchwörter kommen irgendwo in Name, Nummer, Objekt oder Adresse vor (Satzzeichen/Umlaute egal)
     var treffer = liste.filter(function(k){
       var f = sFeld(k);
@@ -6481,7 +6566,7 @@ function renderKundenListe(query){
     // 2) Tippfehler-Suche: Buchstaben der Eingabe kommen in dieser Reihenfolge im Namen vor (z.B. "Pada" findet "Panda's Wok")
     if(treffer.length === 0 && qKompakt.length >= 3){
       treffer = liste.filter(function(k){
-        var n = sKompakt(k.name), pos = 0;
+        var n = sKompakt(kundeAnzeigeName(k)), pos = 0;
         for(var i = 0; i < qKompakt.length; i++){
           pos = n.indexOf(qKompakt.charAt(i), pos);
           if(pos === -1) return false;
@@ -6526,7 +6611,7 @@ function kundenDoppelteFinden(){
 }
 function modalDoppelteKundenVorschau(){
   var gruppen = kundenDoppelteFinden();
-  var zaehle = function(k){ return state.geraete.filter(function(g){ return g.kundeId === k.id; }).length; };
+  var zaehle = function(k){ return geraeteVonKunde(k.id).length; };
   var daten = function(k){ return Object.keys(k).filter(function(f){ return k[f]; }).length + (k.rechnungen ? k.rechnungen.length * 3 : 0) + (k.vermerke ? k.vermerke.length * 3 : 0); };
   var html = '<div class="modal-head"><h3>Doppelte Kunden</h3><button class="close" id="mClose">&times;</button></div>';
   if(!gruppen.length){
@@ -6561,7 +6646,7 @@ function kundenDoppelteBereinigen(){
   var stores = ['geraete','pruefungen','sammelberichte','begehungsberichte','dokumente','brandschutzplaene','tagesberichte','termine'];
   var anzahl = 0;
   gruppen.forEach(function(liste){
-    var zaehle = function(k){ return state.geraete.filter(function(g){ return g.kundeId === k.id; }).length; };
+    var zaehle = function(k){ return geraeteVonKunde(k.id).length; };
     // Behalten wird der Eintrag mit den meisten Geräten (bei Gleichstand der mit den meisten Daten bzw. der erste)
     var daten = function(k){ return Object.keys(k).filter(function(f){ return k[f]; }).length + (k.rechnungen ? k.rechnungen.length * 3 : 0) + (k.vermerke ? k.vermerke.length * 3 : 0); };
     liste.sort(function(a, b){ return (zaehle(b) - zaehle(a)) || (daten(b) - daten(a)); });
@@ -6637,7 +6722,7 @@ function renderKunden(){
 }
 
 function renderKundeDetail(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return '<div class="empty">Kunde nicht gefunden</div>';
   var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
   if(state.kundeGeraeteKatFilterKundeId !== kundeId){
@@ -7296,7 +7381,7 @@ function buildTerminlisteHtml(){
 }
 
 function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!nurKategorie || ((g.kategorie || 'Feuerlöscher').trim()) === nurKategorie); });
 
   var gruppen = {};
@@ -7463,7 +7548,7 @@ function modalGeraeteuebersicht(kundeId){
       bsvDruckenOderTeilen(buildGeraeteuebersichtHtml(kundeId, aktKat), 'Geraeteuebersicht.pdf');
     };
     document.getElementById('mailBtnAL').onclick = function(){
-      var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+      var k = kundeById(kundeId);
       var geraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && (!aktKat || ((g.kategorie || 'Feuerlöscher').trim()) === aktKat); });
       var zeilen = [];
       zeilen.push('Ausstattungsliste - ' + (k ? k.name : '') + (k && k.objekt ? ' / ' + k.objekt : '') + (aktKat ? ' (' + aktKat + ')' : ''));
@@ -7975,7 +8060,7 @@ function renderStatistik(){
       });
       fuellReihenfolge.forEach(function(kid){
         var zeilen = fuellNachKunde[kid];
-        var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+        var k = kundeById(kid);
         var summeCo2 = 0, summeLiter = 0;
         zeilen.forEach(function(z){
           var info = fuellungLesen(z.fuellung, z.geraet.kategorie, z.geraet.standort);
@@ -8148,7 +8233,7 @@ function renderStatistik(){
       var nkKids = Object.keys(nkKunden).sort(function(a, b){ return nkKunden[b].length - nkKunden[a].length; });
       html += '<div class="section-title" style="margin-top:14px;">Nach Kunde (' + nkKids.length + ')</div>';
       nkKids.forEach(function(kid){
-        var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+        var k = kundeById(kid);
         var liste = nkKunden[kid].slice().sort(function(a, b){ return nkArt(a).localeCompare(nkArt(b)) || String(a.typ || '').localeCompare(String(b.typ || '')); });
         html += '<div class="card nkKunde" data-kid="' + escapeHtml(kid) + '" style="cursor:pointer;">';
         html += '<div class="row" style="align-items:flex-start;"><div style="flex:1; min-width:0;"><b style="color:#2a2622;">' + escapeHtml(k ? k.name : 'Unbekannter Kunde') + '</b></div><span class="badge">' + liste.length + ' Stück</span></div>';
@@ -8253,7 +8338,7 @@ function renderBerichte(){
         html += '<div class="section-subtitle" style="margin-top:14px; font-weight:600; opacity:0.7;">' + escapeHtml(tagLabel) + '</div>';
         letztesDatum = tagLabel;
       }
-      var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
+      var k = kundeById(sb.kundeId);
       var katLabel = (sb.geraeteSnapshot && sb.geraeteSnapshot.length) ? (sb.geraeteSnapshot[0].kategorie || 'Feuerlöscher') : 'Feuerlöscher';
       html += '<div class="card">';
       html += '<div class="row"><h3>' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + '</h3><span class="badge blau">' + escapeHtml(katLabel) + '</span></div>';
@@ -8271,7 +8356,7 @@ function renderBerichte(){
     html += '<div class="empty">Noch keine Geräte ausgeschieden</div>';
   } else {
     ausgeschieden.forEach(function(g){
-      var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+      var k = kundeById(g.kundeId);
       html += '<div class="card">';
       html += '<div class="row"><h3>' + escapeHtml(g.typ) + '</h3><span class="badge warn">Ausgeschieden</span></div>';
       html += '<div class="meta">' + (k ? escapeHtml(kundeAnzeigeName(k)) : 'Unbekannt') + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
@@ -8368,7 +8453,7 @@ function closeModal(){
 }
 
 function modalPruefungenVerschieben(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var offenePruefungen = state.pruefungen.filter(function(p){ return p.kundeId === kundeId && !p.erledigt; });
   var html = '';
@@ -8401,7 +8486,7 @@ function modalPruefungenVerschieben(kundeId){
     offenePruefungen.forEach(function(p){
       p.datum = neuesDatum;
       dbPut('pruefungen', p, function(){
-        var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+        var g = geraetById(p.geraetId);
         var weiter = function(){
           verbleibend--;
           if(verbleibend === 0){
@@ -8420,7 +8505,7 @@ function modalPruefungenVerschieben(kundeId){
 }
 
 function modalPruefungenKorrigieren(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var heuteIso = new Date().toISOString().substring(0,10);
   var vorEineWoche = new Date();
@@ -8455,7 +8540,7 @@ function modalPruefungenKorrigieren(kundeId){
     var html2 = '<div class="meta" style="margin-bottom:8px;">' + treffer.length + ' gefunden. Alle sind vorausgewählt, bei Bedarf einzelne abwählen.</div>';
     html2 += '<button type="button" class="btn small secondary" id="korrAlleAbBtn" style="margin-bottom:8px;">Alle abwählen</button>';
     treffer.forEach(function(p, i){
-      var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+      var g = geraetById(p.geraetId);
       html2 += '<label style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid #eee2d3;"><input type="checkbox" class="korrCheck" data-idx="' + i + '" checked style="width:auto;"> ' + (g ? escapeHtml(g.typ) + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') : 'Unbekanntes Gerät') + ' <span class="meta">(' + fmtDate(p.erledigtAm) + ')</span></label>';
     });
     html2 += '<label style="margin-top:14px;">Richtiges Prüfdatum (für alle ausgewählten gleich)</label>';
@@ -8494,7 +8579,7 @@ function modalPruefungenKorrigieren(kundeId){
         p.datum = richtigesDatum;
         p.erledigtAm = richtigesDatum + 'T12:00:00';
         db.collection('pruefungen').doc(p.id).set(mitZeitstempel(p)).then(function(){
-          var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+          var g = geraetById(p.geraetId);
           if(g){
             g.letztePruefung = richtigesDatum;
             var neuerTermin = naechsterTerminNach(richtigesDatum + 'T12:00:00', g.intervallMonate);
@@ -8532,7 +8617,7 @@ function modalPruefungenKorrigieren(kundeId){
 }
 
 function doppelteTermineBereinigen(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var offeneDesKunden = state.pruefungen.filter(function(p){ return p.kundeId === kundeId && !p.erledigt; });
   var nachGeraet = {};
@@ -8591,7 +8676,7 @@ function doppelteTermineBereinigen(kundeId){
 }
 
 function nummernNeuOrdnen(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   openModal('<div class="modal-head"><h3>Gerätenummern neu ordnen</h3><button class="close" id="mClose">&times;</button></div><div class="meta">Lade aktuellen Gerätestand...</div>');
   document.getElementById('mClose').onclick = closeModal;
@@ -8704,7 +8789,7 @@ function nummernNeuOrdnen(kundeId){
 }
 
 function fehlendeTermineNachtragen(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var geraeteDesKunden = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
   var betroffene = geraeteDesKunden.filter(function(g){
@@ -8858,10 +8943,10 @@ function modalNeuerKunde(opts){
 }
 
 function modalKundenZusammenfuehren(quelleId){
-  var q = state.kunden.filter(function(x){ return x.id === quelleId; })[0];
+  var q = kundeById(quelleId);
   if(!q) return;
   function zaehle(kid){
-    return state.geraete.filter(function(g){ return g.kundeId === kid; }).length;
+    return geraeteVonKunde(kid).length;
   }
   function neuZeichnen(suchtext){
     var sq = (suchtext || '').toLowerCase().trim();
@@ -8886,7 +8971,7 @@ function modalKundenZusammenfuehren(quelleId){
     se.oninput = function(){ neuZeichnen(se.value); };
     document.querySelectorAll('.zfZielBtn').forEach(function(b){
       b.onclick = function(){
-        var ziel = state.kunden.filter(function(x){ return x.id === b.getAttribute('data-kid'); })[0];
+        var ziel = kundeById(b.getAttribute('data-kid'));
         if(!ziel) return;
         customConfirm('Alle Geräte, Prüfungen, Berichte und Dokumente von "' + q.name + (q.adresse ? ' (' + q.adresse + ')' : '') + '" in "' + ziel.name + (ziel.adresse ? ' (' + ziel.adresse + ')' : '') + '" übernehmen und den ersten Eintrag in den Papierkorb verschieben?', function(){
           ['geraete','pruefungen','sammelberichte','begehungsberichte','dokumente','brandschutzplaene','tagesberichte','termine'].forEach(function(store){
@@ -8907,7 +8992,7 @@ function modalKundenZusammenfuehren(quelleId){
 }
 
 function modalKundeBearbeiten(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var html = '';
   html += '<div class="modal-head"><h3>Kunde bearbeiten</h3><button class="close" id="mClose">&times;</button></div>';
@@ -9021,9 +9106,9 @@ function qrMitRand(targetId){
 }
 
 function modalQrGeraet(geraetId){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
-  var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+  var k = kundeById(g.kundeId);
   var istKegAnschlussGeraet = istFuellKategorie((g.kategorie || 'Feuerlöscher').trim());
   var qrText = istKegAnschlussGeraet ? g.id : (KUNDEN_PORTAL_URL + '?id=' + encodeURIComponent(g.id));
   var html = '';
@@ -9071,9 +9156,9 @@ function modalQrGeraet(geraetId){
 }
 
 function modalGeraetVerschieben(geraetId){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
-  var aktKunde = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+  var aktKunde = kundeById(g.kundeId);
   function neuZeichnen(suchtext){
     var q = (suchtext || '').toLowerCase().trim();
     var treffer = state.kunden.filter(function(k){
@@ -9103,7 +9188,7 @@ function modalGeraetVerschieben(geraetId){
     document.querySelectorAll('.verschiebenZielBtn').forEach(function(b){
       b.onclick = function(){
         var zielKundeId = b.getAttribute('data-kid');
-        var zielKunde = state.kunden.filter(function(x){ return x.id === zielKundeId; })[0];
+        var zielKunde = kundeById(zielKundeId);
         customConfirm('Gerät "' + escapeHtml(g.typ || '') + '" wirklich zu "' + escapeHtml(zielKunde ? zielKunde.name : '') + (zielKunde && zielKunde.objekt ? ' - ' + escapeHtml(zielKunde.objekt) : '') + '" verschieben?', function(){
           g.kundeId = zielKundeId;
           dbPut('geraete', g, function(){
@@ -9118,7 +9203,7 @@ function modalGeraetVerschieben(geraetId){
 }
 
 function modalGeraetBearbeiten(geraetId){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
   var kategorien = ['Feuerlöscher','RWA-Anlage','Notbeleuchtung','Rauchmelder','Brandschutzbegehung','Brandschutzklappen','Brandschutztüren','Perchtl Zisch','CO2-Flaschen','Sonstiges'];
   var aktKategorie = (g.kategorie || 'Feuerlöscher').trim();
@@ -9429,7 +9514,7 @@ function findeDuplikatExterneId(externeId, eigeneGeraetId){
   if(!externeId) return null;
   var treffer = state.geraete.filter(function(x){ return x.externeId === externeId && x.id !== eigeneGeraetId && !x.ausgeschieden; })[0];
   if(!treffer) return null;
-  var k = state.kunden.filter(function(x){ return x.id === treffer.kundeId; })[0];
+  var k = kundeById(treffer.kundeId);
   return { geraet: treffer, kunde: k };
 }
 
@@ -10090,7 +10175,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
       naechstePruefung: g.naechstePruefung,
       intervallMonate: g.intervallMonate
     };
-    var kFuerReserve = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+    var kFuerReserve = kundeById(kundeId);
     if(g.nr && kFuerReserve && kFuerReserve.reserveNummern && kFuerReserve.reserveNummern[neueKategorie]){
       var idxReserve = kFuerReserve.reserveNummern[neueKategorie].indexOf(g.nr);
       if(idxReserve !== -1){
@@ -10168,7 +10253,7 @@ function initSigPad(canvasId){
 function modalErledigt(pruefungId){
   var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
   var k = kundeFuerPruefung(p);
-  var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] || {};
+  var g = geraetById(p.geraetId) || {};
   var html = '';
   html += '<div class="modal-head"><h3>Prüfung abschließen</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + (k ? escapeHtml(kundeAnzeigeName(k)) : '') + ' &middot; ' + escapeHtml(p.typ || '') + '</div>';
@@ -10207,7 +10292,7 @@ function modalErledigt(pruefungId){
     p.unterschriftKunde = canvasKunde.toDataURL('image/png');
     p.unterschriftTechniker = canvasTechniker.toDataURL('image/png');
     dbPut('pruefungen', p, function(){
-      var gZu = p.geraetId ? state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] : null;
+      var gZu = p.geraetId ? geraetById(p.geraetId) : null;
       if(gZu && ergebnis === 'ausscheiden'){
         gZu.ausgeschieden = true;
         gZu.ausgeschiedenAm = jetztIso;
@@ -10263,7 +10348,7 @@ function berichtAbfuelldatumZu(p, g){
 function buildBerichtHtml(p, k){
   var html = '';
   var berichtNr = 'PB-' + fmtDate(p.erledigtAm || p.datum).split('.').reverse().join('') + '-' + p.id.slice(-4);
-  var gRef = p.geraetId ? state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] : null;
+  var gRef = p.geraetId ? geraetById(p.geraetId) : null;
 
   html += '<div class="bericht-brief">';
 
@@ -10417,7 +10502,7 @@ function kombiSammelbericht(sbs){
 }
 function modalKombiBericht(sbs, kundeId){
   var sb = kombiSammelbericht(sbs);
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   var anzahl = (sb.geraeteSnapshot || []).length;
   var html = '';
   html += '<div class="modal-head no-print"><h3>Prüfbericht (' + anzahl + ' Geräte)</h3><button class="close" id="mClose">&times;</button></div>';
@@ -10483,7 +10568,7 @@ function modalBerichteMehrere(liste){
 function modalBerichtAnsicht(pruefungId){
   var p = state.pruefungen.filter(function(x){ return x.id === pruefungId; })[0];
   var k = kundeFuerPruefung(p);
-  var gAns = p && p.geraetId ? state.geraete.filter(function(x){ return x.id === p.geraetId; })[0] : null;
+  var gAns = p && p.geraetId ? geraetById(p.geraetId) : null;
   var fArtAns = berichtFuellArt(p, gAns);
   var berichtName = fArtAns === 'anschluss' ? 'Anschlussbericht' : (fArtAns === 'abfuellung' ? 'Abfüllbericht' : 'Prüfbericht');
   var html = '';
@@ -10533,7 +10618,7 @@ function modalFuellhistorieListe(kundeId){
     return state.geraete
       .filter(function(g){ return !g.ausgeschieden && istFuellKategorie(g.kategorie); })
       .map(function(g){
-        var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+        var k = kundeById(g.kundeId);
         return { g: g, k: k };
       });
   }
@@ -10969,7 +11054,7 @@ function buildFlaschenUebersichtHtml(eintraege, katFilter){
 }
 
 function buildFuellhistorieEinzelDruckHtml(g, fuellungen){
-  var k = state.kunden.filter(function(x){ return x.id === g.kundeId; })[0];
+  var k = kundeById(g.kundeId);
   var einheitGeraet = (g.kategorie === 'CO2-Flaschen') ? 'g' : 'Liter';
   var gesamtMenge = 0;
   var hatUnbekannt = false;
@@ -11021,7 +11106,7 @@ function buildFuellhistorieEinzelDruckHtml(g, fuellungen){
 }
 
 function modalFuellhistorie(geraetId, zurueckKundeId){
-  var g = state.geraete.filter(function(x){ return x.id === geraetId; })[0];
+  var g = geraetById(geraetId);
   if(!g) return;
   var fuellungen = (g.fuellungen || []).slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
 
@@ -11110,7 +11195,7 @@ function modalFuellhistorie(geraetId, zurueckKundeId){
 
 
 function modalDokumenteListe(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var dokumente = state.dokumente.filter(function(d){ return d.kundeId === kundeId; })
     .slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
@@ -11306,7 +11391,7 @@ function glAuswerten(rows, map){
 }
 
 function modalGeraeteListeEinfuegen(kundeId, vorText){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var map = GL_STANDARD.slice();
   var rows = [];
@@ -11436,7 +11521,7 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
 }
 
 function modalKundeAktionen(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var html = '';
   html += '<div class="modal-head"><h3>Aktionen</h3><button class="close" id="mClose">&times;</button></div>';
@@ -11464,7 +11549,7 @@ function modalKundeAktionen(kundeId){
   b = document.getElementById('aktAktivierenBtn');
   if(b) b.onclick = function(){
     closeModal();
-    var kk = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+    var kk = kundeById(kundeId);
     if(!kk) return;
     kk.stillgelegt = false;
     kk.stillgelegtAm = null;
@@ -11474,7 +11559,7 @@ function modalKundeAktionen(kundeId){
   if(b) b.onclick = function(){
     closeModal();
     customConfirm('Kunde stilllegen? Er bleibt erhalten und sichtbar, taucht aber in keiner Erinnerung/Fälligkeitsliste mehr auf, bis du ihn wieder aktivierst.', function(){
-      var kk = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+      var kk = kundeById(kundeId);
       if(!kk) return;
       kk.stillgelegt = true;
       kk.stillgelegtAm = new Date().toISOString();
@@ -11553,7 +11638,7 @@ function zeitOrtAusWert(wert){
 function zeitOrtText(z){
   if(!z || !z.ort) return '';
   if(z.ort === 'Kunde'){
-    var k = state.kunden.filter(function(x){ return x.id === z.kundeId; })[0];
+    var k = kundeById(z.kundeId);
     return k ? k.name : 'Kunde';
   }
   return z.ort;
@@ -12761,7 +12846,7 @@ function fbLetzterKm(fzId){
   return km;
 }
 function fbKundeName(f){
-  var k = f.kundeId ? state.kunden.filter(function(x){ return x.id === f.kundeId; })[0] : null;
+  var k = f.kundeId ? kundeById(f.kundeId) : null;
   return k ? k.name : (f.kundeFrei || '');
 }
 function fbZeileText(f){
@@ -13130,7 +13215,7 @@ function fbInboxHtml(fz){
     '<button type="button" class="btn small secondary fbNeuAusw" data-fz="' + escapeHtml(fz.id) + '" style="width:auto; flex:0 0 auto; white-space:nowrap; padding:6px 10px; font-size:12px; letter-spacing:0; text-transform:none;">&#8635; Neu</button></div>';
   liste.forEach(function(f){
     var d = new Date(f.datum + 'T12:00:00');
-    var k = f.kundeId ? state.kunden.filter(function(x){ return x.id === f.kundeId; })[0] : null;
+    var k = f.kundeId ? kundeById(f.kundeId) : null;
     var strecke = (f.kmStart != null && f.kmEnde != null) ? f.kmEnde - f.kmStart : (f.kmGeschaetzt != null ? f.kmGeschaetzt : null);
     h += '<div class="card" style="border-left:5px solid ' + (f.laufend ? '#d39a00' : (f.privat ? '#7b3fa0' : '#2e7d4f')) + ';">';
     h += '<div class="row" style="align-items:flex-start;"><b style="color:#2a2622;">' + wt[d.getDay()] + ' ' + fmtDate(f.datum + 'T12:00:00').substring(0, 6) + ' &middot; ' + (f.abfahrtGeschaetzt ? 'ca. ' : '') + escapeHtml(f.abfahrt || '?') + '&ndash;' + escapeHtml(f.laufend ? 'läuft' : (f.ende || '?')) + '</b>';
@@ -13699,7 +13784,7 @@ function renderKalender(){
   tagEs.forEach(function(e){
     if(e.art === 'termin'){
       var t = e.t;
-      var kt = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+      var kt = t.kundeId ? kundeById(t.kundeId) : null;
       var pers = (t.personen || []).indexOf('alle') >= 0 ? 'Alle Mitarbeiter' : (t.personen || []).map(zustaendigKurz).join(', ');
       var tf = kalFarbe(kalEintragFarben(e)[0]);
       html += '<div class="card"' + (voll ? ' data-kaltermin="' + t.id + '" style="cursor:pointer; border-left:6px solid ' + tf + ';"' : ' style="border-left:6px solid ' + tf + ';"') + '>';
@@ -13778,7 +13863,7 @@ function dashTerminKundeAnlegen(t, danach){
 function dashTerminKunde(id){
   var t = dashTerminFinden(id);
   if(!t) return;
-  var k = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+  var k = t.kundeId ? kundeById(t.kundeId) : null;
   if(!k){ if(istVollsicht()) modalTerminKundeZuordnen(t, null); else dashTerminKundeAnlegen(t, null); return; }
   if(dashKundeUnvollstaendig(k) && (istVollsicht())){ modalTerminKundeZuordnen(t, k); return; }
   state.activeKundeId = k.id;
@@ -13862,7 +13947,7 @@ function modalTerminKundeZuordnen(t, kAlt){
     box.querySelectorAll('[data-tkzid]').forEach(function(c){
       c.onclick = function(){
         var id = c.getAttribute('data-tkzid');
-        var k = state.kunden.filter(function(x){ return x.id === id; })[0];
+        var k = kundeById(id);
         setzeGewaehlt(k);
         box.innerHTML = karte(k, true);
       };
@@ -13900,7 +13985,7 @@ function dashTerminVorgabe(t){
 function dashTerminTagesbericht(id){
   var t = dashTerminFinden(id);
   if(!t) return;
-  var k = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+  var k = t.kundeId ? kundeById(t.kundeId) : null;
   if(k){ modalTagesberichtNeu(k.id, dashTerminVorgabe(t)); return; }
   customConfirm('Für den Tagesbericht brauchst du einen Kunden. Jetzt anlegen?', function(){
     dashTerminKundeAnlegen(t, function(nk){ modalTagesberichtNeu(nk.id, dashTerminVorgabe(t)); });
@@ -13929,7 +14014,7 @@ function modalKalenderTag(key){
   es.forEach(function(e){
     if(e.art === 'termin'){
       var t = e.t;
-      var kt = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+      var kt = t.kundeId ? kundeById(t.kundeId) : null;
       var tf = kalFarbe(kalEintragFarben(e)[0]);
       html += '<div class="card"' + (voll ? ' data-ktbearb="' + t.id + '" style="cursor:pointer; border-left:6px solid ' + tf + ';"' : ' style="border-left:6px solid ' + tf + ';"') + '>';
       html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '')) + '</div>';
@@ -13965,7 +14050,7 @@ function modalKalenderTermin(terminId, datumVorgabe){
   html += '<label>Datum</label><input id="ktDatum" type="date" value="' + escapeHtml(t ? String(t.datum).substring(0, 10) : (datumVorgabe || kalHeuteKey())) + '">';
   html += '<label>Uhrzeit (optional)</label><input id="ktZeit" type="time" value="' + escapeHtml(t ? (t.zeit || '') : '') + '">';
   var ktKundeName = '';
-  if(t && t.kundeId){ var ktk = state.kunden.filter(function(x){ return x.id === t.kundeId; })[0]; if(ktk) ktKundeName = ktk.name || ''; }
+  if(t && t.kundeId){ var ktk = kundeById(t.kundeId); if(ktk) ktKundeName = ktk.name || ''; }
   var ktKundeIdVor = (t && t.kundeId) ? t.kundeId : '';
   html += '<label>Kunde (optional &ndash; Name oder Kundennummer eingeben und auswählen)</label>';
   html += '<input type="hidden" id="ktKundeId" value="' + escapeHtml(ktKundeIdVor) + '">';
@@ -14023,7 +14108,7 @@ function modalKalenderTermin(terminId, datumVorgabe){
       box.innerHTML = h; box.style.display = 'block';
       box.querySelectorAll('.ktTrefferZeile').forEach(function(z){
         z.onclick = function(){
-          var k = state.kunden.filter(function(x){ return x.id === z.getAttribute('data-kid'); })[0];
+          var k = kundeById(z.getAttribute('data-kid'));
           if(!k) return;
           inp.value = kundeAnzeigeName(k);
           if(hid) hid.value = k.id;
@@ -14062,7 +14147,7 @@ function modalKalenderTermin(terminId, datumVorgabe){
     obj.personen = gew;
     var kName = document.getElementById('ktKunde').value.trim();
     var kIdSel = (document.getElementById('ktKundeId') || {}).value || '';
-    var kTreffer = kIdSel ? state.kunden.filter(function(x){ return x.id === kIdSel && !x.geloescht; })[0] : null;
+    var kTreffer = kIdSel ? (function(){ var x = kundeById(kIdSel); return (x && !x.geloescht) ? x : undefined; })() : null;
     if(!kTreffer && kName){
       kTreffer = state.kunden.filter(function(x){
         if(x.geloescht) return false;
@@ -14324,7 +14409,7 @@ function modalMehrMenu(){
 }
 
 function modalBrandschutzplan(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var plaene = state.brandschutzplaene.filter(function(p){ return p.kundeId === kundeId; })
     .slice().sort(function(a,b){ return new Date(b.hochgeladenAm) - new Date(a.hochgeladenAm); });
@@ -15040,7 +15125,7 @@ function bsplanSucheFertig(gefunden, suche){
 
 
 function modalBegehungsberichtListe(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var berichte = state.begehungsberichte.filter(function(b){ return b.kundeId === kundeId; })
     .slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
@@ -15080,7 +15165,7 @@ function modalBegehungsberichtListe(kundeId){
 }
 
 function modalBegehungsberichtBearbeiten(kundeId, berichtId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var bestehend = berichtId ? state.begehungsberichte.filter(function(x){ return x.id === berichtId; })[0] : null;
   var bericht = bestehend || {
@@ -15260,7 +15345,7 @@ function buildBegehungsberichtHtml(bericht, k){
 
 
 function modalSammelbericht(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var geraeteAlle = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
   var geraeteSortiert = geraeteAlle.slice().sort(function(a,b){
@@ -15471,7 +15556,7 @@ function modalSammelbericht(kundeId){
         function speichereNaechstenBericht(){
           if(bi >= berichteZuSpeichern.length){
             fertigMarkiert = true;
-            loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast(berichteZuSpeichern.length + ' Prüfbericht(e) erstellt'); var kLs = state.kunden.filter(function(x){ return x.id === kundeId; })[0]; modalLieferschein(berichteZuSpeichern, kLs); });
+            loadAll(function(){ state.tab = 'berichte'; render(); closeModal(); toast(berichteZuSpeichern.length + ' Prüfbericht(e) erstellt'); var kLs = kundeById(kundeId); modalLieferschein(berichteZuSpeichern, kLs); });
             return;
           }
           dbPut('sammelberichte', berichteZuSpeichern[bi], function(){
@@ -15745,7 +15830,7 @@ function buildSammelberichtHtml(sb, k){
 
 // ---------- Tagesbericht ----------
 function modalTagesberichtListe(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var liste = state.tagesberichte.filter(function(t){ return t.kundeId === kundeId; })
     .slice().sort(function(a,b){ return new Date(b.datum) - new Date(a.datum); });
@@ -15837,7 +15922,7 @@ function tagesberichtVorgabe(kundeId){
 }
 
 function modalTagesberichtNeu(kundeId, vorgabe){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var tbVg = vorgabe || tagesberichtVorgabe(kundeId);
   var tbTermin = (vorgabe && vorgabe.terminId) ? (state.termine || []).filter(function(x){ return x.id === vorgabe.terminId; })[0] : null;
@@ -16044,7 +16129,7 @@ function tbQrEinfuegen(qrId, k){
 function modalTagesberichtAnsicht(tbId){
   var tb = state.tagesberichte.filter(function(x){ return x.id === tbId; })[0];
   if(!tb) return;
-  var k = state.kunden.filter(function(x){ return x.id === tb.kundeId; })[0];
+  var k = kundeById(tb.kundeId);
   var qrIdAnsicht = 'tbqr_ansicht_' + tb.id;
   var html = '';
   html += '<div class="modal-head no-print"><h3>Tagesbericht</h3><button class="close" id="mClose">&times;</button></div>';
@@ -16150,7 +16235,7 @@ function modalTagesberichtFormularWahl(suchtext){
 function tagesberichtLeerDrucken(kundeId){
   toast('Bereite Formular vor...');
   try{
-    var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+    var k = kundeById(kundeId);
     if(!k){ toast('Kunde nicht gefunden'); return; }
     var qrId = 'tbqr_' + k.id;
     var pa = document.getElementById('printArea');
@@ -16179,14 +16264,14 @@ function sammelberichtRueckgaengig(sb, cb){
   var treffer = state.pruefungen.filter(function(p){
     if(!p.erledigt || !p.bericht || p.kundeId !== sb.kundeId) return false;
     if(p.unterschriftKunde !== sb.unterschriftKunde || p.unterschriftTechniker !== sb.unterschriftTechniker) return false;
-    var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    var g = geraetById(p.geraetId);
     return !!g && kats[(g.kategorie || 'Feuerlöscher').trim()];
   });
   var trefferIds = {};
   treffer.forEach(function(p){ trefferIds[p.id] = true; });
   var jobs = [];
   treffer.forEach(function(p){
-    var g = state.geraete.filter(function(x){ return x.id === p.geraetId; })[0];
+    var g = geraetById(p.geraetId);
     if(!g) return;
     var frueher = state.pruefungen.filter(function(x){ return x.geraetId === g.id && x.erledigt && x.erledigtAm && !trefferIds[x.id]; })
       .sort(function(a, b){ return new Date(b.erledigtAm) - new Date(a.erledigtAm); });
@@ -16219,7 +16304,7 @@ function sammelberichtRueckgaengig(sb, cb){
 function modalSammelberichtAnsicht(sbId){
   var sb = state.sammelberichte.filter(function(x){ return x.id === sbId; })[0];
   if(!sb) return;
-  var k = state.kunden.filter(function(x){ return x.id === sb.kundeId; })[0];
+  var k = kundeById(sb.kundeId);
   var html = '';
   html += '<div class="modal-head no-print"><h3>Sammelbericht</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="no-print" style="margin-bottom:10px;"><label>Prüfbericht-Nr.</label><input id="sbNrBearbeiten" type="text" value="' + escapeHtml(sb.berichtNr || '') + '"><button class="btn small secondary" id="sbNrSpeichern">Nummer speichern</button></div>';
@@ -16282,7 +16367,7 @@ function modalSammelberichtAnsicht(sbId){
 }
 
 function modalQrKunde(kundeId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   var html = '';
   html += '<div class="modal-head"><h3>QR-Code</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta">' + escapeHtml(kundeAnzeigeName(k)) + '</div>';
@@ -17049,7 +17134,7 @@ function bindKundenCards(container){
       event.stopPropagation();
       var gid = z.getAttribute('data-gid');
       if(!gid) return;
-      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      var g = geraetById(gid);
       if(!g) return;
       state.activeGeraetId = g.id;
       state.tab = 'geraetCheck';
@@ -17093,7 +17178,7 @@ function umsatzKarteHtml(k){
   return h;
 }
 function bindUmsatz(){
-  var k = state.kunden.filter(function(x){ return x.id === state.activeKundeId; })[0];
+  var k = kundeById(state.activeKundeId);
   if(!k) return;
   var add = document.getElementById('rgAdd');
   if(add) add.onclick = function(){
@@ -17385,7 +17470,7 @@ function vermerkeKartenHtml(k){
 function bindVermerke(){
   var add = document.getElementById('vmAdd');
   var kid = state.activeKundeId;
-  var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+  var k = kundeById(kid);
   if(!k) return;
   if(add) add.onclick = function(){
     var t = document.getElementById('vmText').value.trim();
@@ -17462,7 +17547,7 @@ function routeStopps(offset){
     if(t.erledigt) return;
     var pl = t.personen || [];
     if(istEingeschraenkt() && pl.indexOf('alle') < 0 && pl.indexOf(state.mitarbeiterName) < 0) return;
-    var k = t.kundeId ? state.kunden.filter(function(x){ return x.id === t.kundeId; })[0] : null;
+    var k = t.kundeId ? kundeById(t.kundeId) : null;
     var adr = routeAdresse(k);
     if(!adr) return;
     liste.push({ t: t, k: k, adresse: adr });
@@ -17629,7 +17714,7 @@ function modalPruefErinnerung(kundeId){
   };
 }
 function modalZahlungserinnerung(kundeId, rechnungId){
-  var k = state.kunden.filter(function(x){ return x.id === kundeId; })[0];
+  var k = kundeById(kundeId);
   if(!k) return;
   var r = (k.rechnungen || []).filter(function(x){ return x.id === rechnungId; })[0];
   if(!r) return;
@@ -17706,7 +17791,7 @@ function bindDynamic(){
       var gid = b.getAttribute('data-zuweisen-geraet');
       var neueKundeId = document.getElementById('zuweisen_' + gid).value;
       if(!neueKundeId){ toast('Bitte zuerst einen Kunden wählen'); return; }
-      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      var g = geraetById(gid);
       if(g){
         g.kundeId = neueKundeId;
         dbPut('geraete', g, function(){
@@ -17719,7 +17804,7 @@ function bindDynamic(){
   document.querySelectorAll('[data-wiederherstellen]').forEach(function(b){
     b.onclick = function(){
       var kid = b.getAttribute('data-wiederherstellen');
-      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+      var k = kundeById(kid);
       if(k){
         k.geloescht = false;
         k.geloeschtAm = null;
@@ -17885,7 +17970,7 @@ function bindDynamic(){
   if(checkInnenrevErledigt){
     checkInnenrevErledigt.onclick = function(){
       customConfirm('Innenrevision für dieses Gerät jetzt als heute durchgeführt markieren?', function(){
-        var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
+        var g = geraetById(state.activeGeraetId);
         if(g){
           g.letzteInnenrevision = new Date().toISOString().substring(0,10);
           dbPut('geraete', g, function(){
@@ -17906,7 +17991,7 @@ function bindDynamic(){
   if(btnAngeschlossen) btnAngeschlossen.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
   var btnLeerToggle = document.getElementById('btnLeerToggle');
   if(btnLeerToggle) btnLeerToggle.onclick = function(){
-    var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
+    var g = geraetById(state.activeGeraetId);
     if(!g) return;
     var standortElLeer = document.getElementById('checkStandort');
     if(standortElLeer) g.standort = standortElLeer.value.trim();
@@ -17922,7 +18007,7 @@ function bindDynamic(){
   var btnBegehungStarten = document.getElementById('btnBegehungStarten');
   if(btnBegehungStarten){
     btnBegehungStarten.onclick = function(){
-      var g = state.geraete.filter(function(x){ return x.id === state.activeGeraetId; })[0];
+      var g = geraetById(state.activeGeraetId);
       if(!g) return;
       var checkDatumElVorStart = document.getElementById('checkDatum');
       var gewaehltesDatum = checkDatumElVorStart ? checkDatumElVorStart.value : null;
@@ -18114,7 +18199,7 @@ function bindDynamic(){
   var kundeStilllegen = document.getElementById('kundeStilllegenBtn');
   if(kundeStilllegen) kundeStilllegen.onclick = function(){
     customConfirm('Kunde stilllegen? Er bleibt erhalten und sichtbar, taucht aber in keiner Erinnerung/Fälligkeitsliste mehr auf, bis du ihn wieder aktivierst.', function(){
-      var k = state.kunden.filter(function(x){ return x.id === state.activeKundeId; })[0];
+      var k = kundeById(state.activeKundeId);
       if(!k) return;
       k.stillgelegt = true;
       k.stillgelegtAm = new Date().toISOString();
@@ -18126,7 +18211,7 @@ function bindDynamic(){
 
   var kundeAktivieren = document.getElementById('kundeAktivierenBtn');
   if(kundeAktivieren) kundeAktivieren.onclick = function(){
-    var k = state.kunden.filter(function(x){ return x.id === state.activeKundeId; })[0];
+    var k = kundeById(state.activeKundeId);
     if(!k) return;
     k.stillgelegt = false;
     k.stillgelegtAm = null;
@@ -18164,7 +18249,7 @@ function bindDynamic(){
     b.onclick = function(e){
       e.stopPropagation();
       var gid = b.getAttribute('data-gid');
-      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      var g = geraetById(gid);
       if(!g) return;
       customConfirm('Gerät "' + (g.typ || '') + (g.seriennummer ? ' (SN ' + g.seriennummer + ')' : '') + '" endgültig löschen? Das kann nicht rückgängig gemacht werden.', function(){
         var pr = state.pruefungen.filter(function(p){ return p.geraetId === gid; });
@@ -18182,9 +18267,9 @@ function bindDynamic(){
   document.querySelectorAll('.kundeEndgueltigBtn').forEach(function(b){
     b.onclick = function(){
       var kid = b.getAttribute('data-kid');
-      var k = state.kunden.filter(function(x){ return x.id === kid; })[0];
+      var k = kundeById(kid);
       if(!k) return;
-      var gs = state.geraete.filter(function(x){ return x.kundeId === kid; });
+      var gs = geraeteVonKunde(kid);
       customConfirm('"' + k.name + '" endgültig löschen?' + (gs.length ? ' Dazu gehören noch ' + gs.length + ' Geräte, die ebenfalls gelöscht werden.' : '') + ' Das kann nicht rückgängig gemacht werden.', function(){
         var gids = gs.map(function(x){ return x.id; });
         var pr = state.pruefungen.filter(function(p){ return gids.indexOf(p.geraetId) !== -1; });
@@ -18276,7 +18361,7 @@ function bindDynamic(){
     el.onclick = function(e){
       e.stopPropagation();
       var gid = el.getAttribute('data-leerToggleBtn');
-      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      var g = geraetById(gid);
       if(!g) return;
       g.leer = !g.leer;
       g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
@@ -18373,7 +18458,7 @@ function bindDynamic(){
   document.querySelectorAll('[data-erneutpruefen]').forEach(function(b){
     b.onclick = function(){
       var gid = b.getAttribute('data-erneutpruefen');
-      var g = state.geraete.filter(function(x){ return x.id === gid; })[0];
+      var g = geraetById(gid);
       if(!g){ toast('Gerät nicht gefunden'); return; }
       state.activeGeraetId = gid;
       state.checkRueckkehrZuKunde = null;
