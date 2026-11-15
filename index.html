@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-15 11:35';
-var APP_VERSION_TEXT = '15.11. 11:35';
+var APP_VERSION = '2026-11-15 13:15';
+var APP_VERSION_TEXT = '15.11. 13:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -2421,10 +2421,10 @@ function renderDashboard(){
       html += '<div class="aufgabe ' + clsT + '" data-dashtermin="' + e.key + '" style="cursor:pointer;' + (t.erledigt ? ' opacity:.85;' : '') + '">';
       html += '<div class="aufgabe-kopf"><div class="aufgabe-titel"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(kT ? kT.name : (t.titel || 'Termin')) + '</h3>';
       var artT = kT ? (t.titel || 'Termin') : '';
-      if(t.notiz) artT += (artT ? ' &middot; ' : '') + escapeHtml(t.notiz);
-      else artT = escapeHtml(artT);
+      artT = escapeHtml(artT);
       if(kT && kT.objekt) artT += ' &middot; ' + escapeHtml(kT.objekt);
       if(artT) html += '<div class="aufgabe-art">' + artT + '</div>';
+      if(t.notiz) html += terminNotizHtml(t);
       html += '</div>';
       html += '<div class="aufgabe-datum"><b>' + wtT[dT.getDay()] + ' ' + fmtDate(e.key + 'T12:00:00').substring(0, 6) + '</b>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : '<span class="badge ' + clsT + '">' + (e.offset > 1 ? 'in ' + e.offset + ' Tagen' : tagText) + (t.zeit ? ' &middot; ' + escapeHtml(t.zeit) : '') + '</span>') + '</div></div>';
       if(kT && routeAdresse(kT)) html += '<div class="aufgabe-adr"><a href="' + escapeHtml(routeNaviLink(routeAdresse(kT))) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:inherit; text-decoration:none;">&#128205; ' + escapeHtml(routeAdresse(kT)) + ' <span style="color:#1d5fa8; font-weight:600;">&rsaquo; Navi</span></a></div>';
@@ -13841,7 +13841,7 @@ function renderKalender(){
       html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '')) + '</div>';
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
       html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
-      if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
+      if(t.notiz) html += terminNotizHtml(t);
       html += '</div>';
     } else {
       var kp = kundeFuerPruefung(e.p);
@@ -13899,7 +13899,7 @@ function dashKundeUnvollstaendig(k){
 }
 function dashTerminKundeAnlegen(t, danach){
   modalNeuerKunde({
-    name: t.notiz || '',
+    name: terminNotizPunkte(t)[0] || '',
     nachSpeichern: function(k){
       t.kundeId = k.id;
       dbPut('termine', t, function(){
@@ -14070,7 +14070,7 @@ function modalKalenderTag(key){
       html += '<div class="row"><h3' + (t.erledigt ? ' style="text-decoration:line-through;"' : '') + '>' + escapeHtml(t.titel || 'Termin') + '</h3>' + (t.erledigt ? '<span class="badge ok">&#10003; Erledigt</span>' : (t.zeit ? '<span class="badge blau">' + escapeHtml(t.zeit) + ' Uhr</span>' : '')) + '</div>';
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
       html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
-      if(t.notiz) html += '<div class="meta">' + escapeHtml(t.notiz) + '</div>';
+      if(t.notiz) html += terminNotizHtml(t);
       html += '</div>';
     } else {
       var kp = kundeFuerPruefung(e.p);
@@ -14089,6 +14089,45 @@ function modalKalenderTag(key){
     c.onclick = function(){ modalKalenderTermin(c.getAttribute('data-ktbearb')); };
   });
 }
+// ---------- Termin-Notiz als Liste zum Abhaken (jede Zeile ein Punkt) ----------
+function terminNotizPunkte(t){
+  return String((t && t.notiz) || '').split(/\r?\n/).map(function(x){ return x.trim(); }).filter(function(x){ return x; });
+}
+function terminNotizHtml(t){
+  var punkte = terminNotizPunkte(t);
+  if(!punkte.length) return '';
+  var haken = t.notizHaken || [];
+  var h = '<div style="margin-top:6px;">';
+  punkte.forEach(function(p, i){
+    var ok = haken.indexOf(p) !== -1;
+    h += '<div class="tnPunkt" data-tnid="' + escapeHtml(t.id) + '" data-tni="' + i + '" style="display:flex; align-items:flex-start; gap:8px; padding:5px 0; cursor:pointer; font-size:14px; color:' + (ok ? '#8a7d70' : 'var(--ink)') + ';">';
+    h += '<span class="tnBox" style="flex:0 0 20px; width:20px; height:20px; border:2px solid ' + (ok ? '#2e7d4f' : '#8a7d70') + '; border-radius:5px; background:' + (ok ? '#2e7d4f' : 'transparent') + '; color:#fff; font-size:14px; line-height:16px; text-align:center; font-weight:800;">' + (ok ? '&#10003;' : '') + '</span>';
+    h += '<span class="tnText" style="' + (ok ? 'text-decoration:line-through;' : '') + '">' + escapeHtml(p) + '</span></div>';
+  });
+  h += '</div>';
+  return h;
+}
+// Antippen eines Punktes: abhaken / wieder oeffnen (ohne den Termin zu oeffnen)
+document.addEventListener('click', function(ev){
+  var el = ev.target && ev.target.closest ? ev.target.closest('.tnPunkt') : null;
+  if(!el) return;
+  ev.stopPropagation(); ev.preventDefault();
+  var t = (state.termine || []).filter(function(x){ return x.id === el.getAttribute('data-tnid'); })[0];
+  if(!t) return;
+  var p = terminNotizPunkte(t)[parseInt(el.getAttribute('data-tni'), 10)];
+  if(p == null) return;
+  var haken = (t.notizHaken || []).filter(function(x){ return terminNotizPunkte(t).indexOf(x) !== -1; });
+  var ok = haken.indexOf(p) === -1;
+  if(ok) haken.push(p); else haken = haken.filter(function(x){ return x !== p; });
+  t.notizHaken = haken;
+  // sofort anzeigen (alle Stellen mit diesem Punkt)
+  document.querySelectorAll('.tnPunkt[data-tnid="' + t.id + '"][data-tni="' + el.getAttribute('data-tni') + '"]').forEach(function(x){
+    x.style.color = ok ? '#8a7d70' : 'var(--ink)';
+    var b = x.querySelector('.tnBox'); b.style.borderColor = ok ? '#2e7d4f' : '#8a7d70'; b.style.background = ok ? '#2e7d4f' : 'transparent'; b.innerHTML = ok ? '&#10003;' : '';
+    x.querySelector('.tnText').style.textDecoration = ok ? 'line-through' : 'none';
+  });
+  dbPut('termine', t, function(){});
+}, true);
 function modalKalenderTermin(terminId, datumVorgabe){
   var t = terminId ? (state.termine || []).filter(function(x){ return x.id === terminId; })[0] : null;
   var emp = t ? (t.personen || []) : [];
@@ -14107,7 +14146,8 @@ function modalKalenderTermin(terminId, datumVorgabe){
   html += '<input id="ktKunde" type="text" autocomplete="off" placeholder="Name oder Kundennummer" value="' + escapeHtml(ktKundeName) + '">';
   html += '<div id="ktKundeTreffer" style="display:none; border:1px solid #e0d5c3; border-radius:10px; margin-top:4px; max-height:240px; overflow-y:auto; background:#fff;"></div>';
   html += '<div class="meta" style="margin-top:4px;">Tippe Name oder Kundennummer und wähle den Kunden aus der Liste. Ein noch nicht vorhandener Kunde wird beim Speichern neu angelegt.</div>';
-  html += '<label>Notiz (optional)</label><input id="ktNotiz" type="text" value="' + escapeHtml(t ? (t.notiz || '') : '') + '">';
+  html += '<label>Notiz / Punkte (optional)</label><textarea id="ktNotiz" rows="5" placeholder="Jeden Punkt in eine eigene Zeile, z.B.&#10;Begehung&#10;Schl\u00f6sser&#10;Notbeleuchtung" style="width:100%; min-height:110px; font-size:16px; line-height:1.4;">' + escapeHtml(t ? (t.notiz || '') : '') + '</textarea>';
+  html += '<div class="meta" style="margin-top:2px;">Jede Zeile wird ein Punkt zum Abhaken.</div>';
   html += '<label>Für wen? (mehrere möglich)</label><div style="margin-bottom:10px;">';
   html += '<label style="' + zeilenStil + '"><input type="checkbox" data-ktwer="alle" style="' + cbStil + '"' + (emp.indexOf('alle') > -1 ? ' checked' : '') + '> <b>Alle Mitarbeiter</b></label>';
   zeitMitarbeiterNamen().forEach(function(n){
