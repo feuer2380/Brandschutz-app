@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-14 19:10';
-var APP_VERSION_TEXT = '14.11. 19:10';
+var APP_VERSION = '2026-11-15 10:50';
+var APP_VERSION_TEXT = '15.11. 10:50';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -13792,8 +13792,15 @@ function renderKalender(){
     var istHeute = key === heute, istGew = key === gewTag;
     var farbSet = [];
     es.forEach(function(e){ kalEintragFarben(e).forEach(function(n){ if(farbSet.indexOf(n) < 0) farbSet.push(n); }); });
-    html += '<button type="button" data-kaltag="' + key + '" title="' + (ftName ? escapeHtml(ftName) : '') + '" style="border:' + (istGew ? '2px solid #1d5fa8' : '1px solid var(--line)') + '; background:' + (istHeute ? '#fbe9c8' : (ftName ? '#f8d9d0' : 'var(--card)')) + '; border-radius:8px; padding:6px 0; min-height:52px; font-size:14px; color:' + (ftName ? '#c23f12' : 'var(--ink)') + ';' + (ftName ? ' font-weight:700;' : '') + '">' + d;
+    if(istHeute){
+      // Heute: kraeftig orange mit gelbem Rahmen und "HEUTE", damit man es sofort sieht
+      html += '<button type="button" data-kaltag="' + key + '" title="Heute' + (ftName ? ' - ' + escapeHtml(ftName) : '') + '" style="border:3px solid ' + (istGew ? '#1d5fa8' : '#f7e11b') + '; background:#e8541f; border-radius:8px; padding:2px 0 4px; min-height:52px; font-size:17px; font-weight:800; color:#fff; box-shadow:0 0 0 2px rgba(232,84,31,0.35);">';
+      html += '<div style="font-size:8px; letter-spacing:0.5px; line-height:1.2;">HEUTE</div><div style="line-height:1.1;">' + d + '</div>';
+      html += '<div style="display:flex; gap:2px; justify-content:center; flex-wrap:wrap; margin:2px auto 0; min-height:12px; width:fit-content; background:' + (farbSet.length ? '#fff' : 'transparent') + '; border-radius:8px; padding:' + (farbSet.length ? '1px 3px' : '0') + ';">';
+    } else {
+    html += '<button type="button" data-kaltag="' + key + '" title="' + (ftName ? escapeHtml(ftName) : '') + '" style="border:' + (istGew ? '2px solid #1d5fa8' : '1px solid var(--line)') + '; background:' + (ftName ? '#f8d9d0' : 'var(--card)') + '; border-radius:8px; padding:6px 0; min-height:52px; font-size:14px; color:' + (ftName ? '#c23f12' : 'var(--ink)') + ';' + (ftName ? ' font-weight:700;' : '') + '">' + d;
     html += '<div style="display:flex; gap:2px; justify-content:center; flex-wrap:wrap; margin-top:3px; min-height:12px;">';
+    }
     farbSet.slice(0, 6).forEach(function(n){ html += kalPunkt(kalFarbe(n)); });
     html += '</div></button>';
   }
