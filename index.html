@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-15 17:00';
-var APP_VERSION_TEXT = '15.11. 17:00';
+var APP_VERSION = '2026-11-15 17:20';
+var APP_VERSION_TEXT = '15.11. 17:20';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -4854,7 +4854,11 @@ function modalTreueUebersicht(){
   html += treueAktionBannerHtml();
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
   html += '<div class="meta" style="margin-top:6px;">Punkte je 1 &euro; netto: CO2-F\u00fcllung ' + TREUE_PUNKTE_PRO_EURO + ', \u00dcberpr\u00fcfung/Arbeit ' + TREUE_PPE_DIENST + ', Waren/Einkauf ' + TREUE_PPE_WAREN + '. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
-  html += '<div class="row" style="gap:8px; margin-top:12px;"><input type="number" inputmode="numeric" id="tuAnz" value="10" min="1" max="100" style="flex:0 0 80px;"><button type="button" class="btn" id="tuDruck" style="flex:1;">Leere Karten auf Vorrat drucken</button></div>';
+  html += '<div class="card" style="margin-top:12px; padding:10px 12px;"><div style="font-weight:700;">Leere Karten auf Vorrat drucken</div><div class="meta">Wie viele Karten? (auch nur 1 St\u00fcck m\u00f6glich)</div>';
+  html += '<div class="row" style="gap:8px; margin-top:8px; align-items:center;"><button type="button" class="btn secondary" id="tuMinus" style="margin:0; width:48px; font-size:22px; padding:6px 0;">&minus;</button><div id="tuAnzZ" style="min-width:44px; text-align:center; font-size:26px; font-weight:800;">1</div><button type="button" class="btn" id="tuPlus" style="margin:0; width:48px; font-size:22px; padding:6px 0;">+</button>';
+  html += '<div style="display:flex; gap:6px; margin-left:auto;">' + [1, 5, 10].map(function(n){ return '<button type="button" class="btn small secondary tuSchnell" data-n="' + n + '" style="margin:0;">' + n + '</button>'; }).join('') + '</div></div>';
+  html += '<input type="hidden" id="tuAnz" value="1">';
+  html += '<button type="button" class="btn block" id="tuDruck" style="margin-top:10px;">1 leere Karte drucken</button></div>';
   html += '<button type="button" class="btn block" id="tuZuordnen" style="margin-top:8px; background:#2e7d4f;">Vorrat-Karte einem Kunden geben</button>';
   html += '<button type="button" class="btn block secondary" id="tuRueck" style="margin-top:8px;">R\u00fcckseiten drucken</button>';
   html += '<button type="button" class="btn block secondary" id="tuPreise" style="margin-top:8px;">Preisliste bearbeiten</button>';
@@ -4906,7 +4910,7 @@ function modalTreueUebersicht(){
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('tuDruck').onclick = function(){
     var n = Math.max(1, Math.min(100, parseInt(document.getElementById('tuAnz').value, 10) || 1));
-    customConfirm(n + ' neue, leere Treuekarten anlegen und drucken?', function(){
+    customConfirm((n === 1 ? '1 neue, leere Treuekarte' : n + ' neue, leere Treuekarten') + ' anlegen und drucken?', function(){
       treueKartenAnlegen(n, '', function(neu){ treueKartenPdf(neu); });
     });
   };
@@ -4923,6 +4927,15 @@ function modalTreueUebersicht(){
   document.getElementById('tuMonat').onclick = modalTreueMonat;
   document.getElementById('tuZuordnen').onclick = modalTreueVorratZuordnen;
   document.getElementById('tuRueck').onclick = function(){ modalRueckseiten(parseInt(document.getElementById('tuAnz').value, 10) || 1); };
+  var tuSetzen = function(n){
+    n = Math.max(1, Math.min(100, n));
+    document.getElementById('tuAnz').value = n;
+    document.getElementById('tuAnzZ').textContent = n;
+    document.getElementById('tuDruck').textContent = n === 1 ? '1 leere Karte drucken' : n + ' leere Karten drucken';
+  };
+  document.getElementById('tuMinus').onclick = function(){ tuSetzen((parseInt(document.getElementById('tuAnz').value, 10) || 1) - 1); };
+  document.getElementById('tuPlus').onclick = function(){ tuSetzen((parseInt(document.getElementById('tuAnz').value, 10) || 1) + 1); };
+  document.querySelectorAll('.tuSchnell').forEach(function(b){ b.onclick = function(){ tuSetzen(parseInt(b.getAttribute('data-n'), 10)); }; });
 }
 
 function renderScan(){
