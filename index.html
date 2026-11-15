@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-15 15:00';
-var APP_VERSION_TEXT = '15.11. 15:00';
+var APP_VERSION = '2026-11-15 15:15';
+var APP_VERSION_TEXT = '15.11. 15:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -265,7 +265,9 @@ try {
   .monatKopf.monatNext::before{background:#e0a21c;}
   .monatKopf.ueberKopf{color:#a8310e;}
   .monatKopf.ueberKopf::before{background:#c23f12;}
-  .monatKopf .monatAnz{margin-left:auto; background:#ece5d9; color:#3d352b; border-radius:999px; min-width:24px; text-align:center; padding:1px 9px; font-size:12px; letter-spacing:0;}
+  .monatKopf .monatAnz{margin-left:auto; background:#e8541f; color:#fff; border-radius:999px; min-width:30px; text-align:center; padding:3px 11px; font-size:15px; font-weight:800; letter-spacing:0; text-shadow:none !important; -webkit-font-smoothing:antialiased; box-shadow:0 1px 4px rgba(0,0,0,.35);}
+  .monatKopf.ueberKopf .monatAnz{background:#c23f12;}
+  .monatKopf.monatNext .monatAnz{background:#1565c0;}
   .aufgabe{position:relative; background:#fff; border:1px solid #ece5d9; border-radius:14px; padding:11px 13px 10px 16px; margin-bottom:9px; box-shadow:inset 4px 0 0 #8fb596, 0 1px 2px rgba(26,20,16,.05); overflow:hidden;}
   .aufgabe.warn{box-shadow:inset 4px 0 0 #c23f12, 0 1px 2px rgba(26,20,16,.05);}
   .aufgabe.soon{box-shadow:inset 4px 0 0 #e8a21c, 0 1px 2px rgba(26,20,16,.05);}
