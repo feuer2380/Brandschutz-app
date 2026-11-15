@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-15 13:15';
-var APP_VERSION_TEXT = '15.11. 13:15';
+var APP_VERSION = '2026-11-15 14:20';
+var APP_VERSION_TEXT = '15.11. 14:20';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1919,6 +1919,22 @@ function aufgabeKarteHtml(p, k, st){
   return h;
 }
 // Uebersicht: EINE Karte pro Kunde (nur Kunde, was faellig ist, Adresse, ein Zuteilen-Knopf)
+// Kunden mit eigenem (offenen) Termin in den naechsten 7 Tagen: { kundeId: {key, t} } - wird in renderDashboard gefuellt
+var dashTerminKunden = {};
+function kundeKarteOderTerminVerweis(k, eintraege, statusFn){
+  var tv = k ? dashTerminKunden[k.id] : null;
+  if(!tv) return kundeAufgabeKarteHtml(k, eintraege, statusFn);
+  // gleiche Kundin/gleicher Kunde wie ein eigener Termin -> nur eine Zeile, die Details stehen beim Termin oben
+  var kats = {}, reihe = [];
+  eintraege.forEach(function(p){ var g = geraetFuerPruefung(p); var kat = g ? (g.kategorie || 'Feuerl\u00f6scher').trim() : (p.typ || 'Pr\u00fcfung'); if(!kats[kat]){ kats[kat] = 0; reihe.push(kat); } kats[kat]++; });
+  var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+  var dT = new Date(tv.key + 'T12:00:00');
+  var h = '<div class="aufgabe blau" data-dashtermin="' + tv.key + '" style="cursor:pointer; padding:10px 14px; border-style:dashed;">';
+  h += '<div style="display:flex; align-items:center; gap:10px;"><div style="flex:1; min-width:0;"><b>' + escapeHtml(kundeAnzeigeName(k)) + '</b>';
+  h += '<div class="meta">' + reihe.map(function(x){ return kats[x] + '&times; ' + escapeHtml(x); }).join(' &middot; ') + '</div></div>';
+  h += '<span class="badge blau" style="white-space:nowrap;">&#128197; beim Termin ' + wt[dT.getDay()] + ' ' + fmtDate(tv.key + 'T12:00:00').substring(0, 6) + (tv.t.zeit ? ' ' + escapeHtml(tv.t.zeit) : '') + '</span></div></div>';
+  return h;
+}
 function kundeAufgabeKarteHtml(k, eintraege, statusFn){
   var liste = eintraege.slice().sort(function(a, b){ return daysUntil(a.datum) - daysUntil(b.datum); });
   var erste = liste[0];
@@ -2403,15 +2419,24 @@ function renderDashboard(){
       terminTage.push({ key: tKey, offset: tt, t: t });
     });
   }
+  dashTerminKunden = {};
+  terminTage.forEach(function(e){ if(e.t.kundeId && !e.t.erledigt && !dashTerminKunden[e.t.kundeId]) dashTerminKunden[e.t.kundeId] = e; });
   if(terminTage.length){
-    terminTage.sort(function(a, b){ return a.key.localeCompare(b.key) || (a.t.zeit || '99:99').localeCompare(b.t.zeit || '99:99'); });
-    html += '<div class="section-title" style="margin-top:14px;">Termine (' + terminTage.length + ')</div>';
+    // Ordnung: zuerst Termine bei Kunden, dann interne Termine (ohne Kunde); jeweils nach Datum/Uhrzeit
+    terminTage.sort(function(a, b){
+      var ia = a.t.kundeId ? 0 : 1, ib = b.t.kundeId ? 0 : 1;
+      return (ia - ib) || a.key.localeCompare(b.key) || (a.t.zeit || '99:99').localeCompare(b.t.zeit || '99:99');
+    });
+    var anzKundeT = terminTage.filter(function(e){ return e.t.kundeId; }).length;
+    html += '<div class="section-title" style="margin-top:14px; color:#1d5fa8;">&#128197; Eingetragene Termine &ndash; n\u00e4chste 7 Tage (' + terminTage.length + ')</div>';
     var routeHeute = routeStopps(0).length, routeMorgen = routeStopps(1).length;
     var routeTag = routeHeute ? 0 : 1, routeAnz = routeHeute || routeMorgen;
     if(routeAnz) html += '<button type="button" class="btn block secondary" id="routeHeuteBtn" data-routetag="' + routeTag + '" style="margin-bottom:10px;">&#128506; Route für ' + (routeTag === 0 ? 'heute' : 'morgen') + ' (' + routeAnz + ' ' + (routeAnz === 1 ? 'Stopp' : 'Stopps') + ')</button>';
+    var internKopf = false;
     terminTage.forEach(function(e){
       var t = e.t;
       var kT = t.kundeId ? kundeById(t.kundeId) : null;
+      if(!t.kundeId && !internKopf){ internKopf = true; html += '<div class="meta" style="margin:14px 0 6px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:#e9e2d8;">Intern / ohne Kunde</div>'; }
       var tagText = e.offset === 0 ? 'Heute' : (e.offset === 1 ? 'Morgen' : fmtDate(e.key + 'T12:00:00').substring(0, 6));
       var wer = (t.personen || []).indexOf('alle') >= 0 ? 'Alle' : (t.personen || []).map(function(n){ return zustaendigKurz(n); }).join(', ');
       // Termin-Karte im gleichen Aussehen wie die Kundenkarten unten
@@ -2480,7 +2505,7 @@ function renderDashboard(){
         if(c === 'warn') schlimmsteCls = 'warn';
         else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
       });
-      html += kundeAufgabeKarteHtml(k, eintraege, statusForDate);
+      html += kundeKarteOderTerminVerweis(k, eintraege, statusForDate);
     });
   }
   html += '</div>';
@@ -2515,12 +2540,13 @@ function renderDashboard(){
         if(c === 'warn') schlimmsteCls = 'warn';
         else if(c === 'soon' && schlimmsteCls !== 'warn') schlimmsteCls = 'soon';
       });
-      innerHtml += kundeAufgabeKarteHtml(gr.kunde, gr.eintraege, statusFuerBaldFaellig);
+      innerHtml += kundeKarteOderTerminVerweis(gr.kunde, gr.eintraege, statusFuerBaldFaellig);
     });
     if(ausgeblendet) innerHtml += '<button type="button" class="btn block secondary" data-dashalle="1" style="margin-top:8px;">Weitere ' + ausgeblendet + ' Kunden anzeigen</button>';
     return innerHtml;
   }
 
+  html += '<div class="section-title" style="margin-top:18px; color:#e8541f;">&#128295; Pr\u00fcfungen aus den Ger\u00e4ten (automatisch)</div>';
   var ueberfaelligPruefungen = offen.filter(function(p){ return daysUntil(p.datum) < 0; });
   if(ueberfaelligPruefungen.length > 0){
     html += '<div class="monatBox ueb"><div class="monatKopf ueberKopf">Überfällig <span class="monatAnz">' + ueberfaelligPruefungen.length + '</span></div>';
@@ -4320,15 +4346,15 @@ function modalTreueKarteZuordnen(code){
   var kt = reg.karten[code];
   var html = '<div class="modal-head"><h3>Neue Treuekarte Nr. ' + kt.nr + '</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<div class="meta" style="margin-bottom:8px;">Diese Karte gehört noch niemandem. Kunden suchen und antippen:</div>';
-  html += '<input type="text" id="tkSuche" placeholder="Name, Ort oder Kundennummer suchen..." autocomplete="off">';
+  html += '<input type="text" id="tkSuche" placeholder="Kundennummer oder Name eingeben..." autocomplete="off">';
   html += '<div id="tkListe" style="margin-top:8px;"></div>';
   html += '<button type="button" class="btn block secondary" id="tkNeuKunde" style="margin-top:12px;">+ Neuen Kunden anlegen</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   var zeigen = function(){
     var q = document.getElementById('tkSuche').value.trim().toLowerCase();
-    var l = state.kunden.filter(function(k){ return !k.geloescht && k.name; });
-    if(q) l = l.filter(function(k){ return (kundeAnzeigeName(k) + ' ' + (k.adresse || '') + ' ' + (k.kundennummer || '')).toLowerCase().indexOf(q) !== -1; });
+    var l = state.kunden.filter(function(k){ return !k.geloescht && kundeAnzeigeName(k); });
+    if(q) l = l.filter(function(k){ return (kundeAnzeigeName(k) + ' ' + (k.name || '') + ' ' + (k.vorname || '') + ' ' + (k.nachname || '') + ' ' + (k.adresse || '') + ' ' + (k.ort || '') + ' ' + (k.kundennummer || '')).toLowerCase().indexOf(q) !== -1; });
     l.sort(function(a, b){ return (treueAktiv(b) ? 1 : 0) - (treueAktiv(a) ? 1 : 0) || kundeAnzeigeName(a).localeCompare(kundeAnzeigeName(b)); });
     var h = '';
     l.slice(0, 30).forEach(function(k){
@@ -4568,6 +4594,34 @@ function bindTreueKunde(){
   };
 }
 
+// Vorrat-Karte per Kartennummer (ohne Scannen) einem Kunden geben
+function modalTreueVorratZuordnen(){
+  var reg = treueKartenDaten();
+  var frei = Object.keys(reg.karten).filter(function(c){ return !reg.karten[c].kundeId && !reg.karten[c].gesperrt; })
+    .map(function(c){ return { code: c, nr: reg.karten[c].nr }; }).sort(function(a, b){ return a.nr - b.nr; });
+  var html = '<div class="modal-head"><h3>Vorrat-Karte vergeben</h3><button class="close" id="mClose">&times;</button></div>';
+  if(!frei.length){
+    html += '<div class="empty">Keine leeren Karten auf Vorrat.<br>Zuerst unter Treueprogramm &bdquo;Leere Karten auf Vorrat drucken&ldquo;.</div>';
+    openModal(html); document.getElementById('mClose').onclick = closeModal; return;
+  }
+  html += '<div class="meta" style="margin-bottom:8px;">Die Nummer steht unten rechts auf der Karte (z.B. Nr. 1009). Karte antippen:</div>';
+  html += '<input type="text" inputmode="numeric" id="tvNr" placeholder="Kartennummer eintippen" autocomplete="off">';
+  html += '<div id="tvListe" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>';
+  html += '<div class="meta" style="margin-top:10px;">Oder einfacher: die Karte im Reiter <b>Scan</b> scannen.</div>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var zeigen = function(){
+    var q = document.getElementById('tvNr').value.replace(/\D/g, '');
+    var l = frei.filter(function(x){ return !q || String(x.nr).indexOf(q) !== -1; });
+    var h = '';
+    l.forEach(function(x){ h += '<button type="button" class="btn secondary tvKarte" data-code="' + x.code + '" style="width:auto; flex:0 0 auto; padding:10px 16px; font-size:16px; font-weight:800;">Nr. ' + x.nr + '</button>'; });
+    if(!l.length) h = '<div class="empty">Keine freie Karte mit dieser Nummer</div>';
+    document.getElementById('tvListe').innerHTML = h;
+    document.querySelectorAll('.tvKarte').forEach(function(b){ b.onclick = function(){ modalTreueKarteZuordnen(b.getAttribute('data-code')); }; });
+  };
+  document.getElementById('tvNr').oninput = zeigen;
+  zeigen();
+}
 // --- Uebersicht (Mehr -> Treueprogramm) ---
 function modalTreueUebersicht(){
   var liste = state.kunden.filter(treueAktiv).map(function(k){ return { k: k, p: treuePunkte(k) }; }).sort(function(a, b){ return b.p - a.p; });
@@ -4577,6 +4631,7 @@ function modalTreueUebersicht(){
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
   html += '<div class="meta" style="margin-top:6px;">Punkte je 1 &euro; netto: CO2-F\u00fcllung ' + TREUE_PUNKTE_PRO_EURO + ', \u00dcberpr\u00fcfung/Arbeit ' + TREUE_PPE_DIENST + ', Waren/Einkauf ' + TREUE_PPE_WAREN + '. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
   html += '<div class="row" style="gap:8px; margin-top:12px;"><input type="number" inputmode="numeric" id="tuAnz" value="10" min="1" max="100" style="flex:0 0 80px;"><button type="button" class="btn" id="tuDruck" style="flex:1;">Leere Karten auf Vorrat drucken</button></div>';
+  html += '<button type="button" class="btn block" id="tuZuordnen" style="margin-top:8px; background:#2e7d4f;">Vorrat-Karte einem Kunden geben</button>';
   html += '<button type="button" class="btn block secondary" id="tuRueck" style="margin-top:8px;">R\u00fcckseiten drucken</button>';
   html += '<button type="button" class="btn block secondary" id="tuPreise" style="margin-top:8px;">Preisliste bearbeiten</button>';
   html += '<div class="meta" style="margin-top:4px;">Leere Karte an Kunden ausgeben: Karte im Reiter Scan scannen &rarr; Kunden auswählen.</div>';
@@ -4606,6 +4661,7 @@ function modalTreueUebersicht(){
   };
   document.querySelectorAll('.tuKunde').forEach(function(b){ b.onclick = function(){ modalTreueKunde(b.getAttribute('data-kid')); }; });
   document.getElementById('tuPreise').onclick = modalTreuePreise;
+  document.getElementById('tuZuordnen').onclick = modalTreueVorratZuordnen;
   document.getElementById('tuRueck').onclick = function(){ modalRueckseiten(parseInt(document.getElementById('tuAnz').value, 10) || 1); };
 }
 
@@ -14096,6 +14152,8 @@ function terminNotizPunkte(t){
 function terminNotizHtml(t){
   var punkte = terminNotizPunkte(t);
   if(!punkte.length) return '';
+  // nur eine Zeile = normale Notiz, erst ab 2 Punkten als Liste zum Abhaken
+  if(punkte.length === 1) return '<div class="meta" style="margin-top:4px;">' + escapeHtml(punkte[0]) + '</div>';
   var haken = t.notizHaken || [];
   var h = '<div style="margin-top:6px;">';
   punkte.forEach(function(p, i){
@@ -14470,6 +14528,12 @@ function modalMehrMenu(){
     html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px; height:19px; flex-shrink:0;">' + e.svg + '</svg>';
     html += e.label + '</button>';
   });
+  // Treueprogramm direkt in der Liste (nur Chef, Janiba sen., Manuela, Sandra)
+  if(istVollsicht()){
+    html += '<button type="button" class="btn block secondary" id="mehrTreue" style="justify-content:flex-start; gap:10px; margin-top:8px;">';
+    html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px; height:19px; flex-shrink:0;"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>';
+    html += 'Treueprogramm (Treuekarten)</button>';
+  }
   html += '<label style="display:flex; align-items:center; gap:10px; margin-top:16px; font-size:15px;"><input type="checkbox" id="mehrQuer" style="width:22px; height:22px;"' + (bsvQuerformat() ? ' checked' : '') + '> Berichte im Querformat drucken</label>';
   if(darfInfoVerwalten()){
     var letzte = '';
@@ -14479,7 +14543,6 @@ function modalMehrMenu(){
     html += '<button type="button" class="btn block" id="mehrSichern" style="margin-top:10px;">Alles sichern (Datei herunterladen)</button>';
     html += '<div class="meta" style="margin-top:4px; text-align:center;">' + (letzte ? 'Letzte Sicherung auf diesem Gerät: ' + escapeHtml(letzte) : 'Auf diesem Gerät noch keine Sicherung gemacht') + '</div>';
   }
-  if(istVollsicht()) html += '<button type="button" class="btn block secondary" id="mehrTreue" style="margin-top:16px;">&#9733; Treueprogramm (Privatkunden)</button>';
   html += '<button type="button" class="btn block secondary" id="mehrGeraetAbmelden" style="margin-top:16px; color:#c23f12;">Gerät abmelden (Firmen-Konto)</button>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
