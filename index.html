@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-15 15:45';
-var APP_VERSION_TEXT = '15.11. 15:45';
+var APP_VERSION = '2026-11-15 17:00';
+var APP_VERSION_TEXT = '15.11. 17:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -4002,8 +4002,8 @@ function treuePPE(a){
 }
 function treueArtikelPunkte(a){ return Math.round((a.netto || 0) * treuePPE(a)); }
 var TREUE_PRAEMIEN = [
-  { id: 'co2', name: '1 CO2-Füllung gratis', punkte: 1000 },
-  { id: 'pruef', name: '1 Überprüfung gratis', punkte: 3000 },
+  { id: 'co2', name: 'CO2-Füllung', punkte: 1000 },
+  { id: 'pruef', name: 'Überprüfung eines Feuerlöschers', punkte: 3000 },
   { id: 'decke', name: 'Löschdecke P100', punkte: 7000 },
   { id: 'melder', name: 'Rauchmelder Senys2', punkte: 9000 },
   { id: 'p2g', name: 'Autolöscher P2G', punkte: 10000 }
@@ -4178,6 +4178,140 @@ var TREUE_BEDINGUNGEN = [
   'Auf der Karte stehen keine persönlichen Daten. Über den QR-Code ist nur der Punktestand sichtbar.',
   'Fehlbuchungen können korrigiert werden. Das Programm kann geändert oder beendet werden. Bereits gesammelte Punkte können dann noch 6 Monate eingelöst werden.'
 ];
+// --- Aktionen (z.B. Weihnachtsaktion): Zeitraum, Punkte-Faktor, Startbonus, Geschenk-Bonus ---
+var TREUE_AKTION_ID = 'treueaktion';
+var TREUE_AKTION_STANDARD = { id: TREUE_AKTION_ID, aktiv: true, aid: 'weihnachten2026', name: 'Weihnachtsaktion', von: '2026-12-01', bis: '2026-12-24', faktor: 2, startBonus: 300, geschenkBonus: 500 };
+function treueAktion(){
+  var e = (state.einstellungen || []).filter(function(x){ return x && x.id === TREUE_AKTION_ID; })[0];
+  return e || TREUE_AKTION_STANDARD;
+}
+// liefert die Aktion, wenn sie heute laeuft, sonst null (nach dem Ende automatisch aus)
+function treueAktionJetzt(){
+  var a = treueAktion(), h = treueTagKey(new Date());
+  if(!a || !a.aktiv || !a.von || !a.bis) return null;
+  return (h >= a.von && h <= a.bis) ? a : null;
+}
+function treueAktionKurz(a){
+  var t = [];
+  if((Number(a.faktor) || 1) > 1) t.push((Number(a.faktor) === 2 ? 'doppelte' : String(a.faktor).replace('.', ',') + '-fache') + ' Punkte');
+  if(a.geschenkBonus > 0) t.push('+' + treuePunkteText(a.geschenkBonus) + ' für Löschdecke/Rauchmelder');
+  if(a.startBonus > 0) t.push('+' + treuePunkteText(a.startBonus) + ' Startbonus für Neue');
+  return t.join(' · ');
+}
+function treueIstGeschenkArtikel(a){ return !!a && /rauchmelder|löschdecke|loeschdecke/i.test(a.name || '') && !/batterie/i.test(a.name || ''); }
+// Startbonus nur fuer neue Teilnehmer waehrend der Aktion, nur einmal (haengt die Buchung an, Speichern macht der Aufrufer)
+function treueStartbonusAnhaengen(k){
+  var a = treueAktionJetzt();
+  if(!a || !(a.startBonus > 0) || !k) return false;
+  var ref = 'start-' + (a.aid || a.von);
+  var alt = (k.treueBuchungen || []).some(function(b){ return b.ref === ref || treueTagKey(b.d) < a.von; });
+  if(alt) return false;
+  treueBuchungAnhaengen(k, a.startBonus, 'Startbonus ' + (a.name || 'Aktion'), ref);
+  return true;
+}
+function modalTreueAktion(){
+  var a = JSON.parse(JSON.stringify(treueAktion()));
+  var html = '<div class="modal-head"><h3>Aktion einstellen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;">Die Aktion gilt nur im eingestellten Zeitraum und endet danach von selbst.</div>';
+  html += '<label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="taAktiv"' + (a.aktiv ? ' checked' : '') + ' style="width:auto;"> Aktion eingeschaltet</label>';
+  html += '<label style="margin-top:8px;">Name</label><input type="text" id="taName" value="' + escapeHtml(a.name || '') + '">';
+  html += '<div class="row" style="gap:8px;"><div style="flex:1;"><label>Von</label><input type="date" id="taVon" value="' + escapeHtml(a.von || '') + '"></div><div style="flex:1;"><label>Bis (inkl.)</label><input type="date" id="taBis" value="' + escapeHtml(a.bis || '') + '"></div></div>';
+  html += '<label>Punkte-Faktor</label><select id="taFaktor">' + [1, 1.5, 2, 3].map(function(f){ return '<option value="' + f + '"' + (Number(a.faktor) === f ? ' selected' : '') + '>' + (f === 1 ? 'normal (x1)' : 'x' + String(f).replace('.', ',')) + '</option>'; }).join('') + '</select>';
+  html += '<label>Startbonus für neue Teilnehmer (Punkte)</label><input type="text" inputmode="numeric" id="taStart" value="' + (a.startBonus || 0) + '">';
+  html += '<label>Extra-Punkte bei Kauf von Löschdecke / Rauchmelder</label><input type="text" inputmode="numeric" id="taGesch" value="' + (a.geschenkBonus || 0) + '">';
+  html += '<button type="button" class="btn block" id="taSave" style="margin-top:12px;">Speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ modalTreueUebersicht(); };
+  document.getElementById('taSave').onclick = function(){
+    var zahl = function(id){ return Math.max(0, parseInt(String(document.getElementById(id).value).replace(/\D/g, ''), 10) || 0); };
+    var neu = { id: TREUE_AKTION_ID, aktiv: document.getElementById('taAktiv').checked, name: document.getElementById('taName').value.trim() || 'Aktion', von: document.getElementById('taVon').value, bis: document.getElementById('taBis').value, faktor: parseFloat(document.getElementById('taFaktor').value) || 1, startBonus: zahl('taStart'), geschenkBonus: zahl('taGesch'), geaendertAm: new Date().toISOString() };
+    if(!neu.von || !neu.bis || neu.bis < neu.von){ toast('Bitte Zeitraum prüfen'); return; }
+    neu.aid = (neu.name + '-' + neu.von).toLowerCase().replace(/[^a-z0-9-]/g, '');
+    state.einstellungen = (state.einstellungen || []).filter(function(x){ return x.id !== TREUE_AKTION_ID; }).concat([neu]);
+    dbPut('einstellungen', neu, function(){ toast('Aktion gespeichert'); modalTreueUebersicht(); });
+  };
+}
+function treueAktionBannerHtml(){
+  var a = treueAktionJetzt();
+  if(!a) return '';
+  return '<div style="margin:8px 0; padding:10px 12px; border-radius:10px; background:#1b5e20; color:#fff; font-weight:700;">&#127876; ' + escapeHtml(a.name) + ' bis ' + fmtDate(a.bis) + '<div style="font-weight:400; font-size:13px; margin-top:2px;">' + escapeHtml(treueAktionKurz(a)) + '</div></div>';
+}
+// --- Praemie des Monats (Monats-Paket): je Monat eine Praemie aus der Liste oder ein eigenes Paket ---
+var TREUE_MONAT_ID = 'treuemonat';
+var TREUE_MONATSNAMEN = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+function treueMonatKey(d){ var x = d || new Date(); return x.getFullYear() + '-' + ('0' + (x.getMonth() + 1)).slice(-2); }
+function treueMonatText(key){ var t = String(key).split('-'); return TREUE_MONATSNAMEN[parseInt(t[1], 10) - 1] + ' ' + t[0]; }
+function treueMonatDaten(){
+  var e = (state.einstellungen || []).filter(function(x){ return x && x.id === TREUE_MONAT_ID; })[0];
+  if(!e) e = { id: TREUE_MONAT_ID, monate: {} };
+  if(!e.monate) e.monate = {};
+  return e;
+}
+// liefert {id, name, punkte, text, monat} fuer den aktuellen Monat oder null
+function treueMonatsPraemie(){
+  var key = treueMonatKey(), m = treueMonatDaten().monate[key];
+  if(!m || !m.name || !(m.punkte > 0)) return null;
+  return { id: 'monat-' + key, name: m.name, punkte: m.punkte, text: m.text || '', monat: key };
+}
+// Praemienliste fuer diesen Monat (Monatspaket zuerst, ohne doppelte Eintraege)
+function treuePraemienJetzt(){
+  var mp = treueMonatsPraemie();
+  if(!mp) return TREUE_PRAEMIEN.slice();
+  var rest = TREUE_PRAEMIEN.filter(function(p){ return !(p.name === mp.name && p.punkte === mp.punkte); });
+  return [{ id: mp.id, name: mp.name, punkte: mp.punkte, monat: true, text: mp.text }].concat(rest);
+}
+function modalTreueMonat(){
+  var reg = treueMonatDaten();
+  var jetzt = new Date();
+  var keys = [0, 1, 2, 3].map(function(i){ return treueMonatKey(new Date(jetzt.getFullYear(), jetzt.getMonth() + i, 1)); });
+  var html = '<div class="modal-head"><h3>Prämie des Monats</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:8px;">Jeden Monat ein Treuepaket hervorheben. Der Kunde sieht es ganz oben, wenn er seine Karte mit dem Handy scannt. Die Punkte der normalen Prämien bleiben gleich.</div>';
+  keys.forEach(function(k, i){
+    var m = reg.monate[k] || {};
+    var opt = '<option value="">&ndash; keine &ndash;</option>';
+    TREUE_PRAEMIEN.forEach(function(p){ opt += '<option value="' + p.id + '"' + (m.name === p.name && m.punkte === p.punkte ? ' selected' : '') + '>' + escapeHtml(p.name) + ' (' + treuePunkteText(p.punkte) + ' P.)</option>'; });
+    var eigen = m.name && !TREUE_PRAEMIEN.some(function(p){ return m.name === p.name && m.punkte === p.punkte; });
+    opt += '<option value="eigen"' + (eigen ? ' selected' : '') + '>Eigenes Paket &hellip;</option>';
+    html += '<div class="card" style="margin-top:8px; padding:10px 12px;"><div style="font-weight:800;">' + treueMonatText(k) + (i === 0 ? ' (jetzt)' : '') + '</div>';
+    html += '<select class="tmWahl" data-k="' + k + '" style="margin-top:6px;">' + opt + '</select>';
+    html += '<div class="tmEigen" data-k="' + k + '" style="display:' + (eigen ? 'flex' : 'none') + '; gap:6px; margin-top:6px;"><input type="text" class="tmName" data-k="' + k + '" placeholder="z.B. Rauchmelder-Paket" value="' + escapeHtml(eigen ? m.name : '') + '" style="flex:2; min-width:0;"><input type="text" inputmode="numeric" class="tmPunkte" data-k="' + k + '" placeholder="Punkte" value="' + (eigen ? m.punkte : '') + '" style="flex:1; min-width:0;"></div>';
+    html += '<input type="text" class="tmText" data-k="' + k + '" placeholder="Kurzer Text für Kunden (optional)" value="' + escapeHtml(m.text || '') + '" style="margin-top:6px;">';
+    html += '</div>';
+  });
+  html += '<button type="button" class="btn block" id="tmSave" style="margin-top:12px;">Speichern</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = function(){ modalTreueUebersicht(); };
+  document.querySelectorAll('.tmWahl').forEach(function(sel){
+    sel.onchange = function(){ document.querySelector('.tmEigen[data-k="' + sel.getAttribute('data-k') + '"]').style.display = sel.value === 'eigen' ? 'flex' : 'none'; };
+  });
+  document.getElementById('tmSave').onclick = function(){
+    var r = treueMonatDaten();
+    var fehler = '';
+    keys.forEach(function(k){
+      var v = document.querySelector('.tmWahl[data-k="' + k + '"]').value;
+      var text = document.querySelector('.tmText[data-k="' + k + '"]').value.trim();
+      if(!v){ delete r.monate[k]; return; }
+      if(v === 'eigen'){
+        var n = document.querySelector('.tmName[data-k="' + k + '"]').value.trim();
+        var pk = parseInt(String(document.querySelector('.tmPunkte[data-k="' + k + '"]').value).replace(/\D/g, ''), 10) || 0;
+        if(!n || !pk){ fehler = treueMonatText(k) + ': bitte Name und Punkte eingeben'; return; }
+        r.monate[k] = { name: n, punkte: pk, text: text };
+      } else {
+        var pr = TREUE_PRAEMIEN.filter(function(x){ return x.id === v; })[0];
+        if(pr) r.monate[k] = { name: pr.name, punkte: pr.punkte, text: text };
+      }
+    });
+    if(fehler){ toast(fehler); return; }
+    r.geaendertAm = new Date().toISOString();
+    state.einstellungen = (state.einstellungen || []).filter(function(x){ return x.id !== TREUE_MONAT_ID; }).concat([r]);
+    dbPut('einstellungen', r, function(){
+      toast('Gespeichert');
+      // alle Kundenportale aktualisieren, damit die Kunden das neue Paket sehen
+      (state.kunden || []).filter(treueAktiv).forEach(function(k){ if(treueKartenVonKunde(k.id).length) treuePortalSync(k); });
+      modalTreueUebersicht();
+    });
+  };
+}
 function treueDarfEinloesen(){
   return state.rolle === 'chef' || TREUE_EINLOESEN_NAMEN.indexOf(state.mitarbeiterName) !== -1;
 }
@@ -4292,7 +4426,10 @@ function treuePortalSync(k, melden){
   var buch = (k.treueBuchungen || []).slice().sort(function(a, b){ return String(b.d).localeCompare(String(a.d)); }).slice(0, 15)
     .map(function(b){ return { d: String(b.d).substring(0, 10), t: b.t, p: b.p }; });
   var tkGb = treueGueltigBis(k);
-  var daten = { id: 'treue', typ: 'treue', punkte: treuePunkte(k), praemien: TREUE_PRAEMIEN, buchungen: buch, aktiv: treueAktiv(k), stand: new Date().toISOString(), gueltigBis: tkGb ? treueTagKey(tkGb) : '', verfallJahre: TREUE_VERFALL_JAHRE, bedingungen: TREUE_BEDINGUNGEN };
+  var tmReg = treueMonatDaten();
+  var daten = { id: 'treue', typ: 'treue', punkte: treuePunkte(k), praemien: TREUE_PRAEMIEN, monatsPraemien: tmReg.monate,  buchungen: buch, aktiv: treueAktiv(k), stand: new Date().toISOString(), gueltigBis: tkGb ? treueTagKey(tkGb) : '', verfallJahre: TREUE_VERFALL_JAHRE, bedingungen: TREUE_BEDINGUNGEN };
+  var tkAk = treueAktion();
+  daten.aktion = (tkAk && tkAk.aktiv && tkAk.bis >= treueTagKey(new Date())) ? { name: tkAk.name, von: tkAk.von, bis: tkAk.bis, faktor: tkAk.faktor, startBonus: tkAk.startBonus, geschenkBonus: tkAk.geschenkBonus } : null;
   karten.forEach(function(kt){
     portalSchluessel('treue-' + kt.code, function(key, fehler){
       if(fehler || !key){ toast('Kundenportal: Verschl\u00fcsselung auf diesem Ger\u00e4t nicht m\u00f6glich'); return; }
@@ -4419,8 +4556,9 @@ function modalTreueKarteZuordnen(code){
           r2.karten[code].kundeId = k.id;
           r2.karten[code].ausgegeben = new Date().toISOString().substring(0, 10);
           treueKartenSpeichern(r2, function(){
-            var weiter = function(){ treuePortalSync(k); toast('Karte Nr. ' + kt.nr + ' zugeordnet'); modalTreueKunde(k.id); };
-            if(!k.treueAktiv){ k.treueAktiv = true; dbPut('kunden', k, weiter); } else weiter();
+            var sb = treueStartbonusAnhaengen(k);
+            var weiter = function(){ treuePortalSync(k); toast('Karte Nr. ' + kt.nr + ' zugeordnet' + (sb ? ' + Startbonus' : '')); modalTreueKunde(k.id); };
+            if(!k.treueAktiv || sb){ k.treueAktiv = true; dbPut('kunden', k, weiter); } else weiter();
           });
         });
       };
@@ -4434,11 +4572,11 @@ function modalTreueKarteZuordnen(code){
 // --- Treue-Fenster eines Kunden (nach Scan oder aus der Kundenkartei) ---
 function treueFortschrittHtml(punkte, gross){
   var h = '';
-  TREUE_PRAEMIEN.forEach(function(p){
+  treuePraemienJetzt().forEach(function(p){
     var pz = Math.max(0, Math.min(100, Math.round(punkte / p.punkte * 100)));
     var ok = punkte >= p.punkte;
     h += '<div style="padding:8px 0; border-bottom:1px solid var(--line);">';
-    h += '<div class="row" style="align-items:center;"><div style="flex:1; font-weight:700;">' + escapeHtml(p.name) + '</div>';
+    h += '<div class="row" style="align-items:center;"><div style="flex:1; font-weight:700;">' + (p.monat ? '<span style="display:inline-block; background:#1565c0; color:#fff; border-radius:6px; padding:1px 7px; font-size:11px; margin-right:6px;">MONAT</span>' : '') + escapeHtml(p.name) + '</div>';
     h += '<span class="meta">' + treuePunkteText(Math.min(punkte, p.punkte)) + ' / ' + treuePunkteText(p.punkte) + '</span>';
     if(gross && ok && treueDarfEinloesen()) h += '<button type="button" class="btn small treueEinl" data-pid="' + p.id + '" style="margin-left:8px; background:#1e8449;">Einlösen</button>';
     h += '</div>';
@@ -4463,6 +4601,7 @@ function modalTreueKunde(kundeId){
   } else if(tkGueltig && punkte > 0){
     html += '<div class="meta" style="text-align:center;">Gültig bis ' + fmtDate(treueTagKey(tkGueltig)) + ' (verlängert sich mit jedem Einkauf)</div>';
   }
+  html += treueAktionBannerHtml();
   // Leistung / Kauf aus der Preisliste buchen
   html += '<div class="card" style="margin-top:10px; padding:10px 12px;">';
   html += '<div style="font-weight:700; margin-bottom:2px;">Leistung / Kauf buchen</div>';
@@ -4483,7 +4622,9 @@ function modalTreueKunde(kundeId){
   html += '<div style="font-weight:700; margin-top:12px;">Oder einfach den bezahlten Betrag</div>';
   html += '<div class="row" style="gap:6px; margin-top:4px;"><input type="text" inputmode="decimal" id="tkBrutto" placeholder="z.B. 196,00 (brutto, inkl. USt.)" style="flex:1; min-width:0;"><span style="flex:0 0 auto; font-weight:700;">&euro;</span></div>';
   html += '<div class="row" style="gap:6px; margin-top:10px;"><input type="text" id="tkFreiT" placeholder="Sonstiges (Text)" style="flex:2; min-width:0;"><input type="text" inputmode="decimal" id="tkFreiB" placeholder="&euro; netto" style="flex:1; min-width:0;"></div>';
-  html += '<div id="tkSumme" style="margin-top:10px; padding:10px 12px; border-radius:10px; background:#e5f4ea; color:#1e8449; font-weight:700;">Noch nichts ausgewählt</div>';
+  var tkAkt = treueAktionJetzt();
+  if(tkAkt && tkAkt.geschenkBonus > 0) html += '<label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-weight:700;"><input type="checkbox" id="tkGeschenk" style="width:auto;"> &#127873; Löschdecke / Rauchmelder gekauft (+' + treuePunkteText(tkAkt.geschenkBonus) + ')</label>';
+  html += '<div id="tkSumme' + '" style="margin-top:10px; padding:10px 12px; border-radius:10px; background:#e5f4ea; color:#1e8449; font-weight:700;">Noch nichts ausgewählt</div>';
   html += '<button type="button" class="btn block" id="tkBuchen" style="margin-top:8px;">Punkte gutschreiben</button>';
   html += '</div>';
   html += '<div style="font-weight:700; margin-top:14px;">Prämien</div>';
@@ -4538,11 +4679,19 @@ function modalTreueKunde(kundeId){
     if(fb > 0){ netto += fb; punkte += Math.round(fb * TREUE_PPE_WAREN); teile.push((document.getElementById('tkFreiT').value.trim() || 'Sonstiges') + ' ' + treueEur(fb) + ' EUR'); }
     var bb = tkZahl('tkBrutto');
     if(bb > 0){ netto += bb / 1.2; punkte += treuePunkteAusBrutto(bb); teile.push('Einkauf ' + treueEur(bb) + ' EUR'); }
-    return { netto: netto, punkte: punkte, text: teile.join(', ') };
+    var extra = '';
+    var ak = treueAktionJetzt();
+    if(ak && punkte > 0){
+      var f = Number(ak.faktor) || 1;
+      if(f > 1){ punkte = Math.round(punkte * f); teile.push(ak.name + ' x' + String(f).replace('.', ',')); extra += ' (' + ak.name + ' x' + String(f).replace('.', ',') + ')'; }
+    }
+    var gh = document.getElementById('tkGeschenk');
+    if(ak && gh && gh.checked && ak.geschenkBonus > 0){ punkte += ak.geschenkBonus; teile.push('Geschenk-Bonus +' + ak.geschenkBonus); extra += ' + Geschenk-Bonus'; }
+    return { netto: netto, punkte: punkte, text: teile.join(', '), extra: extra };
   };
   var tkAnzeigen = function(){
     var r = tkRechnen();
-    document.getElementById('tkSumme').innerHTML = r.netto > 0 ? ('Netto ' + treueEur(r.netto) + ' &euro; &rarr; <span style="font-size:18px;">+' + treuePunkteText(r.punkte) + ' Punkte</span>') : 'Noch nichts ausgewählt';
+    document.getElementById('tkSumme').innerHTML = r.netto > 0 ? ('Netto ' + treueEur(r.netto) + ' &euro; &rarr; <span style="font-size:18px;">+' + treuePunkteText(r.punkte) + ' Punkte</span>' + (r.extra ? '<div style="font-size:13px; margin-top:2px;">&#127876;' + escapeHtml(r.extra) + '</div>' : '')) : 'Noch nichts ausgewählt';
   };
   document.querySelectorAll('.tkArtP, .tkArtM').forEach(function(b){
     b.onclick = function(){
@@ -4552,12 +4701,15 @@ function modalTreueKunde(kundeId){
       var el = document.querySelector('.tkArtN[data-a="' + id + '"]');
       el.textContent = tkAuswahl[id];
       el.style.color = tkAuswahl[id] ? '#1e8449' : 'var(--muted)';
+      var ghk = document.getElementById('tkGeschenk');
+      if(ghk) ghk.checked = Object.keys(tkAuswahl).some(function(x){ return tkAuswahl[x] > 0 && treueIstGeschenkArtikel(treueArtikel(x)); });
       tkAnzeigen();
     };
   });
   document.getElementById('tkFreiB').oninput = tkAnzeigen;
   document.getElementById('tkBrutto').oninput = tkAnzeigen;
   document.getElementById('tkFreiT').oninput = tkAnzeigen;
+  if(document.getElementById('tkGeschenk')) document.getElementById('tkGeschenk').onchange = tkAnzeigen;
   document.getElementById('tkBuchen').onclick = function(){
     var r = tkRechnen();
     if(!(r.punkte > 0)){ toast('Bitte zuerst etwas auswählen'); return; }
@@ -4581,7 +4733,7 @@ function modalTreueKunde(kundeId){
   };
   document.querySelectorAll('.treueEinl').forEach(function(b){
     b.onclick = function(){
-      var pr = TREUE_PRAEMIEN.filter(function(x){ return x.id === b.getAttribute('data-pid'); })[0];
+      var pr = treuePraemienJetzt().filter(function(x){ return x.id === b.getAttribute('data-pid'); })[0];
       if(!pr) return;
       if(!treueDarfEinloesen()){ toast('Einlösen darf nur der Chef oder Manuela'); return; }
       customConfirm(treueDoppelWarnung(k, function(b){ return b.p < 0 && b.t === 'Prämie: ' + pr.name; }) + 'Prämie "' + pr.name + '" einlösen? Es werden ' + treuePunkteText(pr.punkte) + ' Punkte abgezogen.', function(){
@@ -4644,7 +4796,11 @@ function bindTreueKunde(){
   var d = document.getElementById('tkKarteDruck');
   if(d) d.onclick = function(){
     customConfirm('Neue Treuekarte für ' + kundeAnzeigeName(k) + ' anlegen und drucken?', function(){
-      treueKartenAnlegen(1, k.id, function(neu){ neu.forEach(function(x){ x.kdnr = k.kundennummer || ''; }); treuePortalSync(k); treueKartenPdf(neu); render(); });
+      treueKartenAnlegen(1, k.id, function(neu){
+        neu.forEach(function(x){ x.kdnr = k.kundennummer || ''; });
+        var fertig = function(){ treuePortalSync(k); treueKartenPdf(neu); render(); };
+        if(treueStartbonusAnhaengen(k)){ toast('Startbonus gutgeschrieben'); dbPut('kunden', k, fertig); } else fertig();
+      });
     });
   };
   var s = document.getElementById('tkSperren');
@@ -4695,12 +4851,17 @@ function modalTreueUebersicht(){
   var reg = treueKartenDaten();
   var frei = Object.keys(reg.karten).filter(function(c){ return !reg.karten[c].kundeId && !reg.karten[c].gesperrt; }).length;
   var html = '<div class="modal-head"><h3>Treueprogramm</h3><button class="close" id="mClose">&times;</button></div>';
+  html += treueAktionBannerHtml();
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
   html += '<div class="meta" style="margin-top:6px;">Punkte je 1 &euro; netto: CO2-F\u00fcllung ' + TREUE_PUNKTE_PRO_EURO + ', \u00dcberpr\u00fcfung/Arbeit ' + TREUE_PPE_DIENST + ', Waren/Einkauf ' + TREUE_PPE_WAREN + '. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
   html += '<div class="row" style="gap:8px; margin-top:12px;"><input type="number" inputmode="numeric" id="tuAnz" value="10" min="1" max="100" style="flex:0 0 80px;"><button type="button" class="btn" id="tuDruck" style="flex:1;">Leere Karten auf Vorrat drucken</button></div>';
   html += '<button type="button" class="btn block" id="tuZuordnen" style="margin-top:8px; background:#2e7d4f;">Vorrat-Karte einem Kunden geben</button>';
   html += '<button type="button" class="btn block secondary" id="tuRueck" style="margin-top:8px;">R\u00fcckseiten drucken</button>';
   html += '<button type="button" class="btn block secondary" id="tuPreise" style="margin-top:8px;">Preisliste bearbeiten</button>';
+  var tuAk = treueAktion();
+  var tuMp = treueMonatsPraemie();
+  html += '<button type="button" class="btn block secondary" id="tuMonat" style="margin-top:8px;">Pr\u00e4mie des Monats: ' + (tuMp ? escapeHtml(tuMp.name) : 'keine') + '</button>';
+  html += '<button type="button" class="btn block secondary" id="tuAktion" style="margin-top:8px;">&#127876; Aktion: ' + escapeHtml(tuAk.name || '') + (tuAk.aktiv ? ' (' + fmtDate(tuAk.von) + ' &ndash; ' + fmtDate(tuAk.bis) + ')' : ' (aus)') + '</button>';
   html += '<div class="meta" style="margin-top:4px;">Leere Karte an Kunden ausgeben: Karte im Reiter Scan scannen &rarr; Kunden auswählen.</div>';
   if(frei){
     html += '<button type="button" class="btn block secondary" id="tuNochmal" style="margin-top:8px;">Leere Karten nochmal drucken (' + frei + ')</button>';
@@ -4758,6 +4919,8 @@ function modalTreueUebersicht(){
   };
   document.querySelectorAll('.tuKunde').forEach(function(b){ b.onclick = function(){ modalTreueKunde(b.getAttribute('data-kid')); }; });
   document.getElementById('tuPreise').onclick = modalTreuePreise;
+  document.getElementById('tuAktion').onclick = modalTreueAktion;
+  document.getElementById('tuMonat').onclick = modalTreueMonat;
   document.getElementById('tuZuordnen').onclick = modalTreueVorratZuordnen;
   document.getElementById('tuRueck').onclick = function(){ modalRueckseiten(parseInt(document.getElementById('tuAnz').value, 10) || 1); };
 }

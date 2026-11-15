@@ -523,7 +523,20 @@ function startTreue(code){
 }
 function zeigeTreue(t){
   var p = t.punkte || 0;
-  var h = '<div class="card" style="text-align:center;">';
+  var h = '';
+  var ak = t.aktion;
+  var heuteK = (function(){ var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); })();
+  if(ak && ak.bis && ak.bis >= heuteK){
+    var laeuft = !ak.von || ak.von <= heuteK;
+    var vorteile = [];
+    if((Number(ak.faktor) || 1) > 1) vorteile.push(Number(ak.faktor) === 2 ? '<b>Doppelte Punkte</b> auf jeden Einkauf und jede \u00dcberpr\u00fcfung' : '<b>' + String(ak.faktor).replace('.', ',') + '-fache Punkte</b>');
+    if(ak.geschenkBonus > 0) vorteile.push('<b>+' + punkteText(ak.geschenkBonus) + ' Extra-Punkte</b> f\u00fcr L\u00f6schdecke oder Rauchmelder als Geschenk');
+    if(ak.startBonus > 0) vorteile.push('<b>+' + punkteText(ak.startBonus) + ' Startbonus</b> f\u00fcr neue Kartenbesitzer');
+    h += '<div class="card" style="background:#1b5e20; color:#fff;"><div style="font-size:20px; font-weight:800;">&#127876; ' + escapeHtml(ak.name || 'Aktion') + '</div>';
+    h += '<div style="font-size:14px; margin-top:2px; opacity:.9;">' + (laeuft ? 'Nur bis ' + fmtDate(ak.bis) : 'Von ' + fmtDate(ak.von) + ' bis ' + fmtDate(ak.bis)) + '</div>';
+    h += '<ul style="margin:8px 0 0 18px; padding:0; font-size:15px; line-height:1.5;">' + vorteile.map(function(v){ return '<li>' + v + '</li>'; }).join('') + '</ul></div>';
+  }
+  h += '<div class="card" style="text-align:center;">';
   h += '<div style="font-size:13px; color:#777; text-transform:uppercase; letter-spacing:1px;">Ihr Punktestand</div>';
   h += '<div style="font-size:52px; font-weight:800; color:#c23f12; line-height:1.1; margin:6px 0;">' + punkteText(p) + '</div>';
   h += '<div style="font-size:13px; color:#777;">Stand: ' + fmtDate(t.stand) + '</div>';
@@ -532,8 +545,27 @@ function zeigeTreue(t){
     h += '<div style="font-size:13px; margin-top:4px;' + (gbAbgelaufen ? ' color:#c23f12; font-weight:700;' : ' color:#777;') + '">' + (gbAbgelaufen ? 'Punkte verfallen seit ' : 'Punkte g\u00fcltig bis ') + fmtDate(t.gueltigBis) + '</div>';
   }
   h += '</div>';
+  var MN = ['J\u00e4nner', 'Februar', 'M\u00e4rz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  var jetztD = new Date();
+  var mKey = function(off){ var d = new Date(jetztD.getFullYear(), jetztD.getMonth() + off, 1); return { k: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2), n: MN[d.getMonth()] }; };
+  var mp = t.monatsPraemien || {};
+  var dieser = mKey(0), naechster = mKey(1);
+  var mJetzt = mp[dieser.k], mNext = mp[naechster.k];
+  var praemienListe = (t.praemien || []).slice();
+  if(mJetzt && mJetzt.name){
+    var mpz = Math.max(0, Math.min(100, Math.round(p / mJetzt.punkte * 100)));
+    var mok = p >= mJetzt.punkte;
+    h += '<div class="card" style="background:#1565c0; color:#fff;"><div style="font-size:13px; text-transform:uppercase; letter-spacing:1px; opacity:.9;">Pr\u00e4mie des Monats &middot; ' + dieser.n + '</div>';
+    h += '<div style="font-size:22px; font-weight:800; margin-top:4px;">' + escapeHtml(mJetzt.name) + '</div>';
+    if(mJetzt.text) h += '<div style="font-size:14px; margin-top:4px;">' + escapeHtml(mJetzt.text) + '</div>';
+    h += '<div style="font-size:15px; margin-top:6px; font-weight:700;">' + (mok ? 'Mit Ihren Punkten einl\u00f6sbar!' : 'ab ' + punkteText(mJetzt.punkte) + ' Punkten &middot; noch ' + punkteText(mJetzt.punkte - p) + ' Punkte') + '</div>';
+    h += '<div style="height:10px; border-radius:6px; background:rgba(255,255,255,.3); margin-top:8px; overflow:hidden;"><div style="height:100%; width:' + mpz + '%; background:#fff;"></div></div>';
+    if(mNext && mNext.name) h += '<div style="font-size:13px; margin-top:8px; opacity:.9;">Im ' + naechster.n + ': ' + escapeHtml(mNext.name) + '</div>';
+    h += '</div>';
+    praemienListe = praemienListe.filter(function(x){ return !(x.name === mJetzt.name && x.punkte === mJetzt.punkte); });
+  }
   h += '<div class="card"><h2>Prämien</h2>';
-  (t.praemien || []).forEach(function(pr){
+  praemienListe.forEach(function(pr){
     var pz = Math.max(0, Math.min(100, Math.round(p / pr.punkte * 100)));
     var ok = p >= pr.punkte;
     h += '<div style="padding:10px 0; border-bottom:1px solid #eee;">';
