@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-15 10:50';
-var APP_VERSION_TEXT = '15.11. 10:50';
+var APP_VERSION = '2026-11-15 11:35';
+var APP_VERSION_TEXT = '15.11. 11:35';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1052,18 +1052,27 @@ function geraetById(id){ return eintragById('geraete', id); }
 function kundeById(id){ return eintragById('kunden', id); }
 function geraeteVonKunde(kid){ return (idIndex('geraete').proKunde[kid] || []).slice(); }
 var renderGeplant = null, renderWartet = false, appStartZeit = Date.now();
+var renderWartetSeit = 0;
 function renderTipptGerade(){
+  // nur echtes Tippen in ein Textfeld zaehlt (Auswahllisten bleiben am iPhone oft "aktiv" -> sonst kaeme nie ein Update)
   var a = document.activeElement;
   var m = document.getElementById('main');
-  return !!(a && m && m.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+  if(!(a && m && m.contains(a))) return false;
+  if(a.tagName === 'TEXTAREA') return true;
+  if(a.tagName !== 'INPUT') return false;
+  var t = (a.type || 'text').toLowerCase();
+  return ['text', 'search', 'number', 'tel', 'email', 'url', 'password'].indexOf(t) !== -1;
 }
 function renderBald(){
   if(renderGeplant) return;
   var warte = (Date.now() - appStartZeit < 6000) ? 700 : 250;
   renderGeplant = setTimeout(function(){
     renderGeplant = null;
-    if(state.tab === 'scan' || state.tab === 'geraetCheck' || renderTipptGerade() || (typeof scannerInstance !== 'undefined' && scannerInstance)){ renderWartet = true; return; }
-    renderWartet = false;
+    var aufschieben = state.tab === 'scan' || state.tab === 'geraetCheck' || renderTipptGerade() || (typeof scannerInstance !== 'undefined' && scannerInstance);
+    // nie laenger als 20 Sekunden aufschieben (ausser Kamera/Geraete-Check offen)
+    if(aufschieben && renderWartetSeit && Date.now() - renderWartetSeit > 20000 && state.tab !== 'scan' && state.tab !== 'geraetCheck') aufschieben = false;
+    if(aufschieben){ if(!renderWartetSeit) renderWartetSeit = Date.now(); renderWartet = true; setTimeout(function(){ if(renderWartet) renderBald(); }, 5000); return; }
+    renderWartet = false; renderWartetSeit = 0;
     var y = window.pageYOffset || document.documentElement.scrollTop || 0;
     renderHintergrund = true;
     try{ render(); } finally { renderHintergrund = false; }
