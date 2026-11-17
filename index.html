@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-15 21:50';
-var APP_VERSION_TEXT = '15.11. 21:50';
+var APP_VERSION = '2026-11-17 11:50';
+var APP_VERSION_TEXT = '17.11. 11:50';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -435,6 +435,28 @@ try {
   .pb-sig-col .sig-label{font-size:11px; color:var(--muted); margin-top:6px; text-align:center; font-weight:600;}
 
   .pos-karte{border:1px solid var(--line); border-radius:6px; margin-bottom:10px; overflow:hidden; page-break-inside:avoid;}
+  .pos-daten{display:flex; flex-wrap:wrap; gap:4px 22px; margin-top:6px; font-size:12.5px; color:var(--ink);}
+  .pos-daten b{font-size:13.5px;}
+  /* Druck: kraeftige Schrift und Linien, damit der Bericht auch ohne Hintergrundfarben gut lesbar ist */
+  #printArea{ --muted:#3a332e; --line:#9c8f84; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  #printArea *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  #printArea .pos-karte{border:1.5px solid #8a7b6e;}
+  #printArea .pos-kopf{background:#f1e4d6; border-bottom:1.5px solid #8a7b6e; padding:9px 12px;}
+  #printArea .pos-kopf > div{flex:1; min-width:0;}
+  #printArea .pos-kopf .titel{font-size:14.5px; color:#111;}
+  #printArea .pos-kopf .meta2{font-size:13px; color:#2b2622;}
+  #printArea .pos-dienst{font-size:13px; padding:7px 12px;}
+  #printArea .pos-dienst .dname{color:#1d1916; font-weight:600;}
+  #printArea .pos-notiz{font-size:12.5px; color:#1d1916;}
+  #printArea .pb-ok{background:#dff0e4; color:#0f5a27; border:1.5px solid #1e7a3a; font-size:12px;}
+  #printArea .pb-rot{background:#fbe2d8; color:#9a2a0a; border:1.5px solid #c23f12; font-size:12px;}
+  #printArea .pb-blau{background:#dbe9fb; color:#164c8a; border:1.5px solid #1d5fa8; font-size:12px;}
+  #printArea .pb-kundenbox{background:#f4ebe0; border:1.5px solid #8a7b6e; border-left:5px solid var(--ember); color:#111;}
+  #printArea .pb-kundenbox .knr{color:#3a332e;}
+  #printArea .pb-berichtnr{color:#1d1916; font-weight:600;}
+  #printArea .pb-titel .sub, #printArea .pb-titel .norm{color:#2b2622;}
+  #printArea .bericht-fuss{color:#2b2622; border-top:1.5px solid #8a7b6e;}
+  #printArea .pb-sig-col .sig-label{color:#1d1916;}
   .pos-kopf{display:flex; justify-content:space-between; align-items:flex-start; background:#f0e2d4; padding:8px 10px; gap:10px;}
   .pos-kopf .titel{font-weight:700; font-size:13px;}
   .pos-kopf .meta2{font-size:15px; color:var(--muted); margin-top:2px;}
@@ -1476,7 +1498,7 @@ function bsvDruckenOderTeilen(html, dateiname, cb){
       }catch(eZ){ console.warn('Unterschrift nachzeichnen', eZ); }
 
       var pdf = new window.jspdf.jsPDF({ orientation: (quer ? 'landscape' : 'portrait'), unit: 'pt', format: 'a4', compress: true });
-      var rand = 20;
+      var rand = 30; // ca. 10 mm Rand, damit Drucker rechts nichts abschneiden
       var pageWidth = pdf.internal.pageSize.getWidth();
       var pageHeight = pdf.internal.pageSize.getHeight();
       var nutzbreite = pageWidth - (rand * 2);
@@ -16194,14 +16216,15 @@ function buildSammelberichtHtml(sb, k){
         posTitel = 'Brandschutzbegehung' + (rest && rest.toLowerCase() !== 'brandschutzbegehung' ? ' \u2013 ' + rest : '');
       }
       html += '<div><div class="titel">' + g.nr + '. ' + escapeHtml(posTitel) + bioHinweisHtml(g) + '</div>';
-      html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div></div>';
+      html += '<div class="meta2">' + escapeHtml(g.standort||'-') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + '</div>';
       var naechsteGueltig = g.naechstePruefung && new Date(g.naechstePruefung) > new Date(sb.datum);
+      // Pruefdaten als eigene Zeile unter dem Titel (nicht mehr rechts -> wird beim Drucken nicht abgeschnitten)
       if(istFuellKategorie(kat)){
-        html += '<div class="rechts">Neufüllung am<br><strong>' + fmtDatumZeitLokal(g.abfuelldatum) + '</strong></div>';
+        html += '<div class="pos-daten"><span>Neufüllung am <b>' + fmtDatumZeitLokal(g.abfuelldatum) + '</b></span></div>';
       } else {
-        html += '<div class="rechts">Prüfdatum<br><strong>' + fmtDate(g.letztePruefung || sb.datum) + '</strong><br>nä. Prüfung (KW/Jahr)<br><strong>' + (naechsteGueltig ? fmtKW(g.naechstePruefung) : '-') + '</strong></div>';
+        html += '<div class="pos-daten"><span>Prüfdatum: <b>' + fmtDate(g.letztePruefung || sb.datum) + '</b></span><span>Nächste Prüfung: <b>' + (naechsteGueltig ? fmtDate(g.naechstePruefung) : '-') + '</b></span></div>';
       }
-      html += '</div>';
+      html += '</div></div>';
       if(g.dienstErgebnisse && g.dienstErgebnisse.length){
         g.dienstErgebnisse.forEach(function(d){
           var dOk = d.ok !== false;
