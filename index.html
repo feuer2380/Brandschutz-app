@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-17 11:50';
-var APP_VERSION_TEXT = '17.11. 11:50';
+var APP_VERSION = '2026-11-17 17:20';
+var APP_VERSION_TEXT = '17.11. 17:20';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1138,7 +1138,7 @@ function ersterVollAbgleich(store, cb){
   var start = Date.now();
   db.collection(store).get().then(function(snap){
     var frisch = [];
-    snap.forEach(function(doc){ frisch.push(doc.data()); });
+    snap.forEach(function(doc){ var dd = doc.data(); if(dd && !dd.id) dd.id = doc.id; frisch.push(dd); });
     state[store] = frisch;
     try{ localStorage.setItem('bsvSyncStand_' + store, String(start - 10 * 60000)); }catch(e){}
     if(store === 'zeiten') { try{ zeitNamenMigrieren(); }catch(e){} }
@@ -13505,11 +13505,13 @@ function fahrtAdressenErgaenzen(){
       setTimeout(function(){
         fbAdresse(f.zielGeo, function(a2){
           // Fahrt inzwischen geloescht? Dann nicht wieder anlegen
-          if(!(state.fahrten || []).some(function(x){ return x.id === f.id; })){ setTimeout(weiter, 1100); return; }
-          if(f.startGeo) f.startAdresse = a1;
-          if(f.zielGeo) f.zielAdresse = a2;
-          if(!f.kundeId && !f.privat && a2){ var k = fbKundeZuAdresse(a2, f.datum); if(k){ f.kundeId = k.id; f.kundeVorschlag = true; } }
-          dbPut('fahrten', f, function(){ setTimeout(weiter, 1100); });
+          var cur = (state.fahrten || []).filter(function(x){ return x.id === f.id; })[0];
+          if(!cur){ setTimeout(weiter, 1100); return; }
+          // immer den aktuellen Stand nehmen - sonst wuerde z.B. "Gepr\u00fcft" vom alten Objekt ueberschrieben
+          if(cur.startGeo && cur.startAdresse === undefined) cur.startAdresse = a1;
+          if(cur.zielGeo && cur.zielAdresse === undefined) cur.zielAdresse = a2;
+          if(!cur.kundeId && !cur.privat && cur.zuPruefen && a2){ var k = fbKundeZuAdresse(a2, cur.datum); if(k){ cur.kundeId = k.id; cur.kundeVorschlag = true; } }
+          dbPut('fahrten', cur, function(){ setTimeout(weiter, 1100); });
         });
       }, f.startGeo && f.zielGeo ? 1100 : 0);
     });
@@ -13600,6 +13602,7 @@ document.addEventListener('click', function(ev){
 });
 
 function fbInboxHtml(fz){
+  try{ fbEntscheidungenAnwenden(); }catch(eE){}
   var liste = fbFahrtenVon(fz.id).filter(function(f){ return f.auto && (f.zuPruefen || f.laufend); }).reverse();
   if(!liste.length) return '';
   var wt = ['So','Mo','Di','Mi','Do','Fr','Sa'];
@@ -13678,14 +13681,41 @@ document.addEventListener('click', function(ev){
   var el = b || o;
   if(!el) return;
   ev.stopPropagation();
-  var f = (state.fahrten || []).filter(function(x){ return x.id === el.getAttribute('data-fid'); })[0];
-  if(!f) return;
+  ev.preventDefault();
+  var fid = el.getAttribute('data-fid');
+  var f = (state.fahrten || []).filter(function(x){ return x.id === fid; })[0];
+  if(!f){ toast('Fahrt nicht gefunden \u2013 bitte App neu laden'); return; }
+  // sofort sichtbare Rueckmeldung am Knopf
+  try{ el.style.opacity = '.55'; }catch(eO){}
   if(b){ f.privat = b.getAttribute('data-p') === '1'; if(f.privat && f.kundeVorschlag){ f.kundeId = ''; f.kundeVorschlag = false; } }
-  if(o){ f.zuPruefen = false; f.kundeVorschlag = false; }
+  if(o){ f.zuPruefen = false; f.kundeVorschlag = false; f.geprueftAm = new Date().toISOString(); fbEntscheidungMerken(fid, { zuPruefen: false }); }
   render(); // sofort anzeigen, Speichern laeuft im Hintergrund
   if(o) toast('Fahrt geprüft');
   dbPut('fahrten', f, function(){ render(); });
 }, true);
+// Entscheidungen (Gepr\u00fcft / Privat) auf diesem Geraet merken: falls ein anderes Geraet oder eine
+// Hintergrund-Auswertung mit altem Stand speichert, wird die Entscheidung wieder hergestellt
+var fbEntscheidungen = (function(){ try{ return JSON.parse(localStorage.getItem('bsvFbEntscheidungen') || '{}') || {}; }catch(e){ return {}; } })();
+function fbEntscheidungMerken(id, werte){
+  var e = fbEntscheidungen[id] || {};
+  Object.keys(werte).forEach(function(k){ e[k] = werte[k]; });
+  e.t = Date.now();
+  fbEntscheidungen[id] = e;
+  // nur die letzten 30 Tage behalten
+  var grenze = Date.now() - 30 * 86400000;
+  Object.keys(fbEntscheidungen).forEach(function(k){ if(!fbEntscheidungen[k].t || fbEntscheidungen[k].t < grenze) delete fbEntscheidungen[k]; });
+  try{ localStorage.setItem('bsvFbEntscheidungen', JSON.stringify(fbEntscheidungen)); }catch(e2){}
+}
+// prueft, ob eine Fahrt wieder auf "zu pruefen" zurueckgesprungen ist, und stellt die Entscheidung wieder her
+function fbEntscheidungenAnwenden(){
+  (state.fahrten || []).forEach(function(f){
+    var e = fbEntscheidungen[f.id];
+    if(!e) return;
+    var aendern = false;
+    if(e.zuPruefen === false && f.zuPruefen){ f.zuPruefen = false; f.kundeVorschlag = false; aendern = true; }
+    if(aendern) dbPut('fahrten', f, function(){});
+  });
+}
 
 function renderFahrtenbuch(){
   var html = '';
