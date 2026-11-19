@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-17 17:50';
-var APP_VERSION_TEXT = '17.11. 17:50';
+var APP_VERSION = '2026-11-19 22:40';
+var APP_VERSION_TEXT = '19.11. 22:40';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1914,19 +1914,19 @@ function kalVollsicht(){
 function pruefungFuerMich(p){
   if(!istEingeschraenkt()) return true;
   var g = geraetFuerPruefung(p);
-  if(!g || !g.zustaendig) return false;
-  return g.zustaendig === state.mitarbeiterName;
+  if(!geraetHatZuteilung(g)) return false;
+  return geraetBeteiligt(g, state.mitarbeiterName);
 }
 function zuordSelectHtml(p){
   if(!istVollsicht()) return '';
   var g = geraetFuerPruefung(p);
   if(!g) return '';
-  var nieman = !g.zustaendig;
+  var nieman = !geraetHatZuteilung(g);
   var ini = '!';
-  if(!nieman){ ini = String(zustaendigKurz(g.zustaendig)).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join(''); }
+  if(!nieman){ ini = String(zustaendigKurz(g.zustaendig || (g.zustaendigMit && g.zustaendigMit[0]) || '')).split(/\s+/).filter(function(x){ return x; }).slice(0, 2).map(function(x){ return x.charAt(0).toUpperCase(); }).join(''); }
   var h = '<button type="button" class="zuordBtn' + (nieman ? ' leer' : '') + '" data-pid="' + p.id + '">';
   h += '<span class="zuordAv">' + escapeHtml(ini) + '</span>';
-  h += '<span class="zuordWer">' + (nieman ? 'Noch niemand zugeteilt' : escapeHtml(zustaendigKurz(g.zustaendig)) + (p.zeit ? ' &middot; ' + escapeHtml(p.zeit) + ' Uhr' : '')) + '</span>';
+  h += '<span class="zuordWer">' + (nieman ? 'Noch niemand zugeteilt' : escapeHtml(zustaendigAnzeige(g)) + (p.zeit ? ' &middot; ' + escapeHtml(p.zeit) + ' Uhr' : '')) + '</span>';
   h += '<span class="zuordAkt">' + (nieman ? 'Zuteilen' : 'Ändern') + ' &rsaquo;</span></button>';
   return h;
 }
@@ -2086,6 +2086,7 @@ function modalKundeZuteilen(pids){
   html += '<label>Wer macht das?</label><select id="zkWer"><option value="">– niemand –</option>';
   zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g0 && g0.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
   html += '</select>';
+  html += mithelferChipsHtml('zkMit', (g0 && g0.zustaendigMit) || []);
   html += '<label>Datum</label><input id="zkDatum" type="date" value="' + escapeHtml(datumAlt) + '">';
   html += '<div id="zkHinweis" class="meta" style="color:#c23f12; margin:-4px 0 8px 0;"></div>';
   html += '<label>Uhrzeit (optional)</label><input id="zkZeit" type="time" value="' + escapeHtml(liste[0].zeit || '') + '">';
@@ -2107,11 +2108,13 @@ function modalKundeZuteilen(pids){
     document.getElementById('zkHinweis').textContent = h;
   };
   document.getElementById('zkDatum').onchange = hinweis; hinweis();
+  mithelferBinden('zkMit');
   document.querySelectorAll('.zkEinzeln').forEach(function(b){ b.onclick = function(){ modalPruefungZuteilen(b.getAttribute('data-pid')); }; });
   document.getElementById('zkSpeichern').onclick = function(){
     var datum = document.getElementById('zkDatum').value;
     if(!datum){ toast('Bitte Datum wählen'); return; }
     var wer = document.getElementById('zkWer').value || null;
+    var mit = mithelferLesen('zkMit', wer);
     var zeit = document.getElementById('zkZeit').value || '';
     var datumGeaendert = datum !== datumAlt;
     var offen = liste.length;
@@ -2123,6 +2126,7 @@ function modalKundeZuteilen(pids){
       p.zeit = zeit;
       if(g){
         g.zustaendig = wer;
+        g.zustaendigMit = mit.filter(function(x){ return x !== wer; });
         if(datumGeaendert && String(g.naechstePruefung || '').substring(0, 10) === alt) g.naechstePruefung = datum;
         try{ dbPut('geraete', g, function(){}); }catch(e){}
       }
@@ -2142,6 +2146,7 @@ function modalPruefungZuteilen(pid){
   html += '<label>Wer macht das?</label><select id="zpWer"><option value="">– niemand –</option>';
   zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g && g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
   html += '</select>';
+  html += mithelferChipsHtml('zpMit', (g && g.zustaendigMit) || []);
   html += '<label>Datum</label><input id="zpDatum" type="date" value="' + escapeHtml(String(p.datum || '').substring(0, 10)) + '">';
   html += '<div id="zpHinweis" class="meta" style="color:#c23f12; margin:-4px 0 8px 0;"></div>';
   html += '<label>Uhrzeit (optional)</label><input id="zpZeit" type="time" value="' + escapeHtml(p.zeit || '') + '">';
@@ -2163,6 +2168,7 @@ function modalPruefungZuteilen(pid){
   };
   document.getElementById('zpWer').onchange = auslZeigen;
   auslZeigen();
+  mithelferBinden('zpMit');
   var hinweis = function(){
     var v = document.getElementById('zpDatum').value, h = '';
     if(v){
@@ -2180,7 +2186,9 @@ function modalPruefungZuteilen(pid){
     p.datum = datum;
     p.zeit = document.getElementById('zpZeit').value || '';
     if(g){
-      g.zustaendig = document.getElementById('zpWer').value || null;
+      var zpW = document.getElementById('zpWer').value || null;
+      g.zustaendig = zpW;
+      g.zustaendigMit = mithelferLesen('zpMit', zpW);
       if(String(g.naechstePruefung || '').substring(0, 10) === alt) g.naechstePruefung = datum;
       try{ dbPut('geraete', g, function(){}); }catch(e){}
     }
@@ -2189,6 +2197,47 @@ function modalPruefungZuteilen(pid){
   };
 }
 function zustaendigKurz(n){ return n === CHEF_NAME ? 'Chef' : String(n || ''); }
+// Mehrfach-Zuteilung: g.zustaendig = Hauptperson, g.zustaendigMit = weitere Personen (Array)
+function geraetHatZuteilung(g){ return !!(g && (g.zustaendig || (g.zustaendigMit && g.zustaendigMit.length))); }
+function geraetBeteiligt(g, name){
+  if(!g || !name) return false;
+  if(g.zustaendig === name) return true;
+  return !!(g.zustaendigMit && g.zustaendigMit.indexOf(name) > -1);
+}
+function zustaendigAnzeige(g){
+  if(!g) return '';
+  var teile = [];
+  if(g.zustaendig) teile.push(zustaendigKurz(g.zustaendig));
+  (g.zustaendigMit || []).forEach(function(n){ if(n && n !== g.zustaendig) teile.push(zustaendigKurz(n)); });
+  return teile.join(' + ');
+}
+// Auswahl-Chips fuer "zusaetzlich dabei"
+function mithelferChipsHtml(id, vorhanden){
+  var sel = vorhanden || [];
+  var h = '<label>Zusätzlich dabei (optional)</label><div id="' + id + '" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">';
+  zeitMitarbeiterNamen().forEach(function(n){
+    var an = sel.indexOf(n) > -1;
+    h += '<button type="button" class="mhChip btn small' + (an ? '' : ' secondary') + '" data-n="' + escapeHtml(n) + '" aria-pressed="' + (an ? 'true' : 'false') + '" style="margin:0;">' + escapeHtml(zustaendigKurz(n)) + '</button>';
+  });
+  return h + '</div>';
+}
+function mithelferBinden(id){
+  var box = document.getElementById(id); if(!box) return;
+  box.querySelectorAll('.mhChip').forEach(function(b){
+    b.onclick = function(){
+      var an = b.getAttribute('aria-pressed') === 'true';
+      b.setAttribute('aria-pressed', an ? 'false' : 'true');
+      b.classList.toggle('secondary', an);
+    };
+  });
+}
+function mithelferLesen(id, primary){
+  var r = [], box = document.getElementById(id); if(!box) return r;
+  box.querySelectorAll('.mhChip').forEach(function(b){
+    if(b.getAttribute('aria-pressed') === 'true'){ var n = b.getAttribute('data-n'); if(n && n !== primary && r.indexOf(n) < 0) r.push(n); }
+  });
+  return r;
+}
 
 // ---------- Auslastung pro Mitarbeiter ----------
 // offset 0 = dieser Monat (inkl. ueberfaellige Pruefungen, Termine ab heute), 1 = naechster Monat
@@ -2593,7 +2642,7 @@ function renderDashboard(){
   var innenrevListe = [];
   state.geraete.filter(function(g){ return !g.ausgeschieden && kundeIstAktiv(g.kundeId); }).forEach(function(g){
     var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
-    if(istEingeschraenkt() && g.zustaendig !== state.mitarbeiterName) return;
+    if(istEingeschraenkt() && !geraetBeteiligt(g, state.mitarbeiterName)) return;
     if(bj && bj.cls === 'soon' && bj.label.indexOf('Innenrevision') === 0){
       innenrevListe.push({ geraet:g, bj:bj });
     }
@@ -2656,7 +2705,7 @@ function renderDashboard(){
     }
     var sichtbarBisDatum = new Date(sichtJahr, sichtMonat + 1, 0, 23, 59, 59);
     gefiltert = gefiltert.filter(function(g){
-      if(g.zustaendig !== state.mitarbeiterName) return false;
+      if(!geraetBeteiligt(g, state.mitarbeiterName)) return false;
       if(!g.naechstePruefung) return true;
       return new Date(g.naechstePruefung) <= sichtbarBisDatum;
     });
@@ -6229,8 +6278,9 @@ function neuenOffenenTerminAnlegen(g, cb){
   if(hatOffene){ if(cb) cb(); return; }
   var pNeu = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: g.naechstePruefung, erledigt: false };
   // Zuteilung gilt nur für die erledigte Runde: für den nächsten Termin wird neu eingeteilt
-  if(g.zustaendig){
+  if(geraetHatZuteilung(g)){
     g.zustaendig = null;
+    g.zustaendigMit = [];
     try{ dbPut('geraete', g, function(){}); }catch(eZ){}
   }
   dbPut('pruefungen', pNeu, function(){ if(cb) cb(); });
@@ -7387,8 +7437,8 @@ function renderPruefungen(){
   if(istVollsicht() && state.pruefungPerson){
     sorted = sorted.filter(function(p){
       var g = geraetFuerPruefung(p);
-      if(state.pruefungPerson === '__keine') return !(g && g.zustaendig);
-      return g && g.zustaendig === state.pruefungPerson;
+      if(state.pruefungPerson === '__keine') return !geraetHatZuteilung(g);
+      return geraetBeteiligt(g, state.pruefungPerson);
     });
   }
 
@@ -9642,6 +9692,7 @@ function modalGeraetBearbeiten(geraetId){
   html += '<label>Zuständiger Mitarbeiter (muss die Prüfung/Begehung machen)</label><select id="fZustaendig"><option value="">– nicht zugeordnet –</option>';
   zeitMitarbeiterNamen().forEach(function(n){ html += '<option value="' + escapeHtml(n) + '"' + (g.zustaendig === n ? ' selected' : '') + '>' + escapeHtml(zustaendigKurz(n)) + '</option>'; });
   html += '</select>';
+  html += mithelferChipsHtml('fMit', g.zustaendigMit || []);
   html += '<label style="display:flex; gap:8px; align-items:center; font-weight:400;"><input type="checkbox" id="fZustaendigAlle" style="width:auto;"> Allen Geräten dieses Kunden zuordnen</label>';
   html += '<button class="btn block" id="fSave">Änderungen speichern</button>';
   html += '<button class="btn block secondary" id="qrGeraetBtn" style="margin-top:10px;">QR-Code anzeigen</button>';
@@ -9677,10 +9728,11 @@ function modalGeraetBearbeiten(geraetId){
     var fZustEl = document.getElementById('fZustaendig');
     if(fZustEl){
       g.zustaendig = fZustEl.value || null;
+      g.zustaendigMit = mithelferLesen('fMit', g.zustaendig);
       var fZustAlleEl = document.getElementById('fZustaendigAlle');
       if(fZustAlleEl && fZustAlleEl.checked){
         state.geraete.forEach(function(x){
-          if(x.kundeId === g.kundeId && x.id !== g.id && !x.ausgeschieden){ x.zustaendig = g.zustaendig; try{ dbPut('geraete', x, function(){}); }catch(e){} }
+          if(x.kundeId === g.kundeId && x.id !== g.id && !x.ausgeschieden){ x.zustaendig = g.zustaendig; x.zustaendigMit = (g.zustaendigMit || []).slice(); try{ dbPut('geraete', x, function(){}); }catch(e){} }
         });
       }
     }
@@ -9790,6 +9842,7 @@ function modalGeraetBearbeiten(geraetId){
       });
     });
   };
+  mithelferBinden('fMit');
   document.getElementById('qrGeraetBtn').onclick = function(){
     modalQrGeraet(geraetId);
   };
@@ -14139,8 +14192,8 @@ function kalEintraegeFuerTag(key){
     if(p.erledigt || String(p.datum || '').substring(0, 10) !== key) return;
     if(!kundeIstAktiv(p.kundeId)) return;
     var g = geraetFuerPruefung(p);
-    var z = g ? g.zustaendig : null;
-    if(person){ if(z !== person) return; }
+    var z = g ? (zustaendigAnzeige(g) || g.zustaendig) : null;
+    if(person){ if(!geraetBeteiligt(g, person)) return; }
     else if(istEingeschraenkt() && !kalVollsicht()) return;
     res.push({ art: 'pruefung', p: p, g: g, z: z, sort: (p.zeit || '98:00') });
   });
