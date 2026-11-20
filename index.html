@@ -18111,28 +18111,35 @@ function statistikKundenHtml(){
     (k.rechnungen || []).forEach(function(r){ if(!r.bezahlt) offeneListe.push({ k: k, r: r }); });
   });
   offeneListe.sort(function(a, b){ return String(a.r.datum).localeCompare(String(b.r.datum)); });
+  var offenH = '';
   if(offeneListe.length){
-    h += '<div class="section-title" style="margin-top:6px; color:#c23f12;">Offene Rechnungen (' + offeneListe.length + ')</div>';
+    offenH += '<div class="section-title" style="margin-top:16px; color:#c23f12;">Offene Rechnungen (' + offeneListe.length + ') &middot; ' + eurText(offeneListe.reduce(function(x, e){ return x + (Number(e.r.betrag) || 0); }, 0)) + '</div>';
+    offenH += '<div class="meta" style="margin:-4px 0 8px 0; color:#f5efe6;">Bezahlt? &rarr; auf &bdquo;&#10003; Bezahlt&ldquo; tippen, dann verschwindet sie aus der Liste.</div>';
     offeneListe.forEach(function(e){
       var rdT = String(e.r.datum).substring(0, 10).split('-');
       var heuteT = new Date(); heuteT.setHours(12, 0, 0, 0);
       var tage = Math.round((heuteT - new Date(parseInt(rdT[0], 10), parseInt(rdT[1], 10) - 1, parseInt(rdT[2], 10), 12, 0, 0)) / 86400000);
       var tageText = tage <= 0 ? 'seit heute offen' : ('seit ' + tage + (tage === 1 ? ' Tag' : ' Tagen') + ' offen');
-      h += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px;"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(kundeAnzeigeName(e.k)) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div>' + (tage >= 30 ? '<button type="button" class="btn small secondary" data-rgmahnung="' + escapeHtml(e.k.id) + '|' + escapeHtml(e.r.id) + '" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">&#9993; Zahlungserinnerung</button>' : '') + '</div>';
+      offenH += '<div class="card kunde-card" data-id="' + e.k.id + '" style="padding:10px 13px; margin-bottom:8px; border-left:5px solid ' + (tage > 30 ? '#c62828' : '#ef6c00') + ';"><div class="row"><h3 style="margin:0; font-size:15px;">' + escapeHtml(kundeAnzeigeName(e.k)) + '</h3><b style="white-space:nowrap;">' + eurText(e.r.betrag) + '</b></div><div class="meta">' + fmtDate(e.r.datum) + (e.r.notiz ? ' &middot; ' + escapeHtml(e.r.notiz) : '') + ' &middot; <b style="color:' + (tage > 30 ? '#c23f12' : '#8a5a00') + ';">' + tageText + '</b></div>' + '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"><button type="button" class="btn small" data-rgbezahlt="' + escapeHtml(e.k.id) + '|' + escapeHtml(e.r.id) + '" style="background:#2e7d32;">&#10003; Bezahlt</button>' + (tage >= 30 ? '<button type="button" class="btn small secondary" data-rgmahnung="' + escapeHtml(e.k.id) + '|' + escapeHtml(e.r.id) + '" style="color:#c23f12; border-color:#e6b19d;">&#9993; Zahlungserinnerung</button>' : '') + '</div></div>';
     });
-    h += '<div class="section-title" style="margin-top:14px;">Rangliste nach Umsatz</div>';
   }
+  h += '<div class="section-title" style="margin-top:14px;">&#127942; Beste Kunden ' + (zeit === 'jahr' ? jahr : (zeit === 'vorjahr' ? (jahr - 1) : 'gesamt')) + '</div>';
   if(!mit.length){
     h += '<div class="empty">Noch keine Rechnungen eingetragen. Beim Kunden unten bei „Rechnungen / Umsatz“ den Betrag der letzten Rechnung eintragen.</div>';
   }
+  var medFarben = ['#d4a017', '#9e9e9e', '#b06b2c'];
+  var topAlle = !!state.statTopAlle;
   mit.forEach(function(z, i){
+    if(!topAlle && i >= 10) return;
     var anteil = gesamt ? Math.round(z.summe / gesamt * 100) : 0;
     var breite = max ? Math.max(4, Math.round(z.summe / max * 100)) : 0;
     h += '<div class="card kunde-card" data-id="' + z.k.id + '" style="padding:11px 13px;">';
-    h += '<div class="row"><div style="display:flex; align-items:center; gap:9px; min-width:0;"><span class="badge ' + (i === 0 ? 'soon' : 'blau') + '" style="min-width:26px; text-align:center;">' + (i + 1) + '</span><h3 style="margin:0; font-size:15px;">' + escapeHtml(z.k.name) + '</h3></div><b style="white-space:nowrap;">' + eurText(z.summe) + '</b></div>';
-    h += '<div style="height:7px; border-radius:4px; background:#efe8dc; margin-top:8px;"><div style="height:7px; border-radius:4px; background:#e8541f; width:' + breite + '%;"></div></div>';
+    h += '<div class="row"><div style="display:flex; align-items:center; gap:9px; min-width:0;"><span class="badge ' + (i < 3 ? '' : 'blau') + '" style="min-width:26px; text-align:center;' + (i < 3 ? ' background:' + medFarben[i] + '; color:#fff; font-weight:800;' : '') + '">' + (i < 3 ? '&#9733; ' : '') + (i + 1) + '</span><h3 style="margin:0; font-size:15px;">' + escapeHtml(z.k.name) + '</h3></div><b style="white-space:nowrap;">' + eurText(z.summe) + '</b></div>';
+    h += '<div style="height:7px; border-radius:4px; background:#efe8dc; margin-top:8px;"><div style="height:7px; border-radius:4px; background:' + (i < 3 ? medFarben[i] : '#e8541f') + '; width:' + breite + '%;"></div></div>';
     h += '<div class="meta" style="margin-top:5px;">' + anteil + ' % vom Umsatz &middot; ' + z.anz + ' Rechnung' + (z.anz === 1 ? '' : 'en') + (z.offen > 0 ? ' &middot; <b style="color:#c23f12;">offen ' + eurText(z.offen) + '</b>' : '') + ' &middot; ' + z.geraete + (z.geraete === 1 ? ' Gerät' : ' Geräte') + '</div></div>';
   });
+  if(mit.length > 10) h += '<button type="button" class="btn block secondary" id="statTopAlleBtn" style="margin-top:4px;">' + (topAlle ? 'Nur Top 10 anzeigen' : 'Alle ' + mit.length + ' Kunden anzeigen') + '</button>';
+  h += offenH;
   if(ohne.length){
     h += '<div class="section-title" style="margin-top:16px;">Ohne Rechnung in diesem Zeitraum (' + ohne.length + ')</div>';
     ohne.sort(function(a, b){ return b.geraete - a.geraete; }).slice(0, 15).forEach(function(z){
@@ -18485,6 +18492,26 @@ function bindDynamic(){
     var j = parseInt(smd.getAttribute('data-jahr'), 10);
     bsvDruckenOderTeilen(statMonateHtml(j, true), 'Monatsuebersicht_' + j + '.pdf');
   };
+  document.querySelectorAll('[data-rgbezahlt]').forEach(function(b){
+    b.onclick = function(ev){
+      ev.stopPropagation();
+      var teile = b.getAttribute('data-rgbezahlt').split('|');
+      var kB = kundeById(teile[0]);
+      if(!kB) return;
+      var rB = null;
+      (kB.rechnungen || []).forEach(function(r){ if(r.id === teile[1]) rB = r; });
+      if(!rB) return;
+      customConfirm('Rechnung ' + kundeAnzeigeName(kB) + ' (' + eurText(rB.betrag) + ', ' + fmtDate(rB.datum) + ') als bezahlt markieren?', function(){
+        rB.bezahlt = true;
+        rB.bezahltAm = new Date().toISOString().substring(0, 10);
+        dbPut('kunden', kB, function(){});
+        toast('Als bezahlt markiert');
+        render();
+      });
+    };
+  });
+  var topBtn = document.getElementById('statTopAlleBtn');
+  if(topBtn) topBtn.onclick = function(){ state.statTopAlle = !state.statTopAlle; render(); };
   document.querySelectorAll('[data-rgmahnung]').forEach(function(b){
     b.onclick = function(ev){
       ev.stopPropagation();
