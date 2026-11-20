@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-20 19:35';
-var APP_VERSION_TEXT = '20.11. 19:35';
+var APP_VERSION = '2026-11-20 19:55';
+var APP_VERSION_TEXT = '20.11. 19:55';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7360,6 +7360,7 @@ function renderKundeDetail(kundeId){
   }
 
   html += '<button class="btn block secondary" style="margin-top:14px;" id="geraeteListeBtn">Geräteliste einfügen (aus altem Programm)</button>';
+  html += '<button class="btn block secondary" style="margin-top:10px;" id="rwaSetBtn">RWA-Anlage anlegen (Bauteile je Stiege)</button>';
   html += '<button class="btn block" style="margin-top:10px;" id="sammelberichtBtn">Sammelbericht (alle Geräte auf einer Seite)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="begehungsberichtBtn">Begehungsbericht (Mängel, Fotos, Tätigkeiten)</button>';
   html += '<button class="btn block secondary" style="margin-top:10px;" id="dokumenteBtn">Dokumente ablegen (fertige PDF-Berichte)</button>';
@@ -12061,6 +12062,84 @@ function modalGeraeteListeEinfuegen(kundeId, vorText){
   }
 }
 
+// ---------- RWA-Anlage: Standard-Bauteile je Stiege auf einmal anlegen ----------
+var RWA_SET_TEILE = [
+  { key: 'zentrale', label: 'Steuerzentrale', typ: 'Steuerzentrale elektrisch lt. TRVB 111', zusatz: '' },
+  { key: 'notstrom', label: 'Notstromversorgung', typ: 'Notstromversorgung', zusatz: '' },
+  { key: 'handOG', label: 'Handauslöseeinrichtung OG', typ: 'Handauslöseeinrichtung', zusatz: ' OG' },
+  { key: 'handEG', label: 'Handauslöseeinrichtung EG', typ: 'Handauslöseeinrichtung', zusatz: ' EG' },
+  { key: 'oeffnung', label: 'Öffnungselement elektrisch', typ: 'Öffnungselement elektrisch', zusatz: '' },
+  { key: 'lueftung', label: 'Lüftungstaster elektrisch', typ: 'Lüftungstaster elektrisch', zusatz: '' }
+];
+function modalRwaSet(kundeId){
+  var k = kundeById(kundeId);
+  if(!k) return;
+  var heute = new Date().toISOString().substring(0, 10);
+  var h = '<div class="modal-head"><h3>RWA-Anlage anlegen</h3><button class="close" id="mClose">&times;</button></div>';
+  h += '<div class="meta">Legt die Bauteile für jede Stiege auf einmal an (wie im RWA-Prüfbericht: Pos. 1&ndash;6 Stiege 1, dann dasselbe für Stiege 2 usw.).</div>';
+  h += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Anzahl Stiegen</label><input type="number" inputmode="numeric" id="rsAnz" value="2" min="1" max="20"></div>';
+  h += '<div style="flex:1.3;"><label>Bezeichnung</label><input type="text" id="rsName" value="Stiege" autocomplete="off"></div></div>';
+  h += '<label>Bauteile je Stiege</label>';
+  RWA_SET_TEILE.forEach(function(t){
+    h += '<label style="display:flex; align-items:center; gap:8px; font-weight:400; margin-top:6px;"><input type="checkbox" class="rsTeil" data-key="' + t.key + '" checked style="width:20px; height:20px;"> ' + escapeHtml(t.label) + '</label>';
+  });
+  h += '<label>Typ der Steuerzentrale (optional, z.B. K+G RWZ 1b)</label><input type="text" id="rsZentrale" value="Steuerzentrale elektrisch lt. TRVB 111" autocomplete="off">';
+  h += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Baujahr Notstrom</label><input type="text" inputmode="numeric" id="rsBjAkku" placeholder="z.B. 2025" autocomplete="off"></div>';
+  h += '<div style="flex:1.3;"><label>Nächste Prüfung</label><input type="date" id="rsNaechste" value="' + heute + '"></div></div>';
+  h += '<div id="rsVorschau" class="meta" style="margin-top:10px;"></div>';
+  h += '<button class="btn block" id="rsAnlegen" style="margin-top:12px;">Bauteile anlegen</button>';
+  openModal(h);
+  document.getElementById('mClose').onclick = closeModal;
+  var liste = function(){
+    var anz = Math.max(1, Math.min(20, parseInt(document.getElementById('rsAnz').value, 10) || 1));
+    var name = document.getElementById('rsName').value.trim() || 'Stiege';
+    var gewaehlt = {};
+    document.querySelectorAll('.rsTeil').forEach(function(cb){ if(cb.checked) gewaehlt[cb.getAttribute('data-key')] = true; });
+    var zentraleTyp = document.getElementById('rsZentrale').value.trim() || 'Steuerzentrale elektrisch lt. TRVB 111';
+    var out = [];
+    for(var st = 1; st <= anz; st++){
+      RWA_SET_TEILE.forEach(function(t){
+        if(!gewaehlt[t.key]) return;
+        out.push({ typ: t.key === 'zentrale' ? zentraleTyp : t.typ, standort: name + ' ' + st + t.zusatz, notstrom: t.key === 'notstrom' });
+      });
+    }
+    return out;
+  };
+  var vorschau = function(){
+    var l = liste();
+    var vorhanden = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && ((g.kategorie || '').trim()) === 'RWA-Anlage'; }).length;
+    document.getElementById('rsVorschau').innerHTML = '<b>' + l.length + ' Bauteile</b> werden angelegt' + (vorhanden ? ' &middot; <span style="color:#c23f12;">Achtung: beim Kunden gibt es schon ' + vorhanden + ' RWA-Geräte</span>' : '') + '<br>' + l.slice(0, 8).map(function(x, i){ return (i + 1) + '. ' + escapeHtml(x.typ) + ' &ndash; ' + escapeHtml(x.standort); }).join('<br>') + (l.length > 8 ? '<br>&hellip;' : '');
+  };
+  ['rsAnz', 'rsName', 'rsZentrale'].forEach(function(id){ document.getElementById(id).oninput = vorschau; });
+  document.querySelectorAll('.rsTeil').forEach(function(cb){ cb.onchange = vorschau; });
+  vorschau();
+  document.getElementById('rsAnlegen').onclick = function(){
+    var l = liste();
+    if(!l.length){ toast('Keine Bauteile ausgewählt'); return; }
+    var btn = document.getElementById('rsAnlegen');
+    btn.disabled = true; btn.textContent = 'Legt an ...';
+    var naechste = document.getElementById('rsNaechste').value || null;
+    var bjAkku = document.getElementById('rsBjAkku').value.trim();
+    var nr = naechsteGeraeteNummer(kundeId, 'RWA-Anlage');
+    var jobs = [];
+    l.forEach(function(x){
+      var g = {
+        id: uid(), kundeId: kundeId, typ: x.typ, kategorie: 'RWA-Anlage', nr: nr++, baujahr: (x.notstrom && bjAkku) ? (parseInt(bjAkku, 10) || bjAkku) : null,
+        intervallMonate: 12, erstelltAm: new Date().toISOString(), seriennummer: '', externeId: '',
+        standort: x.standort, letztePruefung: null, naechstePruefung: naechste, abfuelldatum: null,
+        zusatzdaten: '', maengel: '', notiz: ''
+      };
+      jobs.push(['geraete', g]);
+      if(naechste) jobs.push(['pruefungen', { id: uid(), kundeId: kundeId, geraetId: g.id, typ: g.typ, datum: naechste, erledigt: false }]);
+    });
+    var i = 0;
+    (function weiter(){
+      if(i < jobs.length){ var j = jobs[i++]; dbPut(j[0], j[1], weiter); return; }
+      loadAll(function(){ render(); closeModal(); toast(l.length + ' RWA-Bauteile angelegt'); });
+    })();
+  };
+}
+
 function modalKundeAktionen(kundeId){
   var k = kundeById(kundeId);
   if(!k) return;
@@ -16096,6 +16175,7 @@ function modalSammelbericht(kundeId){
         html += '</div>';
         html += '<label style="margin-top:6px;">Prüfdatum</label><input type="date" id="sbPruefdatum_' + g.id + '" value="' + heuteLokalKurz() + '">';
         html += '<label style="margin-top:6px; display:flex; align-items:center; gap:6px; font-weight:400;"><input type="checkbox" class="sbAusscheidenRWA" data-gid="' + g.id + '" style="width:auto;"> Gerät ausscheiden (defekt)</label>';
+        html += '<label style="margin-top:6px;">Ersatzteile (je Zeile: Anzahl + Bezeichnung, z.B. &bdquo;1 Wartungsmeldemodul&ldquo;)</label><textarea id="sbRwaErsatz_' + g.id + '" rows="2" placeholder="1 Wartungsmeldemodul für Wartungsmeldung nach 12 Monaten"></textarea>';
         html += '<label style="margin-top:6px;">Akkutausch (Datum, falls heute gemacht)</label><input type="date" id="sbAkku_' + g.id + '" value="' + (g.akkuTauschDatum || '') + '">';
       } else {
         html += '<label style="margin-top:6px;">Prüfdatum</label><input type="date" id="sbPruefdatum_' + g.id + '" value="' + heuteLokalKurz() + '">';
@@ -16123,6 +16203,11 @@ function modalSammelbericht(kundeId){
     });
   }
 
+  var hatRwaSB = geraeteSortiert.some(function(g){ return ((g.kategorie || '').trim()) === 'RWA-Anlage'; });
+  if(hatRwaSB){
+    html += '<label style="margin-top:4px;">RWA-Anlage (Art / Spannung, kommt in den Berichtskopf)</label><input type="text" id="sbRwaAnlage" value="' + escapeHtml(k.rwaAnlage || 'RWA | 24 Volt') + '" placeholder="z.B. RWA | 24 Volt" autocomplete="off">';
+    html += '<label style="display:flex; align-items:center; gap:8px; font-weight:400; margin-top:6px;"><input type="checkbox" id="sbRwaGesamt" checked style="width:20px; height:20px;"> Position &bdquo;Wartung RWA/DBA/BRV&ldquo; am Ende anfügen</label>';
+  }
   html += '<label style="margin-top:4px;">Allgemeine Bemerkung (optional)</label><textarea id="sbBemerkung" rows="2" placeholder="z.B. Alle Geräte kontrolliert, keine Auffälligkeiten"></textarea>';
   html += '<label style="margin-top:10px;">Unterschrift Kunde</label>';
   html += '<canvas class="sig" id="sbSigKunde"></canvas>';
@@ -16214,6 +16299,11 @@ function modalSammelbericht(kundeId){
         sbBtn.textContent = 'Erstelle Bericht(e)...';
         var basisNr = document.getElementById('sbBerichtNr').value.trim();
         var allgemeineBemerkung = document.getElementById('sbBemerkung').value.trim();
+        var rwaAnlageEl = document.getElementById('sbRwaAnlage');
+        var rwaAnlageText = rwaAnlageEl ? rwaAnlageEl.value.trim() : '';
+        var rwaGesamtEl = document.getElementById('sbRwaGesamt');
+        var rwaGesamt = rwaGesamtEl ? !!rwaGesamtEl.checked : false;
+        if(rwaAnlageEl && rwaAnlageText !== (k.rwaAnlage || '')){ k.rwaAnlage = rwaAnlageText; dbPut('kunden', k, function(){}); }
         var sigKundeData = sigBild(sigKunde);
         var sigTechnikerData = sigBild(sigTechniker);
 
@@ -16242,6 +16332,8 @@ function modalSammelbericht(kundeId){
             berichtNr: basisNr + (kategorienReihenfolge.length > 1 ? '-' + (katIdx+1) : ''),
             geraeteSnapshot: geraeteNeuNummeriert,
             bemerkung: allgemeineBemerkung,
+            rwaAnlage: kat === 'RWA-Anlage' ? rwaAnlageText : null,
+            rwaGesamtwartung: kat === 'RWA-Anlage' ? rwaGesamt : null,
             unterschriftKunde: sigKundeData,
             unterschriftTechniker: sigTechnikerData,
             erstelltVon: (state.rolle === 'chef' ? 'Wolfgang Janiba' : (state.mitarbeiterName || ''))
@@ -16381,7 +16473,8 @@ function modalSammelbericht(kundeId){
             letzteInnenrevision: g.letzteInnenrevision || null,
             akkuTausch: akkuVal || null,
             maengel: g.maengel || null,
-            dienstErgebnisse: istRWA ? einzelErgebnisse[g.id].map(function(d){ return { text: d.text, ok: d.ok }; }) : null
+            dienstErgebnisse: istRWA ? einzelErgebnisse[g.id].map(function(d){ return { text: d.text, ok: d.ok }; }) : null,
+            ersatzteile: (istRWA && document.getElementById('sbRwaErsatz_' + g.id)) ? document.getElementById('sbRwaErsatz_' + g.id).value.split('\n').map(function(z){ return z.trim(); }).filter(function(z){ return z; }) : null
           });
           idx++;
           naechstesGeraet();
@@ -16439,11 +16532,11 @@ function buildRwaBerichtHtml(sb, k){
   h += '<style>.rwa-bericht table{border-collapse:collapse; width:100%;} .rwa-bericht td,.rwa-bericht th{padding:3px 6px; text-align:left; vertical-align:top;} .rwa-bericht .rk{background:#d9d9d9; font-weight:700;} .rwa-bericht .rd td{border-bottom:1px solid #fff; background:#f2f2f2;} .rwa-bericht .rl{background:#d6eef8; width:110px;} .rwa-bericht .rok{background:#92e39a; font-weight:700; text-align:right; width:110px;} .rwa-bericht .rnok{background:#f28b82; font-weight:700; text-align:right; width:110px;} .rwa-bericht .rer{background:#fff59d;} .rwa-bericht .rblock{page-break-inside:avoid; margin-bottom:10px;}</style>';
   // Kopf
   h += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:20px;">';
-  h += '<div><div style="font-size:18px; font-weight:700;">Prüfergebnisbericht</div><div style="font-size:14px; font-weight:700; margin-top:4px;">RWA &ndash; Rauch- und Wärmeabzugsanlage</div><div style="font-size:10px; font-weight:700; margin-top:2px;">nach ÖNORM F 3075 unter Berücksichtigung der TRVB 111 S</div><div style="font-weight:700; margin-top:8px;">Prüfbericht Nr.: ' + escapeHtml(nr) + '</div>';
+  h += '<div><div style="font-size:18px; font-weight:700;">Prüfergebnisbericht</div><div style="font-size:14px; font-weight:700; margin-top:4px;">RWA, DBA, BRV</div><div style="font-size:10px; margin-top:1px;">Rauch- und Wärmeabzug &middot; Druckbelüftung &middot; Brandrauchverdünnung</div><div style="font-size:10px; font-weight:700; margin-top:2px;">nach ÖNORM F 3075 unter Berücksichtigung der TRVB 111 S</div><div style="font-weight:700; margin-top:8px;">Prüfbericht Nr.: ' + escapeHtml(nr) + '</div>';
   h += '<div style="display:flex; gap:12px; margin-top:6px;">';
   h += '<div style="border:1px solid #000; padding:4px 8px; min-width:200px;"><div style="font-weight:700; border-bottom:1px solid #000; margin-bottom:3px;">Kunden Nr.: ' + escapeHtml(k && k.kundennummer ? k.kundennummer : '-') + '</div>' + escapeHtml(k ? kundeAnzeigeName(k) : '') + '<br>' + escapeHtml(adr).replace(/,\s*/g, '<br>') + '</div>';
-  if(k && (k.objekt || k.objektAdresse)){
-    h += '<div style="border:1px solid #000; padding:4px 8px; min-width:200px;"><div style="font-weight:700; border-bottom:1px solid #000; margin-bottom:3px;">Objekt</div>' + escapeHtml(String(k.objekt || '').replace(/^\s*objekt\s*:?\s*/i, '')) + (k.objektAdresse ? '<br>' + escapeHtml(k.objektAdresse).replace(/,\s*/g, '<br>') : '') + '</div>';
+  if(k && (k.objekt || k.objektAdresse || sb.rwaAnlage)){
+    h += '<div style="border:1px solid #000; padding:4px 8px; min-width:200px;"><div style="font-weight:700; border-bottom:1px solid #000; margin-bottom:3px;">Objekt / Anlage</div>' + (k.objekt ? escapeHtml(String(k.objekt).replace(/^\s*objekt\s*:?\s*/i, '')) + '<br>' : '') + (sb.rwaAnlage ? escapeHtml(sb.rwaAnlage) + '<br>' : '') + (k.objektAdresse ? escapeHtml(k.objektAdresse).replace(/,\s*/g, '<br>') : '') + '</div>';
   }
   h += '</div></div>';
   h += '<div style="text-align:right; font-size:11px; line-height:1.45;"><img src="' + LOGO_DATA + '" style="height:58px; margin-bottom:6px;"><br><b>Wolfgang Janiba Brandschutztechnik GmbH</b><br>Ketzergasse 299<br>2380 Perchtoldsdorf<br>Tel. 0676 / 305 83 98<br>info@loeschtechnik.at<br>www.brandschutztechnik-janiba.at</div>';
@@ -16463,6 +16556,10 @@ function buildRwaBerichtHtml(sb, k){
       if(!d.ok) mangelGesamt = true;
       h += '<tr class="rd"><td></td><td colspan="6" style="padding:0;"><table><tr><td style="background:#d6eef8; width:110px;">Dienstleistung:</td><td>' + escapeHtml(d.text) + '</td></tr></table></td><td style="background:' + (d.ok ? '#92e39a' : '#f28b82') + '; font-weight:700; text-align:right; width:110px;">Ergebnis: ' + (d.ok ? 'i.O.' : 'n.i.O.') + '</td></tr>';
     });
+    (g.ersatzteile || []).forEach(function(et){
+      var me = String(et).match(/^(\d+)\s*(?:x|Stk\.?|St\.?)?\s+(.*)$/i);
+      h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:#fff59d; width:110px;">Ersatzteil:</td><td style="width:30px;">' + escapeHtml(me ? me[1] : '1') + '</td><td>' + escapeHtml(me ? me[2] : et) + '</td></tr></table></td></tr>';
+    });
     if(g.akkuTausch){
       h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:#fff59d; width:110px;">Ersatzteil:</td><td>1 &nbsp; Akku getauscht am ' + fmtDate(g.akkuTausch) + '</td></tr></table></td></tr>';
     }
@@ -16471,6 +16568,16 @@ function buildRwaBerichtHtml(sb, k){
     }
     h += '</table></div>';
   });
+  // Abschluss-Position: Gesamtwartung der Anlage
+  var anzPos = (sb.geraeteSnapshot || []).length;
+  if(sb.rwaGesamtwartung !== false && anzPos){
+    var naechsteMax = '';
+    (sb.geraeteSnapshot || []).forEach(function(g){ if(g.naechstePruefung && String(g.naechstePruefung) > naechsteMax) naechsteMax = String(g.naechstePruefung); });
+    h += '<div class="rblock"><table>';
+    h += '<tr class="rk"><td style="width:30px; text-align:center;">' + (anzPos + 1) + '</td><td>Wartung RWA/DBA/BRV</td><td style="width:150px;"></td><td style="width:100px;"></td><td style="width:55px;"></td><td style="width:75px;">' + fmtDate(sb.datum) + '</td><td style="width:85px;">' + escapeHtml(monatJahr(naechsteMax)) + '</td><td style="width:140px;"></td></tr>';
+    h += '<tr class="rd"><td></td><td colspan="6" style="padding:0;"><table><tr><td style="background:#d6eef8; width:110px;">Dienstleistung:</td><td>Wartung RWA/DBA/BRV</td></tr></table></td><td style="background:' + (mangelGesamt ? '#f28b82' : '#92e39a') + '; font-weight:700; text-align:right; width:110px;">Ergebnis: ' + (mangelGesamt ? 'n.i.O.' : 'i.O.') + '</td></tr>';
+    h += '</table></div>';
+  }
   // Bemerkungen + Unterschriften
   h += '<div class="rblock" style="margin-top:16px;"><div style="font-weight:700;">allgemeine Bemerkungen</div><div style="min-height:28px; border-bottom:1px solid #999; padding:4px 0;">' + escapeHtml(sb.notiz || sb.bemerkung || '') + '</div>';
   h += '<div style="margin-top:6px; font-weight:700; color:' + (mangelGesamt ? '#c62828' : '#1e7b34') + ';">' + (mangelGesamt ? 'Es wurden Mängel festgestellt (siehe n.i.O.).' : 'Die Anlage ist zum Zeitpunkt der Prüfung in einem ordnungsgemäßen und funktionsfähigen Zustand.') + '</div>';
@@ -16478,7 +16585,7 @@ function buildRwaBerichtHtml(sb, k){
   h += '<div style="width:250px; text-align:center;"><div style="height:62px; display:flex; align-items:flex-end; justify-content:center;">' + (sb.unterschriftTechniker ? '<img src="' + sb.unterschriftTechniker + '" style="max-height:60px;">' : '') + '</div><div style="border-top:1.5px solid #000; padding-top:3px;">Unterschrift Techniker' + (sb.erstelltVon ? '<br>(' + escapeHtml(sb.erstelltVon) + ')' : '') + '</div></div>';
   h += '<div style="width:250px; text-align:center;"><div style="height:62px; display:flex; align-items:flex-end; justify-content:center;">' + (sb.unterschriftKunde ? '<img src="' + sb.unterschriftKunde + '" style="max-height:60px;">' : sigKundeFehltHtml(60)) + '</div><div style="border-top:1.5px solid #000; padding-top:3px;">Unterschrift Kunde</div></div>';
   h += '</div></div>';
-  h += '<div style="margin-top:14px; border-top:1px solid #999; padding-top:4px; font-size:9px; display:flex; justify-content:space-between;"><span>Wolfgang Janiba Brandschutztechnik GmbH</span><span>Prüfbericht Nr.: ' + escapeHtml(nr) + (k && k.kundennummer ? ' / Kd.Nr.: ' + escapeHtml(k.kundennummer) : '') + '</span><span>Leistungsdatum: ' + fmtDate(sb.datum) + '</span></div>';
+  h += '<div style="margin-top:14px; border-top:1px solid #999; padding-top:4px; font-size:9px; display:flex; justify-content:space-between;"><span>Wolfgang Janiba Brandschutztechnik GmbH</span><span>Prüfbericht Nr.: ' + escapeHtml(nr) + (k && k.kundennummer ? ' / Kd.Nr.: ' + escapeHtml(k.kundennummer) : '') + '</span><span>Druckdatum: ' + fmtDate(new Date().toISOString()) + ' &middot; Leistungsdatum: ' + fmtDate(sb.datum) + '</span></div>';
   h += '<div style="font-size:9px; text-align:center; margin-top:3px;">Die geprüfte(n) Anlage(n) ist/sind zum Zeitpunkt der Prüfung in einem ordnungsgemäßen und funktionsfähigen Zustand, sofern im Prüfergebnis &bdquo;i.O.&ldquo; vermerkt ist.</div>';
   h += '</div>';
   return h;
@@ -19229,6 +19336,8 @@ function bindDynamic(){
   if(geraeteListeBtn) geraeteListeBtn.onclick = function(){ modalGeraeteListeEinfuegen(state.activeKundeId); };
   var sammelberichtBtn = document.getElementById('sammelberichtBtn');
   if(sammelberichtBtn) sammelberichtBtn.onclick = function(){ modalSammelbericht(state.activeKundeId); };
+  var rwaSetBtn = document.getElementById('rwaSetBtn');
+  if(rwaSetBtn) rwaSetBtn.onclick = function(){ modalRwaSet(state.activeKundeId); };
 
   var begehungsberichtBtn = document.getElementById('begehungsberichtBtn');
   if(begehungsberichtBtn) begehungsberichtBtn.onclick = function(){ modalBegehungsberichtListe(state.activeKundeId); };
