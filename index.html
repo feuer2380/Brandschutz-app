@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-20 19:55';
-var APP_VERSION_TEXT = '20.11. 19:55';
+var APP_VERSION = '2026-11-20 20:00';
+var APP_VERSION_TEXT = '20.11. 20:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -16528,8 +16528,11 @@ function buildRwaBerichtHtml(sb, k){
     return n[d.getMonth()] + ' ' + d.getFullYear();
   };
   var adr = k ? String(k.adresse || '') : '';
-  var h = '<div class="bericht-brief nur-querformat rwa-bericht" style="font-family:Calibri,Arial,Helvetica,sans-serif; font-size:11px; color:#000;">';
-  h += '<style>.rwa-bericht table{border-collapse:collapse; width:100%;} .rwa-bericht td,.rwa-bericht th{padding:3px 6px; text-align:left; vertical-align:top;} .rwa-bericht .rk{background:#d9d9d9; font-weight:700;} .rwa-bericht .rd td{border-bottom:1px solid #fff; background:#f2f2f2;} .rwa-bericht .rl{background:#d6eef8; width:110px;} .rwa-bericht .rok{background:#92e39a; font-weight:700; text-align:right; width:110px;} .rwa-bericht .rnok{background:#f28b82; font-weight:700; text-align:right; width:110px;} .rwa-bericht .rer{background:#fff59d;} .rwa-bericht .rblock{page-break-inside:avoid; margin-bottom:10px;}</style>';
+  // Am Handy: Bericht in voller Breite wie auf dem Papier, seitlich wischbar (Druck/PDF ist ohnehin 1100px breit)
+  var h = '<div class="bericht-brief nur-querformat rwa-bericht" style="font-family:Calibri,Arial,Helvetica,sans-serif; font-size:11px; color:#000; overflow-x:auto; -webkit-overflow-scrolling:touch;">';
+  h += '<div class="no-print rwa-wischhinweis" style="font-size:12px; color:#8a5a00; margin-bottom:6px;">&larr; Bericht seitlich wischen, um alle Spalten zu sehen &rarr;</div>';
+  h += '<div style="min-width:980px;">';
+  h += '<style>.rwa-bericht table{border-collapse:collapse; width:100%;} .rwa-bericht td,.rwa-bericht th{padding:3px 6px; text-align:left; vertical-align:top;} .rwa-bericht .rk{background:#d9d9d9; font-weight:700;} .rwa-bericht .rd td{border-bottom:1px solid #fff; background:#f2f2f2;} .rwa-bericht .rl{background:#d6eef8; width:110px;} .rwa-bericht .rok{background:#92e39a; font-weight:700; text-align:right; width:110px;} .rwa-bericht .rnok{background:#f28b82; font-weight:700; text-align:right; width:110px;} .rwa-bericht .rer{background:#fff59d;} .rwa-bericht .rblock{page-break-inside:avoid; margin-bottom:10px;} #printArea .rwa-wischhinweis{display:none !important;} @media print{.rwa-wischhinweis{display:none !important;}}</style>';
   // Kopf
   h += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:20px;">';
   h += '<div><div style="font-size:18px; font-weight:700;">Prüfergebnisbericht</div><div style="font-size:14px; font-weight:700; margin-top:4px;">RWA, DBA, BRV</div><div style="font-size:10px; margin-top:1px;">Rauch- und Wärmeabzug &middot; Druckbelüftung &middot; Brandrauchverdünnung</div><div style="font-size:10px; font-weight:700; margin-top:2px;">nach ÖNORM F 3075 unter Berücksichtigung der TRVB 111 S</div><div style="font-weight:700; margin-top:8px;">Prüfbericht Nr.: ' + escapeHtml(nr) + '</div>';
@@ -16587,7 +16590,7 @@ function buildRwaBerichtHtml(sb, k){
   h += '</div></div>';
   h += '<div style="margin-top:14px; border-top:1px solid #999; padding-top:4px; font-size:9px; display:flex; justify-content:space-between;"><span>Wolfgang Janiba Brandschutztechnik GmbH</span><span>Prüfbericht Nr.: ' + escapeHtml(nr) + (k && k.kundennummer ? ' / Kd.Nr.: ' + escapeHtml(k.kundennummer) : '') + '</span><span>Druckdatum: ' + fmtDate(new Date().toISOString()) + ' &middot; Leistungsdatum: ' + fmtDate(sb.datum) + '</span></div>';
   h += '<div style="font-size:9px; text-align:center; margin-top:3px;">Die geprüfte(n) Anlage(n) ist/sind zum Zeitpunkt der Prüfung in einem ordnungsgemäßen und funktionsfähigen Zustand, sofern im Prüfergebnis &bdquo;i.O.&ldquo; vermerkt ist.</div>';
-  h += '</div>';
+  h += '</div></div>';
   return h;
 }
 
