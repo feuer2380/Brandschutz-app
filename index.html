@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-19 22:40';
-var APP_VERSION_TEXT = '19.11. 22:40';
+var APP_VERSION = '2026-11-20 19:30';
+var APP_VERSION_TEXT = '20.11. 19:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1668,7 +1668,7 @@ function dienstleistungenFuer(kategorie){
 // RWA: Pruefpunkte je Bauteil (erkannt am Typ), wie im Pruefergebnisbericht nach OENORM F 3075
 function rwaBauteilArt(typ){
   var t = String(typ || '').toLowerCase();
-  if(/zentrale|steuer/.test(t)) return 'zentrale';
+  if(/zentrale|steuer|rwz|rwa-z|\bk\s*\+\s*g\b|rauchabzugszentr/.test(t)) return 'zentrale';
   if(/notstrom|akku|batter/.test(t)) return 'notstrom';
   if(/handausl|ausl\u00f6se|auslose|rwa-taster|rwa taster|brandfall/.test(t)) return 'handausloeser';
   if(/l\u00fcftung|lueftung|lueft|l\u00fcft/.test(t)) return 'lueftungstaster';
@@ -15029,6 +15029,18 @@ function sicherungHerunterladen(blob, name){
   setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
 }
 
+// Mehr-Menue: von Hand nach neuer Version suchen
+function versionPruefen(manuell){
+  var basis = location.href.split('#')[0].split('?')[0];
+  if(location.protocol.indexOf('http') !== 0 || !window.fetch){ neueVersionLaden(); return; }
+  toast('Suche neue Version...');
+  fetch(basis + '?check=' + Date.now(), { cache: 'no-store' }).then(function(r){ return r.ok ? r.text() : ''; }).then(function(txt){
+    var m = txt && txt.match(/var APP_VERSION = '([^']+)'/);
+    if(m && m[1] > APP_VERSION){ neueVersionLaden(); }
+    else { toast('Du hast schon die neueste Version (' + APP_VERSION_TEXT + ')'); }
+  }).catch(function(){ neueVersionLaden(); });
+}
+
 function modalMehrMenu(){
   var html = '';
   html += '<div class="modal-head"><h3>Mehr</h3><button class="close" id="mClose">&times;</button></div>';
@@ -15066,8 +15078,11 @@ function modalMehrMenu(){
     html += '<button type="button" class="btn block" id="mehrSichern" style="margin-top:10px;">Alles sichern (Datei herunterladen)</button>';
     html += '<div class="meta" style="margin-top:4px; text-align:center;">' + (letzte ? 'Letzte Sicherung auf diesem Gerät: ' + escapeHtml(letzte) : 'Auf diesem Gerät noch keine Sicherung gemacht') + '</div>';
   }
+  html += '<button type="button" class="btn block" id="mehrUpdate" style="margin-top:16px; background:#1e7b34;">&#8635; App aktualisieren (neue Version laden)</button>';
+  html += '<div class="meta" style="margin-top:4px; text-align:center;">Version: ' + escapeHtml(APP_VERSION_TEXT) + '</div>';
   html += '<button type="button" class="btn block secondary" id="mehrGeraetAbmelden" style="margin-top:16px; color:#c23f12;">Gerät abmelden (Firmen-Konto)</button>';
   openModal(html);
+  document.getElementById('mehrUpdate').onclick = function(){ closeModal(); versionPruefen(true); };
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('mehrGeraetAbmelden').onclick = function(){ closeModal(); geraetAbmelden(); };
   if(document.getElementById('mehrTreue')) document.getElementById('mehrTreue').onclick = function(){ closeModal(); setTimeout(modalTreueUebersicht, 50); };
