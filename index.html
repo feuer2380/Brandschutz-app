@@ -421,6 +421,12 @@ try {
   .pb-pos{background:#f0e2d4; font-weight:700; color:var(--ember-dark); text-align:center;}
   .al-karte{border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:10px; page-break-inside:avoid; break-inside:avoid;}
   .al-karte .al-titel{font-weight:700; font-size:14px;}
+  .al-kartenliste{margin-bottom:12px;}
+  .al-kartenliste .al-karte{background:#fff;}
+  .al-kartenliste .al-nr{display:inline-block; min-width:26px; padding:1px 7px; margin-right:4px; border-radius:6px; background:#f0e2d4; color:var(--ember-dark); text-align:center;}
+  .al-felder{display:grid; grid-template-columns:auto 1fr; gap:3px 12px; margin-top:6px; font-size:13px;}
+  .al-felder .al-lab{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; padding-top:2px; white-space:nowrap;}
+  .al-felder .al-wert{overflow-wrap:anywhere;}
   .al-karte .al-meta{font-size:12.5px; color:var(--muted); margin-top:2px;}
   .al-karte .badge{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; margin-top:6px;}
   .al-karte .badge.ok{background:#dcefdf; color:#1e6b3a;}
@@ -7927,6 +7933,49 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
   return html;
 }
 
+// Am Handy-Bildschirm: breite Tabellen der Ausstattungsliste als Karten anzeigen (Ausdruck bleibt Tabelle)
+function alKartenAnsicht(box){
+  if(!box) return;
+  var tabellen = box.querySelectorAll('table.pb-tabelle');
+  for(var ti = 0; ti < tabellen.length; ti++){
+    var tab = tabellen[ti];
+    if(tab.className.indexOf('ausst-neu-tabelle') >= 0){
+      var neuBox = tab.parentNode;
+      if(neuBox && neuBox.className.indexOf('ausst-neu') >= 0) neuBox.style.display = 'none';
+      continue;
+    }
+    var kopf = [];
+    var ths = tab.querySelectorAll('thead th');
+    for(var hi = 0; hi < ths.length; hi++) kopf.push(String(ths[hi].textContent || '').trim());
+    var liste = document.createElement('div');
+    liste.className = 'al-kartenliste';
+    var zeilen = tab.querySelectorAll('tbody tr');
+    for(var zi = 0; zi < zeilen.length; zi++){
+      var tds = zeilen[zi].children;
+      if(!tds.length) continue;
+      var karte = document.createElement('div');
+      karte.className = 'al-karte';
+      var stil = zeilen[zi].getAttribute('style');
+      if(stil) karte.setAttribute('style', stil);
+      var nr = tds[0] ? tds[0].innerHTML : '';
+      var titel = tds[1] ? tds[1].innerHTML : '';
+      var h = '<div class="al-titel"><span class="al-nr">' + nr + '</span> ' + titel + '</div><div class="al-felder">';
+      for(var ci = 2; ci < tds.length; ci++){
+        var lab = kopf[ci] || '';
+        if(!lab || lab === '\u2713' || lab === '\u2714') continue;
+        var wert = tds[ci].innerHTML;
+        if(String(tds[ci].textContent || '').trim() === '') wert = '-';
+        h += '<div class="al-lab">' + escapeHtml(lab) + '</div><div class="al-wert">' + wert + '</div>';
+      }
+      h += '</div>';
+      karte.innerHTML = h;
+      liste.appendChild(karte);
+    }
+    tab.style.display = 'none';
+    tab.parentNode.insertBefore(liste, tab);
+  }
+}
+
 function modalGeraeteuebersicht(kundeId){
   var alleGeraete = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden; });
   var kategorienVorhanden = [];
@@ -7955,6 +8004,7 @@ function modalGeraeteuebersicht(kundeId){
   html += '<div class="meta" style="margin-top:4px;">Nur Text-Zusammenfassung. Fuer die formatierte Version wie beim Drucken: Drucken / Als PDF teilen -&gt; Teilen-Symbol -&gt; Mail.</div>';
     html += '</div>';
     openModal(html);
+    alKartenAnsicht(document.getElementById('alInhalt'));
     document.getElementById('mClose').onclick = closeModal;
     document.querySelectorAll('[data-alkat]').forEach(function(b){
       b.onclick = function(){ aktKat = b.getAttribute('data-alkat') || null; neuZeichnen(); };
