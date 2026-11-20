@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-20 19:30';
-var APP_VERSION_TEXT = '20.11. 19:30';
+var APP_VERSION = '2026-11-20 19:35';
+var APP_VERSION_TEXT = '20.11. 19:35';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -16085,6 +16085,10 @@ function modalSammelbericht(kundeId){
       html += '<label style="display:flex; align-items:center; gap:8px; font-weight:600; margin-bottom:8px;"><input type="checkbox" class="sbInkl" data-gid="' + g.id + '" checked style="width:20px; height:20px;"> In Bericht aufnehmen</label>';
       html += '<div style="flex:1; min-width:0;"><strong>Nr. ' + katNr2 + ' &middot; ' + escapeHtml(g.typ) + '</strong>' + bioHinweisHtml(g) + (g.kategorie && g.kategorie !== 'Feuerlöscher' ? ' <span class="badge blau" style="font-size:9px; padding:1px 6px;">' + escapeHtml(g.kategorie) + '</span>' : '') + '<br><span class="meta">' + escapeHtml(g.standort || '') + (g.baujahr ? ' &middot; Bj. ' + g.baujahr : '') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</span></div>';
       if(istRWA){
+        // Standort / Seriennummer / Baujahr direkt hier eintragen (z.B. "Stiege 1 OG")
+        html += '<label style="margin-top:8px;">Standort (z.B. Stiege 1, Stiege 1 OG, Dach)</label><input type="text" id="sbRwaStandort_' + g.id + '" value="' + escapeHtml(g.standort || '') + '" placeholder="z.B. Stiege 1 OG" autocomplete="off">';
+        html += '<div style="display:flex; gap:8px;"><div style="flex:1.4;"><label style="margin-top:6px;">Seriennummer</label><input type="text" id="sbRwaSn_' + g.id + '" value="' + escapeHtml(g.seriennummer || '') + '" autocomplete="off"></div>';
+        html += '<div style="flex:1;"><label style="margin-top:6px;">Baujahr</label><input type="text" inputmode="numeric" id="sbRwaBj_' + g.id + '" value="' + escapeHtml(g.baujahr ? String(g.baujahr) : '') + '" placeholder="z.B. 2025" autocomplete="off"></div></div>';
         html += '<div style="margin-top:10px;">';
         einzelErgebnisse[g.id].forEach(function(d, dIdx){
           html += '<div class="pos-dienst" style="padding:6px 0;"><span class="dname" style="flex:1; padding-right:8px;">' + escapeHtml(d.text) + '</span><button type="button" class="btn small sbDienstBtn" data-gid="' + g.id + '" data-didx="' + dIdx + '" style="background:var(--ok); min-width:78px;">OK</button></div>';
@@ -16261,6 +16265,19 @@ function modalSammelbericht(kundeId){
       }
       var g = geraeteBericht[idx];
       var istRWA = ((g.kategorie || 'Feuerlöscher').trim()) === 'RWA-Anlage';
+      if(istRWA){
+        var rwaStEl = document.getElementById('sbRwaStandort_' + g.id);
+        var rwaSnEl = document.getElementById('sbRwaSn_' + g.id);
+        var rwaBjEl = document.getElementById('sbRwaBj_' + g.id);
+        var rwaGeaendert = false;
+        if(rwaStEl && rwaStEl.value.trim() !== (g.standort || '')){ g.standort = rwaStEl.value.trim(); rwaGeaendert = true; }
+        if(rwaSnEl && rwaSnEl.value.trim() !== (g.seriennummer || '')){ g.seriennummer = rwaSnEl.value.trim(); rwaGeaendert = true; }
+        if(rwaBjEl){
+          var bjNeu = rwaBjEl.value.trim();
+          if(bjNeu !== (g.baujahr ? String(g.baujahr) : '')){ g.baujahr = bjNeu ? (parseInt(bjNeu, 10) || bjNeu) : null; rwaGeaendert = true; }
+        }
+        if(rwaGeaendert) dbPut('geraete', g, function(){});
+      }
       var akkuEl = istRWA ? document.getElementById('sbAkku_' + g.id) : null;
       var akkuVal = akkuEl ? akkuEl.value : '';
       if(akkuVal){ g.akkuTauschDatum = akkuVal; }
