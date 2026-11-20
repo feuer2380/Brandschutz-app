@@ -6779,8 +6779,8 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
   offenePruefung.bericht = true;
   offenePruefung.ergebnis = ergebnisLabel;
   offenePruefung.bemerkung = bemerkung;
-  if(sigKundeCanvas) offenePruefung.unterschriftKunde = sigKundeCanvas.toDataURL('image/png');
-  if(sigTechnikerCanvas) offenePruefung.unterschriftTechniker = sigTechnikerCanvas.toDataURL('image/png');
+  if(sigKundeCanvas) offenePruefung.unterschriftKunde = sigBild(sigKundeCanvas);
+  if(sigTechnikerCanvas) offenePruefung.unterschriftTechniker = sigBild(sigTechnikerCanvas);
   dbPut('pruefungen', offenePruefung, function(){
     var rueckkehrKunde = state.checkRueckkehrZuKunde;
     function nachAbschluss(nachricht){
@@ -10665,7 +10665,20 @@ function initSigPad(canvasId){
   canvas.addEventListener('touchstart', start, {passive:false});
   canvas.addEventListener('touchmove', move, {passive:false});
   canvas.addEventListener('touchend', end);
+  try{ canvas._leerBild = canvas.toDataURL('image/png'); }catch(eL){ canvas._leerBild = null; }
   return canvas;
+}
+// Unterschrift als Bild - oder null, wenn nicht unterschrieben wurde
+function sigBild(canvas){
+  if(!canvas) return null;
+  var d = '';
+  try{ d = canvas.toDataURL('image/png'); }catch(e){ return null; }
+  if(!d || d === 'data:,' || (canvas._leerBild && d === canvas._leerBild)) return null;
+  return d;
+}
+var SIG_KUNDE_FEHLT_TEXT = 'Kunde war für eine Unterschrift nicht verfügbar!';
+function sigKundeFehltHtml(hoehe){
+  return '<div style="height:' + (hoehe || 60) + 'px; display:flex; align-items:center; justify-content:center; text-align:center; font-weight:700; font-size:13px; line-height:1.25; font-family:Arial,Helvetica,sans-serif; color:#000;">Kunde war für eine Unterschrift<br>nicht verfügbar!</div>';
 }
 
 function modalErledigt(pruefungId){
@@ -10707,8 +10720,8 @@ function modalErledigt(pruefungId){
     p.bericht = true;
     p.ergebnis = ergebnisLabel;
     p.bemerkung = document.getElementById('fBemerkung').value.trim();
-    p.unterschriftKunde = canvasKunde.toDataURL('image/png');
-    p.unterschriftTechniker = canvasTechniker.toDataURL('image/png');
+    p.unterschriftKunde = sigBild(canvasKunde);
+    p.unterschriftTechniker = sigBild(canvasTechniker);
     dbPut('pruefungen', p, function(){
       var gZu = p.geraetId ? geraetById(p.geraetId) : null;
       if(gZu && ergebnis === 'ausscheiden'){
@@ -10862,7 +10875,7 @@ function buildBerichtHtml(p, k){
   html += '</div>';
   html += '<div class="pb-sig-col">';
   if(sigKunde) html += '<img src="' + sigKunde + '">';
-  else html += '<div style="height:60px;"></div>';
+  else html += sigKundeFehltHtml(60);
   html += '<div class="sig-label">Unterschrift Kunde' + (k ? ' (' + escapeHtml(kundeAnzeigeName(k)) + ')' : '') + '</div>';
   html += '</div>';
   html += '</div>';
@@ -12020,10 +12033,13 @@ var ZEIT_TYPEN = {
   pause_ende: 'Pause Ende',
   gehen: 'Gehen',
   urlaub: 'Urlaub',
+  kur: 'Kur',
   zeitausgleich: 'Zeitausgleich',
   feiertag: 'Feiertag'
 };
-var ZEIT_ABW_TYPEN = ['urlaub', 'zeitausgleich', 'feiertag'];
+var ZEIT_ABW_TYPEN = ['urlaub', 'kur', 'zeitausgleich', 'feiertag'];
+// diese Abwesenheiten erscheinen auch im Kalender
+var KAL_ABW_TYPEN = ['urlaub', 'kur', 'zeitausgleich'];
 
 function zeitOrtOptionenHtml(auswahl){
   var h = '';
@@ -12831,13 +12847,13 @@ function modalZeitNachtragen(name, jahr, monat){
 function modalZeitUrlaub(name){
   var heute = new Date().toISOString().substring(0, 10);
   var html = '';
-  html += '<div class="modal-head"><h3>Urlaub eintragen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="modal-head"><h3>Urlaub / Kur eintragen</h3><button class="close" id="mClose">&times;</button></div>';
   html += '<label>Mitarbeiter</label><select id="zuWer">';
   zeitMitarbeiterNamen().forEach(function(n){
     html += '<option value="' + escapeHtml(n) + '"' + (n === name ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
   });
   html += '</select>';
-  html += '<label>Art</label><select id="zuArt"><option value="urlaub">Urlaub</option><option value="zeitausgleich">Zeitausgleich</option><option value="feiertag">Feiertag</option></select>';
+  html += '<label>Art</label><select id="zuArt"><option value="urlaub">Urlaub</option><option value="kur">Kur</option><option value="zeitausgleich">Zeitausgleich</option><option value="feiertag">Feiertag</option></select>';
   html += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Von</label><input type="date" id="zuVon" value="' + heute + '"></div>';
   html += '<div style="flex:1;"><label>Bis</label><input type="date" id="zuBis" value="' + heute + '"></div></div>';
   html += '<label style="display:flex; align-items:center; gap:8px; margin-top:12px;"><input type="checkbox" id="zuWerktage" checked style="width:auto;"> Nur Montag bis Freitag eintragen</label>';
@@ -14197,6 +14213,14 @@ function kalEintraegeFuerTag(key){
     else if(istEingeschraenkt() && !kalVollsicht()) return;
     res.push({ art: 'pruefung', p: p, g: g, z: z, sort: (p.zeit || '98:00') });
   });
+  // Urlaub / Kur / Zeitausgleich aus der Zeiterfassung
+  (state.zeiten || []).forEach(function(zt){
+    if(KAL_ABW_TYPEN.indexOf(zt.typ) < 0) return;
+    if(zeitTagKey(zt.zeit) !== key) return;
+    if(person && zt.mitarbeiter !== person) return;
+    if(!person && istEingeschraenkt() && !kalVollsicht() && zt.mitarbeiter !== state.mitarbeiterName) return;
+    res.push({ art: 'abwesenheit', a: zt, z: zt.mitarbeiter, sort: '00:00' });
+  });
   res.sort(function(a, b){ return a.sort.localeCompare(b.sort); });
   return res;
 }
@@ -14276,6 +14300,12 @@ function renderKalender(){
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
       html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
       if(t.notiz) html += terminNotizHtml(t);
+      html += '</div>';
+    } else if(e.art === 'abwesenheit'){
+      var abwName = ZEIT_TYPEN[e.a.typ] || 'Abwesend';
+      html += '<div class="card" style="border-left:6px solid ' + kalFarbe(e.z) + '; background:#eef4fb;">';
+      html += '<div class="row"><h3>' + escapeHtml(abwName) + '</h3><span class="badge blau">ganztägig</span></div>';
+      html += '<div class="meta" style="display:flex; align-items:center; gap:6px;">' + kalPunkt(kalFarbe(e.z), true) + '<span>' + escapeHtml(zustaendigKurz(e.z)) + ' ist nicht da</span></div>';
       html += '</div>';
     } else {
       var kp = kundeFuerPruefung(e.p);
@@ -14505,6 +14535,11 @@ function modalKalenderTag(key){
       if(kt) html += '<div class="meta">' + escapeHtml(kt.name) + '</div>';
       html += '<div class="meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' + kalEintragFarben(e).map(function(n){ return kalPunkt(kalFarbe(n), true) + '<span>' + (n === 'alle' ? 'Alle Mitarbeiter' : escapeHtml(zustaendigKurz(n))) + '</span>'; }).join(' ') + '</div>';
       if(t.notiz) html += terminNotizHtml(t);
+      html += '</div>';
+    } else if(e.art === 'abwesenheit'){
+      html += '<div class="card" style="border-left:6px solid ' + kalFarbe(e.z) + '; background:#eef4fb;">';
+      html += '<div class="row"><h3>' + escapeHtml(ZEIT_TYPEN[e.a.typ] || 'Abwesend') + '</h3><span class="badge blau">ganztägig</span></div>';
+      html += '<div class="meta" style="display:flex; align-items:center; gap:6px;">' + kalPunkt(kalFarbe(e.z), true) + '<span>' + escapeHtml(zustaendigKurz(e.z)) + ' ist nicht da</span></div>';
       html += '</div>';
     } else {
       var kp = kundeFuerPruefung(e.p);
@@ -16050,8 +16085,8 @@ function modalSammelbericht(kundeId){
         sbBtn.textContent = 'Erstelle Bericht(e)...';
         var basisNr = document.getElementById('sbBerichtNr').value.trim();
         var allgemeineBemerkung = document.getElementById('sbBemerkung').value.trim();
-        var sigKundeData = sigKunde.toDataURL('image/png');
-        var sigTechnikerData = sigTechniker.toDataURL('image/png');
+        var sigKundeData = sigBild(sigKunde);
+        var sigTechnikerData = sigBild(sigTechniker);
 
         var gruppenNachKategorie = {};
         var kategorienReihenfolge = [];
@@ -16181,8 +16216,8 @@ function modalSammelbericht(kundeId){
       offenePruefung.bericht = true;
       offenePruefung.ergebnis = ergebnisLabel;
       offenePruefung.bemerkung = notiz;
-      offenePruefung.unterschriftKunde = sigKunde.toDataURL('image/png');
-      offenePruefung.unterschriftTechniker = sigTechniker.toDataURL('image/png');
+      offenePruefung.unterschriftKunde = sigBild(sigKunde);
+      offenePruefung.unterschriftTechniker = sigBild(sigTechniker);
 
       dbPut('pruefungen', offenePruefung, function(){
         var weiter = function(naechstePruefungWert){
@@ -16357,7 +16392,7 @@ function buildSammelberichtHtml(sb, k){
   html += '</div>';
   html += '<div class="pb-sig-col">';
   if(sb.unterschriftKunde) html += '<img src="' + sb.unterschriftKunde + '">';
-  else html += '<div style="height:60px;"></div>';
+  else html += sigKundeFehltHtml(60);
   html += '<div class="sig-label">Unterschrift Kunde' + (k ? ' (' + escapeHtml(kundeAnzeigeName(k)) + ')' : '') + '</div>';
   html += '</div>';
   html += '</div>';
@@ -16526,8 +16561,8 @@ function modalTagesberichtNeu(kundeId, vorgabe){
       durchgefuehrt: document.getElementById('tbDurchgefuehrt').value.trim(),
       material: document.getElementById('tbMaterial').value.trim(),
       feststellungen: document.getElementById('tbFeststellungen').value.trim(),
-      unterschriftTechniker: canvasTechniker ? canvasTechniker.toDataURL('image/png') : null,
-      unterschriftKunde: canvasKunde ? canvasKunde.toDataURL('image/png') : null,
+      unterschriftTechniker: sigBild(canvasTechniker),
+      unterschriftKunde: sigBild(canvasKunde),
       erstelltAm: new Date().toISOString()
     };
     dbPut('tagesberichte', tb, function(){
@@ -16608,7 +16643,7 @@ function tbMaterialTabelleAusgefuellt(text){
   return html;
 }
 
-function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName, feldHoehe){
+function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName, feldHoehe, leereVorlage){
   var fh = feldHoehe || 50;
   var html = '<div style="margin-top:12px; page-break-inside:avoid; break-inside:avoid;">';
   html += '<div style="font-weight:700; font-size:11px; text-decoration:underline; text-transform:uppercase; margin-bottom:4px;">5. Bestätigung</div>';
@@ -16616,7 +16651,7 @@ function tbUnterschriftTabelle(bildTechniker, bildKunde, kundeName, feldHoehe){
   html += '<tr><td style="border:1px solid #333; background:#eee; padding:4px 6px; font-weight:700; width:50%;">Techniker &ndash; Name / Unterschrift</td><td style="border:1px solid #333; background:#eee; padding:4px 6px; font-weight:700; width:50%;">Auftraggeber / Kunde' + (kundeName ? ' (' + escapeHtml(kundeName) + ')' : '') + ' &ndash; Unterschrift</td></tr>';
   html += '<tr>';
   html += '<td style="border:1px solid #333; padding:5px; height:' + fh + 'px; text-align:center; vertical-align:middle;">' + (bildTechniker ? '<img src="' + bildTechniker + '" style="max-height:' + (fh - 5) + 'px;">' : '') + '</td>';
-  html += '<td style="border:1px solid #333; padding:5px; height:' + fh + 'px; text-align:center; vertical-align:middle;">' + (bildKunde ? '<img src="' + bildKunde + '" style="max-height:' + (fh - 5) + 'px;">' : '') + '</td>';
+  html += '<td style="border:1px solid #333; padding:5px; height:' + fh + 'px; text-align:center; vertical-align:middle;">' + (bildKunde ? '<img src="' + bildKunde + '" style="max-height:' + (fh - 5) + 'px;">' : (leereVorlage ? '' : sigKundeFehltHtml(fh - 10))) + '</td>';
   html += '</tr>';
   html += '</table></div>';
   return html;
@@ -16730,7 +16765,7 @@ function buildTagesberichtLeerDruckHtml(k, qrId){
   html += tbAbschnitt('2. Durchgeführte Tätigkeiten', 'Hier dokumentiert der Techniker kurz und nachvollziehbar, was tatsächlich durchgeführt wurde:', '', 100);
   html += tbMaterialTabelleLeer();
   html += tbAbschnitt('4. Feststellungen / Hinweise / offene Punkte', '', '', 100);
-  html += tbUnterschriftTabelle(null, null, null);
+  html += tbUnterschriftTabelle(null, null, null, null, true);
   html += tbFusszeile();
 
   html += '</div>';
@@ -17366,6 +17401,18 @@ function lieferscheinPdfErzeugen(daten, vorlageBytes, opt){
         seite.drawImage(img, { x: x + (bMax - bw) / 2, y: y + (hMax - bh) / 2, width: bw, height: bh });
       }).catch(function(){});
     };
+    var hatKundenSig = !!(daten.sigKunde && daten.sigKunde.indexOf('data:image/png') === 0 && daten.sigKunde.length >= 200);
+    if(!hatKundenSig){
+      // Kunde hat nicht unterschrieben -> Hinweis ins Unterschriftsfeld des Kunden
+      var zeilenK = ['Kunde war für eine Unterschrift', 'nicht verfügbar!'];
+      for(var zk = 0; zk < zeilenK.length; zk++){
+        var gk = 11;
+        var wk = helv ? helv.widthOfTextAtSize(zeilenK[zk], gk) : zeilenK[zk].length * gk * 0.5;
+        var ok = { x: 50 + (240 - wk) / 2, y: 133 - zk * 14, size: gk, color: PL.rgb(0, 0, 0) };
+        if(helv) ok.font = helv;
+        try{ seite.drawText(zeilenK[zk], ok); }catch(eK){}
+      }
+    }
     return bild(daten.sigKunde, 50, 103, 240, 50).then(function(){
       return bild(daten.sigTechniker, 380, 103, 165, 50);
     });
