@@ -421,6 +421,10 @@ try {
   .pb-pos{background:#f0e2d4; font-weight:700; color:var(--ember-dark); text-align:center;}
   .al-karte{border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:10px; page-break-inside:avoid; break-inside:avoid;}
   .al-karte .al-titel{font-weight:700; font-size:14px;}
+  .al-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin-bottom:14px; box-shadow:0 1px 4px rgba(26,20,16,.12); background:#fff;}
+  .modal .al-scroll .pb-tabelle{display:table; width:100%; min-width:620px; margin:0; overflow:visible; box-shadow:none;}
+  .modal .al-scroll .pb-tabelle td{white-space:nowrap;}
+  .modal .al-scroll .pb-tabelle td:nth-child(2){white-space:normal; min-width:140px;}
   .al-kartenliste{margin-bottom:12px;}
   .al-kartenliste .al-karte{background:#fff; border-radius:12px; padding:10px 12px; margin-bottom:8px; box-shadow:0 1px 4px rgba(26,20,16,.12); border-top:none; border-right:none; border-bottom:none;}
   .al-kopf{display:flex; align-items:center; gap:10px;}
@@ -7960,81 +7964,51 @@ function alPill(text, bg, fg){
   return '<span class="al-pill" style="background:' + bg + '; color:' + (fg || '#fff') + ';">' + text + '</span>';
 }
 function alKartenAnsicht(box){
+  // Bildschirm-Ansicht: Tabelle wie am Ausdruck, aber mit Farben und Status-Plaketten
   if(!box) return;
   var tabellen = box.querySelectorAll('table.pb-tabelle');
+  var heute = new Date(); heute.setHours(0, 0, 0, 0);
   for(var ti = 0; ti < tabellen.length; ti++){
     var tab = tabellen[ti];
-    if(tab.className.indexOf('ausst-neu-tabelle') >= 0){
-      var neuBox = tab.parentNode;
-      if(neuBox && neuBox.className.indexOf('ausst-neu') >= 0) neuBox.style.display = 'none';
-      continue;
-    }
-    // Kategorie-Ueberschrift (h3 direkt davor) farbig machen
+    if(tab.className.indexOf('ausst-neu-tabelle') >= 0) continue;
     var ueb = tab.previousElementSibling;
     var kat = (ueb && ueb.tagName === 'H3') ? String(ueb.textContent || '').trim() : '';
     var farbe = alKatFarbe(kat);
     var zeilen = tab.querySelectorAll('tbody tr');
     if(ueb && ueb.tagName === 'H3'){
-      ueb.className += ' al-kat';
-      ueb.style.cssText = 'margin:18px 0 8px 0; font-size:15px; background:' + farbe + '; color:#fff; padding:8px 12px; border-radius:10px; display:flex; align-items:center; justify-content:space-between;';
+      ueb.style.cssText = 'margin:18px 0 0 0; font-size:15px; background:' + farbe + '; color:#fff; padding:7px 12px; border-radius:10px 10px 0 0; display:flex; align-items:center; justify-content:space-between;';
       ueb.innerHTML = escapeHtml(kat) + '<span style="background:rgba(255,255,255,.25); border-radius:20px; padding:1px 10px; font-size:13px;">' + zeilen.length + '</span>';
     }
     var kopf = [];
     var ths = tab.querySelectorAll('thead th');
-    for(var hi = 0; hi < ths.length; hi++) kopf.push(String(ths[hi].textContent || '').trim());
-    var liste = document.createElement('div');
-    liste.className = 'al-kartenliste';
-    var heute = new Date(); heute.setHours(0, 0, 0, 0);
+    for(var hi = 0; hi < ths.length; hi++) kopf.push(String(ths[hi].textContent || '').trim().toLowerCase());
     for(var zi = 0; zi < zeilen.length; zi++){
       var tds = zeilen[zi].children;
-      if(!tds.length) continue;
-      var karte = document.createElement('div');
-      karte.className = 'al-karte';
-      var warnZeile = !!zeilen[zi].getAttribute('style');
-      karte.style.borderLeft = '6px solid ' + farbe;
-      if(warnZeile) karte.style.background = '#fdecea';
-      var nr = tds[0] ? String(tds[0].textContent || '').trim() : '';
-      var titel = tds[1] ? tds[1].innerHTML : '';
-      if(tds[1] && String(tds[1].textContent || '').trim() === '-') titel = '<span style="color:var(--muted); font-weight:500;">' + escapeHtml(kat || 'Eintrag') + '</span>';
-      var status = '';
-      var felder = '';
+      if(tds[0]) tds[0].style.cssText += '; background:' + farbe + '; color:#fff;';
       for(var ci = 2; ci < tds.length; ci++){
         var lab = kopf[ci] || '';
-        if(!lab || lab === '\u2713' || lab === '\u2714') continue;
         var txt = String(tds[ci].textContent || '').trim();
-        var labK = lab.toLowerCase();
-        var wert = tds[ci].innerHTML;
-        // Statusfelder als bunte Plaketten
-        if(labK === 'leer'){
-          status += txt === 'Ja' ? alPill('&#9675; Leer', '#c62828') : alPill('&#9679; Voll', '#2e7d32');
-          continue;
-        }
-        if(labK.indexOf('n\u00e4. pr\u00fcfung') === 0 || labK.indexOf('naechste') === 0){
+        if(lab === 'leer'){
+          tds[ci].innerHTML = txt === 'Ja' ? alPill('Leer', '#c62828') : alPill('Voll', '#2e7d32');
+        } else if(lab.indexOf('n\u00e4. pr\u00fcfung') === 0){
           var dN = alDatumAusText(txt);
           if(dN){
             var tageBis = Math.round((dN - heute) / 86400000);
-            if(tageBis < 0) status += alPill('&#9888; f\u00e4llig seit ' + txt, '#c62828');
-            else if(tageBis <= 30) status += alPill('bald f\u00e4llig ' + txt, '#ef6c00');
-            else status += alPill('&#10003; bis ' + txt, '#2e7d32');
-            continue;
+            tds[ci].innerHTML = alPill((tageBis < 0 ? '&#9888; ' : '') + escapeHtml(txt), tageBis < 0 ? '#c62828' : (tageBis <= 30 ? '#ef6c00' : '#2e7d32'));
           }
+        } else if(lab.indexOf('m\u00e4ngel') === 0){
+          if(txt && txt !== '-') tds[ci].innerHTML = '<span style="color:#c2410c; font-weight:700;">&#9888; ' + tds[ci].innerHTML + '</span>';
+          else tds[ci].innerHTML = alPill('&#10003; keine', '#2e7d32');
+        } else if(lab === 'zeitspanne' && txt && txt !== '-'){
+          tds[ci].innerHTML = alPill(escapeHtml(txt), '#e3eefa', '#1d5fa8');
         }
-        if(labK.indexOf('m\u00e4ngel') === 0){
-          if(txt && txt !== '-') status += alPill('&#9888; M\u00e4ngel', '#ef6c00');
-          else status += alPill('&#10003; keine M\u00e4ngel', '#2e7d32');
-        }
-        if(txt === '' || txt === '-') continue;
-        if(labK === 'zeitspanne') wert = alPill(escapeHtml(txt), '#e3eefa', '#1d5fa8');
-        felder += '<div class="al-feld"><div class="al-lab">' + escapeHtml(lab) + '</div><div class="al-wert">' + wert + '</div></div>';
       }
-      var h = '<div class="al-kopf"><span class="al-nr" style="background:' + farbe + ';">' + escapeHtml(nr) + '</span><div class="al-titel">' + titel + '</div></div>';
-      if(status) h += '<div class="al-status">' + status + '</div>';
-      if(felder) h += '<div class="al-felder">' + felder + '</div>';
-      karte.innerHTML = h;
-      liste.appendChild(karte);
     }
-    tab.style.display = 'none';
-    tab.parentNode.insertBefore(liste, tab);
+    var huelle = document.createElement('div');
+    huelle.className = 'al-scroll';
+    huelle.style.borderTop = ueb && ueb.tagName === 'H3' ? 'none' : '';
+    tab.parentNode.insertBefore(huelle, tab);
+    huelle.appendChild(tab);
   }
 }
 
