@@ -422,11 +422,16 @@ try {
   .al-karte{border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:10px; page-break-inside:avoid; break-inside:avoid;}
   .al-karte .al-titel{font-weight:700; font-size:14px;}
   .al-kartenliste{margin-bottom:12px;}
-  .al-kartenliste .al-karte{background:#fff;}
-  .al-kartenliste .al-nr{display:inline-block; min-width:26px; padding:1px 7px; margin-right:4px; border-radius:6px; background:#f0e2d4; color:var(--ember-dark); text-align:center;}
-  .al-felder{display:grid; grid-template-columns:auto 1fr; gap:3px 12px; margin-top:6px; font-size:13px;}
-  .al-felder .al-lab{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; padding-top:2px; white-space:nowrap;}
-  .al-felder .al-wert{overflow-wrap:anywhere;}
+  .al-kartenliste .al-karte{background:#fff; border-radius:12px; padding:10px 12px; margin-bottom:8px; box-shadow:0 1px 4px rgba(26,20,16,.12); border-top:none; border-right:none; border-bottom:none;}
+  .al-kopf{display:flex; align-items:center; gap:10px;}
+  .al-kopf .al-titel{font-weight:700; font-size:15px; line-height:1.25;}
+  .al-nr{flex-shrink:0; min-width:30px; height:30px; border-radius:50%; color:#fff; font-weight:800; font-size:14px; display:inline-flex; align-items:center; justify-content:center; padding:0 6px;}
+  .al-status{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  .al-pill{display:inline-block; border-radius:20px; padding:3px 10px; font-size:12px; font-weight:700; white-space:nowrap;}
+  .al-felder{display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px;}
+  .al-feld{background:#f7f2ea; border-radius:8px; padding:5px 8px; min-width:0;}
+  .al-feld .al-lab{color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.04em;}
+  .al-feld .al-wert{font-size:14px; font-weight:600; overflow-wrap:anywhere;}
   .al-karte .al-meta{font-size:12.5px; color:var(--muted); margin-top:2px;}
   .al-karte .badge{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; margin-top:6px;}
   .al-karte .badge.ok{background:#dcefdf; color:#1e6b3a;}
@@ -7933,7 +7938,27 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
   return html;
 }
 
-// Am Handy-Bildschirm: breite Tabellen der Ausstattungsliste als Karten anzeigen (Ausdruck bleibt Tabelle)
+// Am Handy-Bildschirm: breite Tabellen der Ausstattungsliste als bunte Karten anzeigen (Ausdruck bleibt Tabelle)
+function alKatFarbe(kat){
+  var k = String(kat || '').toLowerCase();
+  if(k.indexOf('feuerl') >= 0) return '#c62828';
+  if(k.indexOf('zisch') >= 0) return '#1d5fa8';
+  if(k.indexOf('co2') >= 0) return '#00897b';
+  if(k.indexOf('rauch') >= 0) return '#7b3fa0';
+  if(k.indexOf('begehung') >= 0) return '#e8541f';
+  if(k.indexOf('rwa') >= 0) return '#6d4c41';
+  if(k.indexOf('notbel') >= 0 || k.indexOf('licht') >= 0) return '#f2a900';
+  if(k.indexOf('t\u00fcr') >= 0 || k.indexOf('tuer') >= 0) return '#2f7a4f';
+  return '#455a64';
+}
+function alDatumAusText(t){
+  var m = String(t || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if(!m) return null;
+  return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+}
+function alPill(text, bg, fg){
+  return '<span class="al-pill" style="background:' + bg + '; color:' + (fg || '#fff') + ';">' + text + '</span>';
+}
 function alKartenAnsicht(box){
   if(!box) return;
   var tabellen = box.querySelectorAll('table.pb-tabelle');
@@ -7944,30 +7969,67 @@ function alKartenAnsicht(box){
       if(neuBox && neuBox.className.indexOf('ausst-neu') >= 0) neuBox.style.display = 'none';
       continue;
     }
+    // Kategorie-Ueberschrift (h3 direkt davor) farbig machen
+    var ueb = tab.previousElementSibling;
+    var kat = (ueb && ueb.tagName === 'H3') ? String(ueb.textContent || '').trim() : '';
+    var farbe = alKatFarbe(kat);
+    var zeilen = tab.querySelectorAll('tbody tr');
+    if(ueb && ueb.tagName === 'H3'){
+      ueb.className += ' al-kat';
+      ueb.style.cssText = 'margin:18px 0 8px 0; font-size:15px; background:' + farbe + '; color:#fff; padding:8px 12px; border-radius:10px; display:flex; align-items:center; justify-content:space-between;';
+      ueb.innerHTML = escapeHtml(kat) + '<span style="background:rgba(255,255,255,.25); border-radius:20px; padding:1px 10px; font-size:13px;">' + zeilen.length + '</span>';
+    }
     var kopf = [];
     var ths = tab.querySelectorAll('thead th');
     for(var hi = 0; hi < ths.length; hi++) kopf.push(String(ths[hi].textContent || '').trim());
     var liste = document.createElement('div');
     liste.className = 'al-kartenliste';
-    var zeilen = tab.querySelectorAll('tbody tr');
+    var heute = new Date(); heute.setHours(0, 0, 0, 0);
     for(var zi = 0; zi < zeilen.length; zi++){
       var tds = zeilen[zi].children;
       if(!tds.length) continue;
       var karte = document.createElement('div');
       karte.className = 'al-karte';
-      var stil = zeilen[zi].getAttribute('style');
-      if(stil) karte.setAttribute('style', stil);
-      var nr = tds[0] ? tds[0].innerHTML : '';
+      var warnZeile = !!zeilen[zi].getAttribute('style');
+      karte.style.borderLeft = '6px solid ' + farbe;
+      if(warnZeile) karte.style.background = '#fdecea';
+      var nr = tds[0] ? String(tds[0].textContent || '').trim() : '';
       var titel = tds[1] ? tds[1].innerHTML : '';
-      var h = '<div class="al-titel"><span class="al-nr">' + nr + '</span> ' + titel + '</div><div class="al-felder">';
+      if(tds[1] && String(tds[1].textContent || '').trim() === '-') titel = '<span style="color:var(--muted); font-weight:500;">' + escapeHtml(kat || 'Eintrag') + '</span>';
+      var status = '';
+      var felder = '';
       for(var ci = 2; ci < tds.length; ci++){
         var lab = kopf[ci] || '';
         if(!lab || lab === '\u2713' || lab === '\u2714') continue;
+        var txt = String(tds[ci].textContent || '').trim();
+        var labK = lab.toLowerCase();
         var wert = tds[ci].innerHTML;
-        if(String(tds[ci].textContent || '').trim() === '') wert = '-';
-        h += '<div class="al-lab">' + escapeHtml(lab) + '</div><div class="al-wert">' + wert + '</div>';
+        // Statusfelder als bunte Plaketten
+        if(labK === 'leer'){
+          status += txt === 'Ja' ? alPill('&#9675; Leer', '#c62828') : alPill('&#9679; Voll', '#2e7d32');
+          continue;
+        }
+        if(labK.indexOf('n\u00e4. pr\u00fcfung') === 0 || labK.indexOf('naechste') === 0){
+          var dN = alDatumAusText(txt);
+          if(dN){
+            var tageBis = Math.round((dN - heute) / 86400000);
+            if(tageBis < 0) status += alPill('&#9888; f\u00e4llig seit ' + txt, '#c62828');
+            else if(tageBis <= 30) status += alPill('bald f\u00e4llig ' + txt, '#ef6c00');
+            else status += alPill('&#10003; bis ' + txt, '#2e7d32');
+            continue;
+          }
+        }
+        if(labK.indexOf('m\u00e4ngel') === 0){
+          if(txt && txt !== '-') status += alPill('&#9888; M\u00e4ngel', '#ef6c00');
+          else status += alPill('&#10003; keine M\u00e4ngel', '#2e7d32');
+        }
+        if(txt === '' || txt === '-') continue;
+        if(labK === 'zeitspanne') wert = alPill(escapeHtml(txt), '#e3eefa', '#1d5fa8');
+        felder += '<div class="al-feld"><div class="al-lab">' + escapeHtml(lab) + '</div><div class="al-wert">' + wert + '</div></div>';
       }
-      h += '</div>';
+      var h = '<div class="al-kopf"><span class="al-nr" style="background:' + farbe + ';">' + escapeHtml(nr) + '</span><div class="al-titel">' + titel + '</div></div>';
+      if(status) h += '<div class="al-status">' + status + '</div>';
+      if(felder) h += '<div class="al-felder">' + felder + '</div>';
       karte.innerHTML = h;
       liste.appendChild(karte);
     }
