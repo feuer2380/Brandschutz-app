@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-20 20:00';
-var APP_VERSION_TEXT = '20.11. 20:00';
+var APP_VERSION = '2026-11-20 22:45';
+var APP_VERSION_TEXT = '20.11. 22:45';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -17809,6 +17809,7 @@ function modalLieferschein(berichte, k){
   html += '<div id="lsPosListe"></div>';
   html += '<button type="button" class="btn small secondary" id="lsPosAdd">+ Position hinzufügen</button></div>';
   html += '<div id="lsSummen" style="margin-top:12px; padding:10px 12px; background:#f6efe2; border-radius:10px; font-size:14px;"></div>';
+  html += '<div class="meta" style="margin-top:8px;">Bei <b>Rechnung</b> mit Preisen wird der Endbetrag automatisch beim Kunden unter &bdquo;Rechnungen&ldquo; eingetragen (bezahlt oder offen).</div>';
   html += '<div id="lsBezahltHinweis" class="meta" style="margin-top:10px;">Lieferschein: Zahlung bleibt offen (kein Kreuz bei bezahlt).</div>';
   html += '<div id="lsBezahltBox" style="margin-top:10px; display:none; flex-wrap:wrap; align-items:center; gap:8px 0;"><span style="font-weight:600; margin-right:12px;">Zahlung:</span>';
   html += '<label style="display:inline-flex; align-items:center; gap:6px; font-weight:400; margin:0 14px 0 0; width:auto;"><input type="radio" name="lsBez" value="" checked style="width:auto; margin:0;"> offen</label>';
@@ -17847,12 +17848,40 @@ function modalLieferschein(berichte, k){
     };
   };
   var zeileNetto = function(o){ var a = lsNum(o.anz), pr = lsNum(o.preis); return pr > 0 ? (a > 0 ? a * pr : pr) : 0; };
-  var summenAktualisieren = function(){
-    var o = opt();
+  var nettoBerechnen = function(o){
     var netto = 0;
     for(var i = 0; i < anzeigen; i++) netto += lsNum(o.gpreise[i]) * g[i].anz;
     netto += zeileNetto(o.plakette) + zeileNetto(o.innen) + zeileNetto(o.fuellung) + zeileNetto(o.arbeitszeit) + zeileNetto(o.fahrtkosten);
     o.positionen.forEach(function(pz){ var a = lsNum(pz.anz), pr = lsNum(pz.preis); netto += pr > 0 ? (a > 0 ? a * pr : pr) : 0; });
+    return netto;
+  };
+  // Rechnung automatisch beim Kunden unter "Rechnungen" eintragen (einmal je Pruefbericht-Nr., spaeter nur aktualisiert)
+  var rechnungBeimKundenEintragen = function(){
+    var o = opt();
+    if(o.modus !== 'rechnung' || !k) return;
+    var netto = nettoBerechnen(o);
+    if(!(netto > 0)) return;
+    var brutto = Math.round(netto * 1.2 * 100) / 100;
+    var nrR = lsBerichtNr(berichte);
+    var schluessel = 'ls:' + (nrR || '') + ':' + k.id;
+    var heute = new Date().toISOString().substring(0, 10);
+    var bez = o.bezahlt === 'ja';
+    if(!k.rechnungen) k.rechnungen = [];
+    var vorh = null;
+    k.rechnungen.forEach(function(r){ if(r.quelle === schluessel) vorh = r; });
+    if(vorh){
+      vorh.betrag = brutto;
+      if(bez && !vorh.bezahlt){ vorh.bezahlt = true; vorh.bezahltAm = heute; }
+      if(!bez && o.bezahlt === 'nein'){ vorh.bezahlt = false; vorh.bezahltAm = null; }
+    } else {
+      k.rechnungen.push({ id: uid(), datum: heute, betrag: brutto, notiz: 'Rechnung' + (nrR ? ' lt. Prüfbericht Nr. ' + nrR : ''), bezahlt: bez, bezahltAm: bez ? heute : null, quelle: schluessel });
+    }
+    dbPut('kunden', k, function(){});
+    toast('Rechnung ' + lsEur(brutto) + ' beim Kunden eingetragen (' + (bez ? 'bezahlt' : 'offen') + ')');
+  };
+  var summenAktualisieren = function(){
+    var o = opt();
+    var netto = nettoBerechnen(o);
     var box = document.getElementById('lsSummen');
     if(netto > 0){
       box.innerHTML = 'Netto: <b>' + lsEur(netto) + '</b><br>+ 20 % USt.: ' + lsEur(netto * 0.2) + '<br>Endbetrag: <b>' + lsEur(netto * 1.2) + '</b>';
@@ -17898,6 +17927,7 @@ function modalLieferschein(berichte, k){
     var alterText = knopf.innerHTML;
     knopf.textContent = 'Bitte warten...';
     lsBetreffKopieren(lsMailBetreff(berichte, k, true, opt().modus));
+    rechnungBeimKundenEintragen();
     lsKombiErstellen(berichte, k, daten, opt(), document.getElementById('lsStatus'), function(){
       var kn = document.getElementById('lsKombi');
       if(kn){ kn.disabled = false; kn.innerHTML = alterText; }
@@ -17908,6 +17938,7 @@ function modalLieferschein(berichte, k){
     st.textContent = 'Wird erstellt...';
     var betreffLs = lsMailBetreff(berichte, k, false, opt().modus);
     lsBetreffKopieren(betreffLs);
+    rechnungBeimKundenEintragen();
     lsPdfLibLaden(function(err){
       if(err){ st.innerHTML = '<span style="color:#c23f12;">Fehler: ' + escapeHtml(err.message || String(err)) + '</span>'; return; }
       lsVorlageLaden(function(err2, vorlage){
@@ -19120,7 +19151,8 @@ function bindDynamic(){
   }
 
   var exportBtn = document.getElementById('exportBtn');
-  if(exportBtn) exportBtn.onclick = exportAlleDaten;
+  // vollstaendige Sicherung (alle Daten inkl. PDFs) statt nur Kunden/Geraete/Pruefungen
+  if(exportBtn) exportBtn.onclick = function(){ if(typeof datensicherungErstellen === 'function') datensicherungErstellen(); else exportAlleDaten(); };
 
   var importBtn = document.getElementById('importBtn');
   var importFile = document.getElementById('importFile');
