@@ -9753,9 +9753,9 @@ function modalGeraetBearbeiten(geraetId){
   html += '<button type="button" class="btn secondary small" id="btnDatum2J">+2 Jahre</button>';
   html += '</div>';
   html += '<label>' + (istFuellKatBearb ? 'Anschluss-Intervall (beim Anschließen im Scan wird der naechste Termin automatisch so weit vorgesetzt)' : 'Prüfintervall (bei "In Ordnung" im Scan wird der naechste Termin automatisch so weit vorgesetzt)') + '</label>';
-  html += '<select id="fIntervall">';
+  html += '<select id="fIntervall"' + (g.intervallMonate ? ' data-gespeichert="1"' : '') + '>';
   [1,3,12,24,36].forEach(function(m){
-    html += '<option value="' + m + '"' + ((g.intervallMonate||24) === m ? ' selected' : '') + '>' + m + ' Monate</option>';
+    html += '<option value="' + m + '"' + ((g.intervallMonate||24) === m ? ' selected' : '') + '>' + m + (m === 1 ? ' Monat' : ' Monate') + '</option>';
   });
   html += '</select>';
   var istCO2Loescher = /kohlendioxid|co2/i.test(g.typ || '');
@@ -10285,7 +10285,7 @@ function bindKategorieToggle(kundeIdFuerReserve){
   var intervallSel = document.getElementById('fIntervall');
   var nrFeld = document.getElementById('fNr');
   if(!sel) return;
-  function aktualisieren(){
+  function aktualisieren(ersterAufruf){
     var istBegehung = (sel.value === 'Brandschutzbegehung');
     if(block) block.style.display = (sel.value === 'Feuerlöscher' || sel.value === 'Rauchmelder') ? '' : 'none';
     if(blockAkku) blockAkku.style.display = (sel.value === 'RWA-Anlage') ? '' : 'none';
@@ -10301,15 +10301,16 @@ function bindKategorieToggle(kundeIdFuerReserve){
     if(typChipsBlock) typChipsBlock.style.display = 'none';
     if(typLabel) typLabel.textContent = istBegehung ? 'Begehung (Datum/Beschreibung)' : 'Typ';
     if(typInput) typInput.placeholder = istBegehung ? 'z.B. Begehung Herbst 2026' : 'z.B. Pulverlöscher 6kg';
-    if(intervallSel && !intervallSel.getAttribute('data-manuell')){
+    // Gespeichertes Intervall beim Oeffnen NICHT ueberschreiben - nur wenn die Kategorie gewechselt wird
+    if(intervallSel && !intervallSel.getAttribute('data-manuell') && !(ersterAufruf === true && intervallSel.getAttribute('data-gespeichert'))){
       intervallSel.value = (sel.value === 'Feuerlöscher') ? '24' : (istBegehung ? '3' : '12');
     }
     if(kundeIdFuerReserve && nrFeld && !nrFeld.getAttribute('data-manuell')){
       nrFeld.value = naechsteGeraeteNummer(kundeIdFuerReserve, sel.value);
     }
   }
-  aktualisieren();
-  sel.onchange = aktualisieren;
+  aktualisieren(true);
+  sel.onchange = function(){ aktualisieren(false); };
   if(nrFeld){
     nrFeld.oninput = function(){ nrFeld.setAttribute('data-manuell', '1'); };
   }
@@ -10628,7 +10629,7 @@ function modalNeuesGeraet(kundeId, vorgabe){
   html += '<label>Nächste Prüfung</label><input id="fDatum" type="date" value="' + (letzte && letzte.naechstePruefung ? letzte.naechstePruefung : '') + '">';
   html += '<label>Prüfintervall</label>';
   var vorIntervall = letzte && letzte.intervallMonate ? letzte.intervallMonate : 24;
-  html += '<select id="fIntervall">';
+  html += '<select id="fIntervall"' + (letzte && letzte.intervallMonate ? ' data-gespeichert="1"' : '') + '>';
   [1,3,12,24,36].forEach(function(m){
     html += '<option value="' + m + '"' + (m === vorIntervall ? ' selected' : '') + '>' + m + ' Monat' + (m===1?'':'e') + '</option>';
   });
