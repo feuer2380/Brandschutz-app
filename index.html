@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 17:25';
-var APP_VERSION_TEXT = '21.11. 17:25';
+var APP_VERSION = '2026-11-21 17:50';
+var APP_VERSION_TEXT = '21.11. 17:50';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7591,9 +7591,9 @@ function pzDesinfInfo(g){
   return { faellig: faellig, tage: tage, kurz: faellig ? 'Desinfektion fällig' : 'desinf. ' + fmtDate(g.desinfiziertAm) };
 }
 var PZ_SPUREN = [
-  { key: 'leer', titel: 'Leer &ndash; im Lager', unter: 'desinfizieren &amp; abfüllen', farbe: '#c23f12', hell: '#fbe9e3', icon: '&#9675;' },
-  { key: 'voll', titel: 'Voll &ndash; befüllt, nicht angeschlossen', unter: 'bereit zum Anschließen', farbe: '#1d5fa8', hell: '#e6eef8', icon: '&#9679;' },
-  { key: 'betrieb', titel: 'Angeschlossen &ndash; am Durchlaufkühler', unter: '', farbe: '#1e8449', hell: '#e5f4ea', icon: '&#10003;' }
+  { key: 'leer', titel: 'Leer &ndash; im Lager (Ketzergasse)', unter: 'desinfizieren &amp; abfüllen', farbe: '#c23f12', hell: '#fbe9e3', icon: '&#9675;' },
+  { key: 'voll', titel: 'Voll &ndash; noch nicht angeschlossen', unter: 'bereit zum Anschließen', farbe: '#1d5fa8', hell: '#e6eef8', icon: '&#9679;' },
+  { key: 'betrieb', titel: 'Angeschlossen &ndash; beim Kunden', unter: '', farbe: '#1e8449', hell: '#e5f4ea', icon: '&#10003;' }
 ];
 // ---------- Standzeiten: jede Runde eines Fasses (befuellt -> angeschlossen -> leer) ----------
 function pzTag(d){ return d ? String(d).substring(0, 10) : ''; }
@@ -7770,36 +7770,21 @@ function modalPzStatistik(kundeId){
 
 function pzUebersichtHtml(kat, liste){
   var gruppen = { leer: [], voll: [], betrieb: [] };
-  var desinf = [];
-  liste.forEach(function(g){ gruppen[pzSpur(g)].push(g); if(pzDesinfInfo(g).faellig) desinf.push(g); });
-  var h = '<div style="padding:6px 0 4px 0;">';
-  h += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style="font-weight:800; font-size:16px;">' + escapeHtml(kat) + ' &middot; ' + liste.length + ' Stück</div><button type="button" class="btn small secondary pzStop" data-pzstat="' + (liste[0] ? liste[0].kundeId : '') + '" style="margin:0; padding:6px 10px;">&#128202; Standzeiten</button></div>';
-  // Zaehler-Leiste
-  var kachel = function(n, txt, farbe, hell){ return '<div style="background:' + hell + '; border-radius:10px; padding:6px 4px; text-align:center;"><div style="font-size:22px; font-weight:800; color:' + farbe + '; line-height:1.1;">' + n + '</div><div style="font-size:11px; color:' + farbe + '; font-weight:700;">' + txt + '</div></div>'; };
-  var mitDesinf = liste.some(pzBrauchtDesinf);
-  h += '<div style="display:grid; grid-template-columns:repeat(' + (mitDesinf ? 4 : 3) + ', 1fr); gap:6px; margin-bottom:8px;">';
-  h += kachel(gruppen.leer.length, 'leer', '#c23f12', '#fbe9e3') + kachel(gruppen.voll.length, 'voll', '#1d5fa8', '#e6eef8') + kachel(gruppen.betrieb.length, 'angeschl.', '#1e8449', '#e5f4ea') + (mitDesinf ? kachel(desinf.length, 'Desinf. fällig', desinf.length ? '#b3261e' : '#00695c', desinf.length ? '#fdecea' : '#e0f2f1') : '');
-  h += '</div>';
-  // Desinfektion faellig - immer ganz oben
-  if(desinf.length){
-    h += '<div style="margin-top:6px; border-radius:12px; overflow:hidden; border:1.5px solid #f5c6c2;">';
-    h += '<div style="background:#00897b; color:#fff; padding:7px 12px; font-weight:800; font-size:14px; display:flex; justify-content:space-between;"><span>&#129532; Desinfektion fällig (mind. 1&times; im Jahr)</span><span style="background:rgba(255,255,255,.25); border-radius:20px; padding:0 9px;">' + desinf.length + '</span></div>';
-    desinf.forEach(function(g){
-      var di = pzDesinfInfo(g);
-      h += '<div style="padding:8px 12px; border-top:1px solid #e0f2f1; background:#fff; display:flex; align-items:center; gap:8px;">';
-      h += '<div style="flex:1; min-width:0;"><b>' + escapeHtml(String(g.nr || '')) + ' &middot; ' + escapeHtml(g.typ || 'Fass') + '</b><div class="meta" style="font-size:12px;">' + (g.desinfiziertAm ? 'zuletzt ' + fmtDate(g.desinfiziertAm) + ' (vor ' + di.tage + ' Tagen)' : 'noch nie eingetragen') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div></div>';
-      h += '<button type="button" class="btn small pzStop" data-pzaktion="desinf" data-gid="' + g.id + '" style="background:#00897b; border-color:#00897b; margin:0; white-space:nowrap;">&#129532; Desinfiziert</button>';
-      h += '</div>';
-    });
-    h += '</div>';
-  }
+  var desinfAnz = 0;
+  liste.forEach(function(g){ gruppen[pzSpur(g)].push(g); if(pzDesinfInfo(g).faellig) desinfAnz++; });
+  var h = '<div style="padding:4px 0;">';
+  h += '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><div style="font-weight:800; font-size:16px;">' + escapeHtml(kat) + ' (' + liste.length + ')</div><button type="button" class="btn small secondary pzStop" data-pzstat="' + (liste[0] ? liste[0].kundeId : '') + '" style="margin:0; padding:6px 10px;">Standzeiten</button></div>';
+  // Zusammenfassung in einer Zeile, ohne Farbkacheln
+  var teile = [];
+  teile.push(gruppen.betrieb.length + ' angeschlossen');
+  teile.push(gruppen.voll.length + ' voll');
+  teile.push(gruppen.leer.length + ' leer');
+  h += '<div class="meta" style="margin:4px 0 6px 0; font-size:13px;">' + teile.join(' &middot; ') + (desinfAnz ? ' &middot; <b style="color:#b3261e;">' + desinfAnz + ' Desinfektion fällig</b>' : '') + '</div>';
   PZ_SPUREN.forEach(function(sp){
     var l = gruppen[sp.key];
     if(!l.length) return;
-    h += '<div style="margin-top:10px; border-radius:12px; overflow:hidden; border:1.5px solid ' + sp.hell + ';">';
-    h += '<div style="background:' + sp.farbe + '; color:#fff; padding:7px 12px; font-weight:800; font-size:14px; display:flex; justify-content:space-between; align-items:center;"><span>' + sp.icon + ' ' + sp.titel + (sp.unter ? '<span style="font-weight:600; opacity:.85;"> &middot; ' + sp.unter + '</span>' : '') + '</span><span style="background:rgba(255,255,255,.25); border-radius:20px; padding:0 9px;">' + l.length + '</span></div>';
+    h += '<div style="margin-top:12px; padding:0 2px 4px 2px; border-bottom:2px solid #e6dfd3; font-size:12px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; color:#5c5246;">' + sp.titel + ' (' + l.length + ')</div>';
     l.forEach(function(g){ h += pzZeileHtml(g, sp); });
-    h += '</div>';
   });
   h += '</div>';
   return h;
@@ -7807,37 +7792,88 @@ function pzUebersichtHtml(kat, liste){
 function pzZeileHtml(g, sp){
   var di = pzDesinfInfo(g);
   var anschluss = g.letzterAnschluss || g.letztePruefung || '';
-  var info = '';
-  if(sp.key === 'betrieb' && anschluss) info = 'befüllt ' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '?') + ' &middot; angeschlossen ' + fmtDate(anschluss);
-  else if(sp.key === 'leer') info = g.leerSeit ? 'leer seit ' + fmtDate(g.leerSeit) : 'leer';
-  else if(g.abfuelldatum) info = 'befüllt ' + fmtDate(g.abfuelldatum);
-  var zyTxt = pzZyklusText(g);
-  if(zyTxt) info += (info ? '<br>' : '') + '<span style="color:#3a332b;">' + (sp.key === 'leer' ? 'letzte Runde: ' : '') + zyTxt + '</span>';
-  var h = '<div style="padding:9px 12px; border-top:1px solid ' + sp.hell + '; background:#fff;">';
-  h += '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">';
-  h += '<div style="min-width:0;"><div style="font-weight:800; font-size:15px;"><span style="display:inline-block; min-width:24px; text-align:center; background:' + sp.hell + '; color:' + sp.farbe + '; border-radius:6px; padding:0 5px; margin-right:5px;">' + escapeHtml(String(g.nr || '')) + '</span>' + escapeHtml(g.typ || 'Fass') + '</div>';
-  if((g.kategorie || '').trim() !== 'CO2-Flaschen'){
-    var inh = pzInhalt(g);
-    h += '<span class="pzStop" data-pzinhalt="' + g.id + '" style="display:inline-block; margin:2px 0; padding:1px 9px; border-radius:20px; font-size:11.5px; font-weight:700; cursor:pointer; ' + (inh === 'Bier' ? 'background:#fdf3e1; color:#b7791f; border:1px solid #e9c98a;' : 'background:#e6eef8; color:#1d5fa8; border:1px solid #b9cdea;') + '">' + (inh === 'Bier' ? '&#127866; Bier' : '&#128167; Sodawasser') + ' &#8644;</span>';
-  }
-  h += '<div class="meta" style="font-size:12.5px;">' + (sp.key === 'leer' ? '' : '&#128205; ' + escapeHtml(g.standort || '?') + ' &middot; ') + (g.seriennummer ? 'SN ' + escapeHtml(g.seriennummer) : '') + (info ? '<br>' + info : '') + '</div></div>';
-  if(!di.keine) h += '<span style="flex-shrink:0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; white-space:nowrap; ' + (di.faellig ? 'background:#fdecea; color:#b3261e;' : 'background:#e0f2f1; color:#00695c;') + '">&#129532; ' + di.kurz + '</span>';
+  var zeile2 = '';
+  if(sp.key === 'betrieb') zeile2 = 'beim Kunden: <b>' + escapeHtml(g.standort || '?') + '</b><br>angeschlossen ' + (anschluss ? fmtDate(anschluss) : '?') + (anschluss ? ' (seit ' + Math.max(0, pzTageZwischen(anschluss, heuteLokalKurz()) || 0) + ' Tagen)' : '') + (g.abfuelldatum ? ' &middot; befüllt ' + fmtDate(g.abfuelldatum) : '');
+  else if(sp.key === 'voll') zeile2 = (istLagerStandort(g.standort) ? 'im Lager' : 'bei: <b>' + escapeHtml(g.standort || '?') + '</b>') + (g.abfuelldatum ? '<br>befüllt ' + fmtDate(g.abfuelldatum) + ' (vor ' + Math.max(0, pzTageZwischen(g.abfuelldatum, heuteLokalKurz()) || 0) + ' Tagen)' : '');
+  else zeile2 = 'im Lager' + (g.leerSeit ? ' &middot; leer seit ' + fmtDate(g.leerSeit) : '');
+  var inhaltTxt = (g.kategorie || '').trim() === 'CO2-Flaschen' ? '' : pzInhalt(g);
+  var h = '<div style="padding:10px 2px; border-bottom:1px solid #eee7dc;">';
+  h += '<div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline;">';
+  h += '<div style="font-weight:700; font-size:15px; min-width:0;">Nr. ' + escapeHtml(String(g.nr || '')) + ' &middot; ' + escapeHtml(g.typ || 'Fass') + '</div>';
+  if(inhaltTxt) h += '<div class="meta" style="flex-shrink:0; font-size:12px;">' + inhaltTxt + '</div>';
   h += '</div>';
-  var b = function(attr, farbe, text, sek){ return '<button type="button" class="btn small' + (sek ? ' secondary' : '') + '" ' + attr + ' style="flex:1 1 0; min-width:0; padding:8px 4px; font-size:13px; margin:0;' + (sek ? '' : ' background:' + farbe + '; border-color:' + farbe + ';') + '">' + text + '</button>'; };
-  var schritt = sp.key === 'leer' ? 'Wenn desinfiziert bzw. neu befüllt:' : (sp.key === 'voll' ? 'Wenn am Durchlaufkühler angehängt:' : 'Erst wenn das Fass leer geworden ist:');
-  h += '<div class="pzStop" style="margin-top:8px; font-size:11px; font-weight:700; color:#8a8070; text-transform:uppercase; letter-spacing:.3px;">' + schritt + '</div>';
-  h += '<div class="pzStop" style="display:flex; gap:6px; margin-top:4px;">';
-  if(sp.key === 'leer'){
-    if(!di.keine) h += b('data-pzaktion="desinf" data-gid="' + g.id + '"', '#00897b', '&#129532; Desinfiziert', !di.faellig);
-    h += b('data-nurAbfuellBtn="' + g.id + '"', '#1d5fa8', '&#128167; Befüllt');
-  }
-  if(sp.key === 'voll') h += b('data-pzaktion="ausliefern" data-gid="' + g.id + '"', '#1e8449', '&#10003; Jetzt anschließen &hellip;');
-  if(sp.key === 'betrieb') h += b('data-pzaktion="leer" data-gid="' + g.id + '"', '#c23f12', 'Ist leer &rarr; ins Lager', true).replace('class="btn small secondary"', 'class="btn small secondary" style2="1"').replace('style="flex:1 1 0;', 'style="color:#c23f12; border-color:#e6b19d; flex:1 1 0;');
-  h += b('data-pzdetail="' + g.id + '"', '#666', 'Mehr &hellip;', true);
-  h += '</div>';
-  h += '<div class="pzDetailBox" data-gid="' + g.id + '" style="display:' + (state.pzDetailOffen === g.id ? 'block' : 'none') + ';">' + pzKarteHtml(g, g.nr || '') + '</div>';
+  h += '<div class="meta" style="font-size:13px; margin-top:2px; line-height:1.45;">' + zeile2 + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div>';
+  if(!di.keine && di.faellig) h += '<div style="font-size:12px; color:#b3261e; font-weight:700; margin-top:2px;">' + (g.desinfiziertAm ? 'Desinfektion fällig (zuletzt ' + fmtDate(g.desinfiziertAm) + ')' : 'Desinfektion noch nicht eingetragen') + '</div>';
+  // Genau EIN Knopf fuer den naechsten Schritt + "..." fuer alles andere
+  var haupt = '';
+  if(sp.key === 'leer') haupt = '<button type="button" class="btn small" data-nurAbfuellBtn="' + g.id + '" style="flex:1; margin:0; padding:9px 6px;">Befüllt</button>';
+  if(sp.key === 'voll') haupt = '<button type="button" class="btn small" data-pzaktion="ausliefern" data-gid="' + g.id + '" style="flex:1; margin:0; padding:9px 6px;">Anschließen &hellip;</button>';
+  if(sp.key === 'betrieb') haupt = '<button type="button" class="btn small secondary" data-pzaktion="leer" data-gid="' + g.id + '" style="flex:1; margin:0; padding:9px 6px;">Fass ist leer</button>';
+  h += '<div class="pzStop" style="display:flex; gap:8px; margin-top:8px;">' + haupt + '<button type="button" class="btn small secondary" data-pzdetail="' + g.id + '" style="flex:0 0 64px; margin:0; padding:9px 6px; font-weight:800;">&middot;&middot;&middot;</button></div>';
   h += '</div>';
   return h;
+}
+function modalPzMehr(gid){
+  var g = geraetById(gid);
+  if(!g) return;
+  var di = pzDesinfInfo(g);
+  var sp = pzSpur(g);
+  var spTitel = sp === 'leer' ? 'Leer &ndash; im Lager' : (sp === 'voll' ? 'Voll &ndash; nicht angeschlossen' : 'Angeschlossen');
+  var h = '<div class="modal-head"><h3>Nr. ' + escapeHtml(String(g.nr || '')) + ' &middot; ' + escapeHtml(g.typ || 'Fass') + '</h3><button class="close" id="mClose">&times;</button></div>';
+  h += '<div class="meta" style="margin-bottom:10px;">Jetzt: <b>' + spTitel + '</b>' + (g.standort ? ' &middot; ' + escapeHtml(g.standort) : '') + '</div>';
+  h += '<table style="width:100%; font-size:14px; border-collapse:collapse; margin-bottom:12px;">';
+  var z = function(l, v){ return '<tr><td style="padding:4px 0; color:var(--muted);">' + l + '</td><td style="padding:4px 0; text-align:right;"><b>' + (v || '&ndash;') + '</b></td></tr>'; };
+  h += z('Befüllt', g.abfuelldatum ? fmtDate(g.abfuelldatum) : '');
+  h += z('Angeschlossen', (g.letzterAnschluss || g.letztePruefung) ? fmtDate(g.letzterAnschluss || g.letztePruefung) : '');
+  if(g.leer) h += z('Leer seit', g.leerSeit ? fmtDate(g.leerSeit) : '');
+  if(!di.keine) h += z('Desinfiziert', g.desinfiziertAm ? fmtDate(g.desinfiziertAm) : 'noch nie');
+  h += '</table>';
+  var k = function(id, txt, rot){ return '<button class="btn block secondary" id="' + id + '" style="margin-top:8px;' + (rot ? ' color:#c23f12; border-color:#e6b19d;' : '') + '">' + txt + '</button>'; };
+  if(!di.keine) h += k('pmDesinf', 'Desinfektion heute eintragen');
+  if((g.kategorie || '').trim() !== 'CO2-Flaschen') h += k('pmInhalt', 'Inhalt ändern (jetzt: ' + pzInhalt(g) + ')');
+  if(sp !== 'leer') h += k('pmLeer', 'Als leer ins Lager buchen');
+  if(sp === 'leer') h += k('pmVoll', 'Wieder voll (befüllt heute)');
+  h += k('pmBearb', 'Daten / Datum ändern');
+  h += k('pmQr', 'QR-Code');
+  if(!istEingeschraenkt()) h += k('pmLoeschen', 'Fass löschen', true);
+  openModal(h);
+  document.getElementById('mClose').onclick = closeModal;
+  var speichern = function(meldung){ dbPut('geraete', g, function(){ closeModal(); loadAll(function(){ render(); toast(meldung); }); }); };
+  var el;
+  if((el = document.getElementById('pmDesinf'))) el.onclick = function(){
+    var heute = heuteLokalKurz();
+    if(!g.desinfektionen) g.desinfektionen = [];
+    g.desinfektionen.push({ datum: heute, eingetragen: jetztLokalDatumZeit(), von: (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || '')) });
+    g.desinfiziertAm = heute;
+    speichern('Desinfektion eingetragen');
+  };
+  if((el = document.getElementById('pmInhalt'))) el.onclick = function(){
+    g.inhalt = pzInhalt(g) === 'Bier' ? 'Sodawasser' : 'Bier';
+    var zl = g.zyklen || [];
+    if(zl.length && !zl[zl.length - 1].leer) zl[zl.length - 1].inhalt = g.inhalt;
+    speichern('Inhalt: ' + g.inhalt);
+  };
+  if((el = document.getElementById('pmLeer'))) el.onclick = function(){
+    g.leer = true; g.leerSeit = jetztLokalDatumZeit(); g.standort = 'Lager';
+    speichern('Leer - zurück ins Lager');
+  };
+  if((el = document.getElementById('pmVoll'))) el.onclick = function(){
+    g.leer = false; g.leerSeit = null;
+    if(!g.abfuelldatum || (g.letzterAnschluss && pzTag(g.abfuelldatum) <= pzTag(g.letzterAnschluss))) g.abfuelldatum = heuteLokalKurz();
+    speichern('Wieder voll');
+  };
+  if((el = document.getElementById('pmBearb'))) el.onclick = function(){ closeModal(); modalGeraetBearbeiten(gid); };
+  if((el = document.getElementById('pmQr'))) el.onclick = function(){ closeModal(); modalQrGeraet(gid); };
+  if((el = document.getElementById('pmLoeschen'))) el.onclick = function(){
+    customConfirm('Fass Nr. ' + (g.nr || '') + ' (' + (g.typ || '') + ') endgültig löschen?', function(){
+      var pr = state.pruefungen.filter(function(p){ return p.geraetId === gid; });
+      var i = 0;
+      (function weiter(){
+        if(i < pr.length){ dbDelete('pruefungen', pr[i++].id, weiter); return; }
+        dbDelete('geraete', gid, function(){ loadAll(function(){ render(); toast('Fass gelöscht'); }); });
+      })();
+    });
+  };
 }
 function modalPzAusliefern(gid){
   var g = geraetById(gid);
@@ -7913,12 +7949,7 @@ function pzAktionenBinden(){
   document.querySelectorAll('[data-pzdetail]').forEach(function(el){
     el.onclick = function(e){
       e.stopPropagation();
-      var gid = el.getAttribute('data-pzdetail');
-      var box = document.querySelector('.pzDetailBox[data-gid="' + gid + '"]');
-      if(!box) return;
-      var auf = box.style.display === 'none';
-      box.style.display = auf ? 'block' : 'none';
-      state.pzDetailOffen = auf ? gid : null;
+      modalPzMehr(el.getAttribute('data-pzdetail'));
     };
   });
 }
