@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 18:25';
-var APP_VERSION_TEXT = '21.11. 18:25';
+var APP_VERSION = '2026-11-21 18:40';
+var APP_VERSION_TEXT = '21.11. 18:40';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7844,7 +7844,7 @@ function pzZeileHtml(g, sp){
   else zeile2 = 'im Lager' + (g.leerSeit ? ' &middot; leer seit ' + fmtDate(g.leerSeit) : '');
   var inhaltTxt = (g.kategorie || '').trim() === 'CO2-Flaschen' ? '' : pzInhalt(g);
   var fb = PZ_FARBE[sp.key];
-  var h = '<div style="margin-top:6px; padding:9px 10px; border-radius:10px; border-left:5px solid ' + fb + '; background:' + PZ_HELL[sp.key] + ';">';
+  var h = '<div data-pzbearb="' + g.id + '" style="cursor:pointer; margin-top:6px; padding:9px 10px; border-radius:10px; border-left:5px solid ' + fb + '; background:' + PZ_HELL[sp.key] + ';">';
   h += '<div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline;">';
   h += '<div style="font-weight:700; font-size:15px; min-width:0;">Nr. ' + escapeHtml(String(g.nr || '')) + ' &middot; ' + escapeHtml(g.typ || 'Fass') + '</div>';
   if(inhaltTxt) h += '<div class="meta" style="flex-shrink:0; font-size:12px;">' + inhaltTxt + '</div>';
@@ -7859,7 +7859,7 @@ function pzZeileHtml(g, sp){
   if(sp.key === 'voll') haupt = '<button type="button" class="btn small" data-pzaktion="ausliefern" data-gid="' + g.id + '" style="' + bs(PZ_FARBE.betrieb) + '">&#10003; Anschließen &hellip;</button>';
   if(sp.key === 'betrieb') haupt = '<button type="button" class="btn small" data-pzaktion="leer" data-gid="' + g.id + '" style="' + bs(PZ_FARBE.leer) + '">Fass ist leer</button>';
   if(sp.key === 'leer' && !di.keine && di.faellig) haupt = '<button type="button" class="btn small" data-pzaktion="desinf" data-gid="' + g.id + '" style="' + bs('#00897b') + '">&#129532; Desinfiziert</button>' + haupt;
-  h += '<div class="pzStop" style="display:flex; gap:8px; margin-top:8px;">' + haupt + '<button type="button" class="btn small secondary" data-pzdetail="' + g.id + '" style="flex:0 0 64px; margin:0; padding:9px 6px; font-weight:800;">&middot;&middot;&middot;</button></div>';
+  h += '<div class="pzStop" style="display:flex; gap:8px; margin-top:8px;">' + haupt + '<button type="button" class="btn small secondary" data-pzbearbknopf="' + g.id + '" style="flex:0 0 48px; margin:0; padding:9px 4px;" title="Bearbeiten">&#9999;&#65039;</button><button type="button" class="btn small secondary" data-pzdetail="' + g.id + '" style="flex:0 0 48px; margin:0; padding:9px 4px; font-weight:800;">&middot;&middot;&middot;</button></div>';
   h += '</div>';
   return h;
 }
@@ -7883,7 +7883,7 @@ function modalPzMehr(gid){
   if((g.kategorie || '').trim() !== 'CO2-Flaschen') h += k('pmInhalt', 'Inhalt ändern (jetzt: ' + pzInhalt(g) + ')');
   if(sp !== 'leer') h += k('pmLeer', 'Als leer ins Lager buchen');
   if(sp === 'leer') h += k('pmVoll', 'Wieder voll (befüllt heute)');
-  h += k('pmBearb', 'Daten / Datum ändern');
+  h += k('pmBearb', '&#9999;&#65039; Fass bearbeiten (Daten / Datum)');
   h += k('pmQr', 'QR-Code');
   if(!istEingeschraenkt()) h += k('pmLoeschen', 'Fass löschen', true);
   openModal(h);
@@ -7992,6 +7992,12 @@ function pzAktionenBinden(){
       if(zl.length && !zl[zl.length - 1].leer) zl[zl.length - 1].inhalt = g.inhalt;
       dbPut('geraete', g, function(){ loadAll(function(){ render(); toast('Inhalt: ' + g.inhalt); }); });
     };
+  });
+  document.querySelectorAll('[data-pzbearb]').forEach(function(el){
+    el.onclick = function(){ modalGeraetBearbeiten(el.getAttribute('data-pzbearb')); };
+  });
+  document.querySelectorAll('[data-pzbearbknopf]').forEach(function(el){
+    el.onclick = function(e){ e.stopPropagation(); modalGeraetBearbeiten(el.getAttribute('data-pzbearbknopf')); };
   });
   document.querySelectorAll('[data-pzstat]').forEach(function(el){
     el.onclick = function(e){ e.stopPropagation(); modalPzStatistik(el.getAttribute('data-pzstat') || null); };
