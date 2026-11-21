@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 18:40';
-var APP_VERSION_TEXT = '21.11. 18:40';
+var APP_VERSION = '2026-11-21 19:00';
+var APP_VERSION_TEXT = '21.11. 19:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7811,28 +7811,33 @@ function pzTabelleHtml(liste){
   var th = 'padding:6px 4px; text-align:left; font-size:11px; color:#5c5246; border-bottom:2px solid #e6dfd3; white-space:nowrap;';
   var td = 'padding:7px 4px; border-bottom:1px solid #eee7dc; font-size:13px; vertical-align:top;';
   var h = '<div style="margin-top:8px; overflow-x:auto;"><table style="width:100%; border-collapse:collapse;">';
-  h += '<thead><tr><th style="' + th + '">Nr.</th><th style="' + th + '">Zustand</th><th style="' + th + '">Abgefüllt</th><th style="' + th + '">Inhalt drin</th>' + (mitDesinf ? '<th style="' + th + '">Desinf.</th>' : '') + '</tr></thead><tbody>';
+  h += '<thead><tr><th style="' + th + '">Nr.</th><th style="' + th + '">Zustand</th><th style="' + th + '">Abgefüllt</th><th style="' + th + '">Inhalt seit</th>' + (mitDesinf ? '<th style="' + th + '">Desinf.</th>' : '') + '</tr></thead><tbody>';
   l.forEach(function(g){
     var sp = pzSpur(g);
     var zustand = pzPill(sp === 'betrieb' ? 'angeschl.' : (sp === 'voll' ? 'voll' : 'leer'), PZ_FARBE[sp]);
-    var tage = '';
-    if(g.abfuelldatum){
-      var bis = (sp === 'leer' && g.leerSeit) ? g.leerSeit : heute;
-      var t = pzTageZwischen(g.abfuelldatum, bis);
-      if(t !== null && t >= 0) tage = t + ' Tage' + (sp === 'leer' ? '<div class="meta" style="font-size:11px;">bis leer</div>' : '');
+    var tage = '', abgef = '';
+    if(sp === 'leer'){
+      // leeres Fass: kein Inhalt -> kein Zaehler; die alte Runde steht in den Standzeiten
+      abgef = '<span class="meta">&ndash;</span>';
+      var tl = g.leerSeit ? pzTageZwischen(g.leerSeit, heute) : null;
+      tage = '<span style="color:#c62828; font-weight:700;">leer</span>' + (g.leerSeit ? '<div class="meta" style="font-size:11px;">seit ' + fmtDate(g.leerSeit).substring(0, 6) + (tl !== null && tl >= 0 ? ' (' + tl + ' T.)' : '') + '</div>' : '');
+    } else if(g.abfuelldatum){
+      abgef = fmtDate(g.abfuelldatum);
+      var t = pzTageZwischen(g.abfuelldatum, heute);
+      if(t !== null && t >= 0) tage = '<b>' + t + '</b> Tag' + (t === 1 ? '' : 'e');
     }
     var di = pzDesinfInfo(g);
     var desinf = di.keine ? '' : (di.faellig ? pzPill('fällig', '#ef6c00') + (g.desinfiziertAm ? '<div class="meta" style="font-size:11px;">' + fmtDate(g.desinfiziertAm) + '</div>' : '') : pzPill('ok', '#00897b') + '<div class="meta" style="font-size:11px;">' + fmtDate(g.desinfiziertAm) + '</div>');
     h += '<tr data-pzdetail="' + g.id + '" class="pzStop" style="cursor:pointer; background:' + PZ_HELL[sp] + ';">';
     h += '<td style="' + td + ' border-left:4px solid ' + PZ_FARBE[sp] + ';"><b>' + escapeHtml(String(g.nr || '')) + '</b><div class="meta" style="font-size:11px;">' + escapeHtml(String(g.typ || '').replace(/^(Sodawasser|Bier|CO2)\s*/i, '')) + '</div></td>';
     h += '<td style="' + td + '">' + zustand + '</td>';
-    h += '<td style="' + td + '">' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '&ndash;') + '</td>';
+    h += '<td style="' + td + '">' + (abgef || '&ndash;') + '</td>';
     h += '<td style="' + td + '">' + (tage || '&ndash;') + '</td>';
     if(mitDesinf) h += '<td style="' + td + '">' + (desinf || '&ndash;') + '</td>';
     h += '</tr>';
   });
   h += '</tbody></table></div>';
-  h += '<div class="meta" style="font-size:11px; margin-top:4px;">Zeile antippen für Details. &bdquo;Inhalt drin&ldquo; = Tage seit dem Abfüllen (bei leeren Fässern: bis sie leer waren).</div>';
+  h += '<div class="meta" style="font-size:11px; margin-top:4px;">Zeile antippen für Details. &bdquo;Inhalt seit&ldquo; = Tage seit dem Abfüllen. Beim nächsten &bdquo;Befüllt&ldquo; beginnt es wieder bei 0. Wie lange frühere Füllungen gehalten haben: &bdquo;Standzeiten&ldquo;.</div>';
   return h;
 }
 function pzZeileHtml(g, sp){
@@ -20020,7 +20025,7 @@ function bindDynamic(){
       e.stopPropagation();
       var gid = el.getAttribute('data-nurAbfuellBtn');
       var datumInput = document.querySelector('.schnellDatumInput[data-gid="' + gid + '"]');
-      nurAbfuelldatumAktualisieren(gid, datumInput ? datumInput.value : null);
+      nurAbfuelldatumAktualisieren(gid, (datumInput && datumInput.value) ? datumInput.value : heuteLokalKurz());
     };
   });
 
