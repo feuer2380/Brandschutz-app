@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 15:15';
-var APP_VERSION_TEXT = '21.11. 15:15';
+var APP_VERSION = '2026-11-21 15:55';
+var APP_VERSION_TEXT = '21.11. 15:55';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -5454,7 +5454,8 @@ function renderGeraetCheck(geraetId){
       html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Dichtung getauscht">' + escapeHtml(g.bemerkung || '') + '</textarea>';
       if(g.bemerkungAm) html += '<div class="meta" style="margin-top:2px; color:#f5efe6;">Gespeichert am ' + escapeHtml(fmtDatumZeitLokal(g.bemerkungAm)) + '</div>';
       html += '<button type="button" class="btn small secondary" id="btnBemerkungSpeichern" style="margin-top:6px;">Bemerkung speichern</button>';
-      // Desinfektion
+      // Desinfektion (nur Keg-Behaelter, nicht CO2-Flaschen)
+      if(pzBrauchtDesinf(g)){
       var desTage = g.desinfiziertAm ? Math.round((new Date(heuteLokalKurz() + 'T12:00:00') - new Date(String(g.desinfiziertAm).substring(0, 10) + 'T12:00:00')) / 86400000) : null;
       html += '<div class="card" style="margin-top:14px; padding:12px 14px; border-left:5px solid #00897b;">';
       html += '<div class="row"><b>&#129532; Desinfektion</b>' + (g.desinfiziertAm ? '<span class="badge" style="background:#e0f2f1; color:#00695c;">zuletzt ' + fmtDate(g.desinfiziertAm) + (desTage !== null ? ' &middot; vor ' + desTage + ' Tag' + (desTage === 1 ? '' : 'en') : '') + '</span>' : '<span class="badge" style="background:#fdecea; color:#c62828;">noch nie eingetragen</span>') + '</div>';
@@ -5464,6 +5465,7 @@ function renderGeraetCheck(geraetId){
         html += '<div class="meta" style="margin-top:6px;">Frühere: ' + g.desinfektionen.slice(-6, -1).reverse().map(function(d){ return fmtDate(d.datum); }).join(', ') + '</div>';
       }
       html += '</div>';
+      }
       // Wo ist das Fass gerade + naechster Schritt (gleiche Logik wie in der Fass-Uebersicht beim Kunden)
       var spScan = PZ_SPUREN.filter(function(x){ return x.key === pzSpur(g); })[0];
       if(spScan){
@@ -7439,7 +7441,10 @@ function pzSpur(g){
   if(g.leer) return 'leer';
   return pzZustand(g).key === 'angeschlossen' ? 'betrieb' : 'voll';
 }
+// Desinfektion nur bei Keg-Behaeltern (Sodawasser/Bier) - CO2-Flaschen sind nur Gasfuellung
+function pzBrauchtDesinf(g){ return ((g.kategorie || '').trim()) !== 'CO2-Flaschen'; }
 function pzDesinfInfo(g){
+  if(!pzBrauchtDesinf(g)) return { faellig: false, tage: null, kurz: '', keine: true };
   if(!g.desinfiziertAm) return { faellig: true, tage: null, kurz: 'Desinfektion fehlt' };
   var tage = Math.round((new Date() - new Date(String(g.desinfiziertAm).substring(0, 10) + 'T12:00:00')) / 86400000);
   var faellig = tage > PZ_DESINF_TAGE;
@@ -7631,8 +7636,9 @@ function pzUebersichtHtml(kat, liste){
   h += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style="font-weight:800; font-size:16px;">' + escapeHtml(kat) + ' &middot; ' + liste.length + ' Stück</div><button type="button" class="btn small secondary pzStop" data-pzstat="' + (liste[0] ? liste[0].kundeId : '') + '" style="margin:0; padding:6px 10px;">&#128202; Standzeiten</button></div>';
   // Zaehler-Leiste
   var kachel = function(n, txt, farbe, hell){ return '<div style="background:' + hell + '; border-radius:10px; padding:6px 4px; text-align:center;"><div style="font-size:22px; font-weight:800; color:' + farbe + '; line-height:1.1;">' + n + '</div><div style="font-size:11px; color:' + farbe + '; font-weight:700;">' + txt + '</div></div>'; };
-  h += '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:8px;">';
-  h += kachel(gruppen.leer.length, 'leer', '#c23f12', '#fbe9e3') + kachel(gruppen.voll.length, 'voll', '#1d5fa8', '#e6eef8') + kachel(gruppen.betrieb.length, 'angeschl.', '#1e8449', '#e5f4ea') + kachel(desinf.length, 'Desinf. fällig', desinf.length ? '#b3261e' : '#00695c', desinf.length ? '#fdecea' : '#e0f2f1');
+  var mitDesinf = liste.some(pzBrauchtDesinf);
+  h += '<div style="display:grid; grid-template-columns:repeat(' + (mitDesinf ? 4 : 3) + ', 1fr); gap:6px; margin-bottom:8px;">';
+  h += kachel(gruppen.leer.length, 'leer', '#c23f12', '#fbe9e3') + kachel(gruppen.voll.length, 'voll', '#1d5fa8', '#e6eef8') + kachel(gruppen.betrieb.length, 'angeschl.', '#1e8449', '#e5f4ea') + (mitDesinf ? kachel(desinf.length, 'Desinf. fällig', desinf.length ? '#b3261e' : '#00695c', desinf.length ? '#fdecea' : '#e0f2f1') : '');
   h += '</div>';
   // Desinfektion faellig - immer ganz oben
   if(desinf.length){
@@ -7675,12 +7681,12 @@ function pzZeileHtml(g, sp){
     h += '<span class="pzStop" data-pzinhalt="' + g.id + '" style="display:inline-block; margin:2px 0; padding:1px 9px; border-radius:20px; font-size:11.5px; font-weight:700; cursor:pointer; ' + (inh === 'Bier' ? 'background:#fdf3e1; color:#b7791f; border:1px solid #e9c98a;' : 'background:#e6eef8; color:#1d5fa8; border:1px solid #b9cdea;') + '">' + (inh === 'Bier' ? '&#127866; Bier' : '&#128167; Sodawasser') + ' &#8644;</span>';
   }
   h += '<div class="meta" style="font-size:12.5px;">' + (sp.key === 'leer' ? '' : '&#128205; ' + escapeHtml(g.standort || '?') + ' &middot; ') + (g.seriennummer ? 'SN ' + escapeHtml(g.seriennummer) : '') + (info ? '<br>' + info : '') + '</div></div>';
-  h += '<span style="flex-shrink:0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; white-space:nowrap; ' + (di.faellig ? 'background:#fdecea; color:#b3261e;' : 'background:#e0f2f1; color:#00695c;') + '">&#129532; ' + di.kurz + '</span>';
+  if(!di.keine) h += '<span style="flex-shrink:0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; white-space:nowrap; ' + (di.faellig ? 'background:#fdecea; color:#b3261e;' : 'background:#e0f2f1; color:#00695c;') + '">&#129532; ' + di.kurz + '</span>';
   h += '</div>';
   var b = function(attr, farbe, text, sek){ return '<button type="button" class="btn small' + (sek ? ' secondary' : '') + '" ' + attr + ' style="flex:1 1 0; min-width:0; padding:8px 4px; font-size:13px; margin:0;' + (sek ? '' : ' background:' + farbe + '; border-color:' + farbe + ';') + '">' + text + '</button>'; };
   h += '<div class="pzStop" style="display:flex; gap:6px; margin-top:8px;">';
   if(sp.key === 'leer'){
-    h += b('data-pzaktion="desinf" data-gid="' + g.id + '"', '#00897b', '&#129532; Desinfiziert', !di.faellig);
+    if(!di.keine) h += b('data-pzaktion="desinf" data-gid="' + g.id + '"', '#00897b', '&#129532; Desinfiziert', !di.faellig);
     h += b('data-nurAbfuellBtn="' + g.id + '"', '#1d5fa8', '&#128167; Befüllt');
   }
   if(sp.key === 'voll') h += b('data-pzaktion="ausliefern" data-gid="' + g.id + '"', '#1e8449', '&#10003; Angeschlossen &hellip;');
@@ -8257,7 +8263,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istRWA = (kat === 'RWA-Anlage');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
       var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : (istRWA ? '<th>Baujahr</th><th>Letzter Akkutausch</th><th>Nächster Akkutausch</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>'));
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th><th>Desinfiziert</th><th>Zusatzdaten / Bemerkung</th>' : (istBegehung ? '<th>Rhythmus</th><th>Letzte Begehung</th><th>Nächste Begehung</th><th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th>' + (kat === 'CO2-Flaschen' ? '' : '<th>Desinfiziert</th>') + '<th>Zusatzdaten / Bemerkung</th>' : (istBegehung ? '<th>Rhythmus</th><th>Letzte Begehung</th><th>Nächste Begehung</th><th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null;
@@ -8269,7 +8275,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
             var tageSpanne = Math.round((new Date(g.letzterAnschluss) - new Date(g.abfuelldatum)) / 86400000);
             if(!isNaN(tageSpanne) && tageSpanne >= 0) zeitspanneText = tageSpanne + ' Tag' + (tageSpanne === 1 ? '' : 'e');
           }
-          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.leer ? 'Ja' : 'Nein') + '</td><td>' + (g.desinfiziertAm ? fmtDate(g.desinfiziertAm) : '-') + '</td><td>' + ([g.zusatzdaten, g.bemerkung].filter(function(x){ return x; }).map(escapeHtml).join(' / ') || '-') + '</td>';
+          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.leer ? 'Ja' : 'Nein') + '</td>' + (kat === 'CO2-Flaschen' ? '' : '<td>' + (g.desinfiziertAm ? fmtDate(g.desinfiziertAm) : '-') + '</td>') + '<td>' + ([g.zusatzdaten, g.bemerkung].filter(function(x){ return x; }).map(escapeHtml).join(' / ') || '-') + '</td>';
         } else if(istBegehung){
           var rhyM = parseInt(g.intervallMonate, 10) || 0;
           var rhyText = rhyM === 1 ? 'monatlich' : (rhyM === 3 ? 'vierteljährlich' : (rhyM === 6 ? 'halbjährlich' : (rhyM === 12 ? 'jährlich' : (rhyM ? 'alle ' + rhyM + ' Monate' : '-'))));
