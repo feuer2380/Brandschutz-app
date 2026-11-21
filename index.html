@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 17:05';
-var APP_VERSION_TEXT = '21.11. 17:05';
+var APP_VERSION = '2026-11-21 17:25';
+var APP_VERSION_TEXT = '21.11. 17:25';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7824,13 +7824,15 @@ function pzZeileHtml(g, sp){
   if(!di.keine) h += '<span style="flex-shrink:0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; white-space:nowrap; ' + (di.faellig ? 'background:#fdecea; color:#b3261e;' : 'background:#e0f2f1; color:#00695c;') + '">&#129532; ' + di.kurz + '</span>';
   h += '</div>';
   var b = function(attr, farbe, text, sek){ return '<button type="button" class="btn small' + (sek ? ' secondary' : '') + '" ' + attr + ' style="flex:1 1 0; min-width:0; padding:8px 4px; font-size:13px; margin:0;' + (sek ? '' : ' background:' + farbe + '; border-color:' + farbe + ';') + '">' + text + '</button>'; };
-  h += '<div class="pzStop" style="display:flex; gap:6px; margin-top:8px;">';
+  var schritt = sp.key === 'leer' ? 'Wenn desinfiziert bzw. neu befüllt:' : (sp.key === 'voll' ? 'Wenn am Durchlaufkühler angehängt:' : 'Erst wenn das Fass leer geworden ist:');
+  h += '<div class="pzStop" style="margin-top:8px; font-size:11px; font-weight:700; color:#8a8070; text-transform:uppercase; letter-spacing:.3px;">' + schritt + '</div>';
+  h += '<div class="pzStop" style="display:flex; gap:6px; margin-top:4px;">';
   if(sp.key === 'leer'){
     if(!di.keine) h += b('data-pzaktion="desinf" data-gid="' + g.id + '"', '#00897b', '&#129532; Desinfiziert', !di.faellig);
     h += b('data-nurAbfuellBtn="' + g.id + '"', '#1d5fa8', '&#128167; Befüllt');
   }
-  if(sp.key === 'voll') h += b('data-pzaktion="ausliefern" data-gid="' + g.id + '"', '#1e8449', '&#10003; Angeschlossen &hellip;');
-  if(sp.key === 'betrieb') h += b('data-pzaktion="leer" data-gid="' + g.id + '"', '#c23f12', 'Leer &rarr; Lager');
+  if(sp.key === 'voll') h += b('data-pzaktion="ausliefern" data-gid="' + g.id + '"', '#1e8449', '&#10003; Jetzt anschließen &hellip;');
+  if(sp.key === 'betrieb') h += b('data-pzaktion="leer" data-gid="' + g.id + '"', '#c23f12', 'Ist leer &rarr; ins Lager', true).replace('class="btn small secondary"', 'class="btn small secondary" style2="1"').replace('style="flex:1 1 0;', 'style="color:#c23f12; border-color:#e6b19d; flex:1 1 0;');
   h += b('data-pzdetail="' + g.id + '"', '#666', 'Mehr &hellip;', true);
   h += '</div>';
   h += '<div class="pzDetailBox" data-gid="' + g.id + '" style="display:' + (state.pzDetailOffen === g.id ? 'block' : 'none') + ';">' + pzKarteHtml(g, g.nr || '') + '</div>';
@@ -7869,7 +7871,15 @@ function pzAktionenBinden(){
       if(!g) return;
       var akt = el.getAttribute('data-pzaktion');
       if(akt === 'ausliefern'){ modalPzAusliefern(g.id); return; }
+      if(akt === 'leer' && !el.getAttribute('data-bestaetigt')){
+        customConfirm('Ist Fass Nr. ' + (g.nr || '') + ' (' + (g.typ || '') + ') wirklich leer? Es wird dann als leer ins Lager gebucht.', function(){
+          el.setAttribute('data-bestaetigt', '1');
+          el.onclick({ stopPropagation: function(){} });
+        });
+        return;
+      }
       if(akt === 'leer' || akt === 'abholen'){
+        closeModal();
         g.leer = true;
         g.leerSeit = jetztLokalDatumZeit();
         g.standort = 'Lager';
