@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 16:45';
-var APP_VERSION_TEXT = '21.11. 16:45';
+var APP_VERSION = '2026-11-21 17:05';
+var APP_VERSION_TEXT = '21.11. 17:05';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7459,7 +7459,10 @@ function rwaPaketHtml(kundeId, key, teile){
   h += '<button type="button" class="btn small" style="flex:1; background:var(--ok); color:#fff;" data-rwapaket="' + keyAttr + '" data-erg="in_ordnung">Alles in Ordnung</button>';
   h += '<button type="button" class="btn small secondary" style="flex:1;" data-rwapaket="' + keyAttr + '" data-erg="reparatur">Mängel / Reparatur</button>';
   h += '</div>';
-  h += '<button type="button" class="btn small secondary" style="margin-top:6px; width:100%;" data-rwapaketauf="' + keyAttr + '">' + (offen ? '&#9650; Bauteile ausblenden' : '&#9660; Bauteile einzeln anzeigen (' + teile.length + ')') + '</button>';
+  h += '<div style="display:flex; gap:6px; margin-top:6px;">';
+  h += '<button type="button" class="btn small secondary" style="flex:2;" data-rwapaketauf="' + keyAttr + '">' + (offen ? '&#9650; Bauteile ausblenden' : '&#9660; Bauteile einzeln (' + teile.length + ')') + '</button>';
+  if(!istEingeschraenkt()) h += '<button type="button" class="btn small secondary" style="flex:1; color:#c23f12; border-color:#e6b19d;" data-rwapaketloeschen="' + keyAttr + '">Anlage löschen</button>';
+  h += '</div>';
   h += '</div>';
   return h;
 }
@@ -7494,6 +7497,21 @@ function rwaPaketSpeichern(teile, reparaturIds, datumKurz, fertig){
   }
   weiter();
 }
+function rwaPaketLoeschen(kundeId, key){
+  var teile = rwaPaketTeile(kundeId, key);
+  if(!teile.length) return;
+  customConfirm('Die ganze RWA-Anlage \u201e' + key + '\u201c mit allen ' + teile.length + ' Bauteilen und deren Prüfterminen endgültig löschen? Das kann nicht rückgängig gemacht werden.', function(){
+    var ids = teile.map(function(t){ return t.id; });
+    var pr = state.pruefungen.filter(function(p){ return ids.indexOf(p.geraetId) !== -1; });
+    var i = 0, j = 0;
+    (function weiter(){
+      if(i < pr.length){ dbDelete('pruefungen', pr[i++].id, weiter); return; }
+      if(j < ids.length){ dbDelete('geraete', ids[j++], weiter); return; }
+      if(state.rwaPaketOffen) delete state.rwaPaketOffen[kundeId + '|' + key];
+      loadAll(function(){ render(); toast('RWA-Anlage ' + key + ' gelöscht'); });
+    })();
+  });
+}
 function rwaPaketPruefen(kundeId, key, erg){
   var teile = rwaPaketTeile(kundeId, key);
   if(!teile.length){ toast('Keine Bauteile gefunden'); return; }
@@ -7512,7 +7530,7 @@ function rwaPaketPruefen(kundeId, key, erg){
   if(erg === 'in_ordnung'){
     var schon = teile.filter(function(t){ return letzteErledigungInnerhalb24h(t.id); }).length;
     if(schon === teile.length){
-      customConfirm('Die RWA-Anlage ' + escapeHtml(key) + ' wurde bereits geprüft. Trotzdem nochmal speichern?', function(){ abschluss([]); });
+      customConfirm('Die RWA-Anlage ' + key + ' wurde bereits geprüft. Trotzdem nochmal speichern?', function(){ abschluss([]); });
       return;
     }
     abschluss([]);
@@ -19941,6 +19959,12 @@ function bindDynamic(){
     b.onclick = function(e){
       e.stopPropagation();
       rwaPaketPruefen(state.activeKundeId, b.getAttribute('data-rwapaket'), b.getAttribute('data-erg'));
+    };
+  });
+  document.querySelectorAll('[data-rwapaketloeschen]').forEach(function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      rwaPaketLoeschen(state.activeKundeId, b.getAttribute('data-rwapaketloeschen'));
     };
   });
   document.querySelectorAll('[data-rwapaketauf]').forEach(function(b){
