@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-20 22:45';
-var APP_VERSION_TEXT = '20.11. 22:45';
+var APP_VERSION = '2026-11-21 11:45';
+var APP_VERSION_TEXT = '21.11. 11:45';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -5450,7 +5450,19 @@ function renderGeraetCheck(geraetId){
       html += '<div class="meta" style="margin-top:2px;">Nur ändern, wenn ihr rückwirkend eine Prüfung eintragt.</div>';
     }
     if(istPerchtlZisch){
-      html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Manometer im grünen Bereich"></textarea>';
+      html += '<label>Bemerkung (optional)</label><textarea id="checkBemerkung" rows="2" placeholder="z.B. Dichtung getauscht">' + escapeHtml(g.bemerkung || '') + '</textarea>';
+      if(g.bemerkungAm) html += '<div class="meta" style="margin-top:2px; color:#f5efe6;">Gespeichert am ' + escapeHtml(fmtDatumZeitLokal(g.bemerkungAm)) + '</div>';
+      html += '<button type="button" class="btn small secondary" id="btnBemerkungSpeichern" style="margin-top:6px;">Bemerkung speichern</button>';
+      // Desinfektion
+      var desTage = g.desinfiziertAm ? Math.round((new Date(heuteLokalKurz() + 'T12:00:00') - new Date(String(g.desinfiziertAm).substring(0, 10) + 'T12:00:00')) / 86400000) : null;
+      html += '<div class="card" style="margin-top:14px; padding:12px 14px; border-left:5px solid #00897b;">';
+      html += '<div class="row"><b>&#129532; Desinfektion</b>' + (g.desinfiziertAm ? '<span class="badge" style="background:#e0f2f1; color:#00695c;">zuletzt ' + fmtDate(g.desinfiziertAm) + (desTage !== null ? ' &middot; vor ' + desTage + ' Tag' + (desTage === 1 ? '' : 'en') : '') + '</span>' : '<span class="badge" style="background:#fdecea; color:#c62828;">noch nie eingetragen</span>') + '</div>';
+      html += '<div style="display:flex; gap:8px; align-items:flex-end; margin-top:8px;"><div style="flex:1;"><label style="margin-top:0;">Desinfiziert am</label><input type="date" id="checkDesinfDatum" value="' + heuteLokalKurz() + '"></div>';
+      html += '<button type="button" class="btn" id="btnDesinfiziert" style="background:#00897b; white-space:nowrap;">Eintragen</button></div>';
+      if(g.desinfektionen && g.desinfektionen.length > 1){
+        html += '<div class="meta" style="margin-top:6px;">Frühere: ' + g.desinfektionen.slice(-6, -1).reverse().map(function(d){ return fmtDate(d.datum); }).join(', ') + '</div>';
+      }
+      html += '</div>';
       html += '<button type="button" class="btn block" id="btnAbgefuellt" style="background:#1d5fa8; margin-top:16px;">&#128167; Abgefüllt (heute) &ndash; Wasser/CO2 neu befüllt</button>';
       html += '<button type="button" class="btn block" id="btnAngeschlossen" style="background:var(--ok); margin-top:10px;">&#10003; Angeschlossen &ndash; Flasche in Betrieb genommen</button>';
       if(g.leer && g.leerSeit){
@@ -6730,11 +6742,28 @@ function schnellErgebnisSetzenAusfuehren(geraetId, ergebnis, datumOverride){
   });
 }
 
+// Perchtl Zisch / CO2: Bemerkung vom Check-Bildschirm beim Geraet speichern (mit Verlauf)
+function zischBemerkungUebernehmen(g){
+  var el = document.getElementById('checkBemerkung');
+  if(!el || !g) return false;
+  var text = el.value.trim();
+  if(text === (g.bemerkung || '')) return false;
+  g.bemerkung = text;
+  g.bemerkungAm = text ? jetztLokalDatumZeit() : null;
+  if(text){
+    if(!g.bemerkungen) g.bemerkungen = [];
+    g.bemerkungen.push({ datum: jetztLokalDatumZeit(), text: text });
+    if(g.bemerkungen.length > 50) g.bemerkungen = g.bemerkungen.slice(-50);
+  }
+  return true;
+}
+
 function checkAbgefuellt(geraetId){
   var g = geraetById(geraetId);
   if(!g) return;
   var standortEl = document.getElementById('checkStandort');
   if(standortEl) g.standort = standortEl.value.trim();
+  zischBemerkungUebernehmen(g);
   var heuteKurz = new Date().toISOString().substring(0,10);
   g.abfuelldatum = heuteKurz;
   g.leer = false;
@@ -6783,6 +6812,7 @@ function checkAbschliessenAusfuehren(geraetId, ergebnis){
   if(standortEl) g.standort = standortEl.value.trim();
   var bemerkungEl = document.getElementById('checkBemerkung');
   var bemerkung = bemerkungEl ? bemerkungEl.value.trim() : '';
+  if(g && (g.kategorie === 'Perchtl Zisch' || g.kategorie === 'CO2-Flaschen')) zischBemerkungUebernehmen(g);
   if(!bemerkung){
     if(ergebnis === 'reparatur') bemerkung = 'Reparatur erforderlich';
     if(ergebnis === 'in_ordnung') bemerkung = '';
@@ -7883,7 +7913,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istRWA = (kat === 'RWA-Anlage');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
       var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : (istRWA ? '<th>Baujahr</th><th>Letzter Akkutausch</th><th>Nächster Akkutausch</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>'));
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th><th>Zusatzdaten</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th><th>Desinfiziert</th><th>Zusatzdaten / Bemerkung</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null;
@@ -7895,7 +7925,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
             var tageSpanne = Math.round((new Date(g.letzterAnschluss) - new Date(g.abfuelldatum)) / 86400000);
             if(!isNaN(tageSpanne) && tageSpanne >= 0) zeitspanneText = tageSpanne + ' Tag' + (tageSpanne === 1 ? '' : 'e');
           }
-          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.leer ? 'Ja' : 'Nein') + '</td><td>' + (g.zusatzdaten ? escapeHtml(g.zusatzdaten) : '-') + '</td>';
+          mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.leer ? 'Ja' : 'Nein') + '</td><td>' + (g.desinfiziertAm ? fmtDate(g.desinfiziertAm) : '-') + '</td><td>' + ([g.zusatzdaten, g.bemerkung].filter(function(x){ return x; }).map(escapeHtml).join(' / ') || '-') + '</td>';
         } else if(istBegehung){
           mittelspalten = '<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>';
         } else if(zeigtInnenrevision){
@@ -18965,12 +18995,37 @@ function bindDynamic(){
   if(btnAbgefuellt) btnAbgefuellt.onclick = function(){ checkAbgefuellt(state.activeGeraetId); };
   var btnAngeschlossen = document.getElementById('btnAngeschlossen');
   if(btnAngeschlossen) btnAngeschlossen.onclick = function(){ checkAbschliessen(state.activeGeraetId, 'in_ordnung'); };
+  var btnBemSp = document.getElementById('btnBemerkungSpeichern');
+  if(btnBemSp) btnBemSp.onclick = function(){
+    var g = geraetById(state.activeGeraetId);
+    if(!g) return;
+    var stB = document.getElementById('checkStandort');
+    if(stB) g.standort = stB.value.trim();
+    zischBemerkungUebernehmen(g);
+    dbPut('geraete', g, function(){ toast('Bemerkung gespeichert'); });
+  };
+  var btnDesinf = document.getElementById('btnDesinfiziert');
+  if(btnDesinf) btnDesinf.onclick = function(){
+    var g = geraetById(state.activeGeraetId);
+    if(!g) return;
+    var dEl = document.getElementById('checkDesinfDatum');
+    var datum = (dEl && dEl.value) ? dEl.value : heuteLokalKurz();
+    var stD = document.getElementById('checkStandort');
+    if(stD) g.standort = stD.value.trim();
+    zischBemerkungUebernehmen(g);
+    if(!g.desinfektionen) g.desinfektionen = [];
+    g.desinfektionen.push({ datum: datum, eingetragen: jetztLokalDatumZeit(), von: (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || '')) });
+    g.desinfektionen.sort(function(a, b){ return String(a.datum).localeCompare(String(b.datum)); });
+    g.desinfiziertAm = g.desinfektionen[g.desinfektionen.length - 1].datum;
+    dbPut('geraete', g, function(){ loadAll(function(){ render(); toast('Desinfektion eingetragen: ' + fmtDate(datum)); }); });
+  };
   var btnLeerToggle = document.getElementById('btnLeerToggle');
   if(btnLeerToggle) btnLeerToggle.onclick = function(){
     var g = geraetById(state.activeGeraetId);
     if(!g) return;
     var standortElLeer = document.getElementById('checkStandort');
     if(standortElLeer) g.standort = standortElLeer.value.trim();
+    zischBemerkungUebernehmen(g);
     g.leer = !g.leer;
     g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
     dbPut('geraete', g, function(){
