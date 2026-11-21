@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 14:50';
-var APP_VERSION_TEXT = '21.11. 14:50';
+var APP_VERSION = '2026-11-21 15:15';
+var APP_VERSION_TEXT = '21.11. 15:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7466,6 +7466,7 @@ function pzZyklusPflegen(g){
   if(abf && (!letzte || pzTag(letzte.abgefuellt) !== abf)){
     if(!letzte || abf > pzTag(letzte.abgefuellt)){
       letzte = { abgefuellt: abf };
+      if((g.kategorie || '').trim() !== 'CO2-Flaschen') letzte.inhalt = pzInhalt(g);
       z.push(letzte);
     }
   }
@@ -7490,7 +7491,7 @@ function pzZyklusPflegen(g){
 // Runden eines Fasses - bei Faessern ohne gespeicherte Runden aus dem aktuellen Stand abgeleitet
 function pzZyklenVon(g){
   if(g.zyklen && g.zyklen.length) return g.zyklen;
-  var kopie = { abfuelldatum: g.abfuelldatum, letzterAnschluss: g.letzterAnschluss, leer: g.leer, leerSeit: g.leerSeit, standort: g.standort, zyklen: [] };
+  var kopie = { abfuelldatum: g.abfuelldatum, letzterAnschluss: g.letzterAnschluss, leer: g.leer, leerSeit: g.leerSeit, standort: g.standort, kategorie: g.kategorie, typ: g.typ, inhalt: g.inhalt, zyklen: [] };
   try{ pzZyklusPflegen(kopie); }catch(e){}
   return kopie.zyklen;
 }
@@ -7515,6 +7516,33 @@ function pzZyklusText(g){
   else if(akt.angeschlossen) teile.push('seit <b>' + pzTageZwischen(akt.angeschlossen, heute) + '</b> Tagen angeschlossen');
   return teile.join(' &middot; ');
 }
+// Inhalt eines Keg-Behaelters (Perchtl Zisch): Sodawasser oder Bier
+function pzInhalt(g){
+  if(g.inhalt) return g.inhalt;
+  return /bier/i.test(g.typ || '') ? 'Bier' : 'Sodawasser';
+}
+// CO2-Flaschengroesse vereinheitlichen: 425 g, 600 g, 2 kg, 6 kg, 10 kg
+function pzCo2Groesse(g){
+  var t = String(g.typ || '') + ' ' + String(g.seriennummer || '');
+  var m = t.match(/(\d+(?:[.,]\d+)?)\s*(kg|g)\b/i);
+  if(!m) return 'Größe ?';
+  var wert = parseFloat(m[1].replace(',', '.'));
+  var gramm = m[2].toLowerCase() === 'kg' ? wert * 1000 : wert;
+  if(gramm >= 1000) return (Math.round(gramm / 100) / 10).toString().replace('.', ',') + ' kg';
+  return Math.round(gramm) + ' g';
+}
+function pzGruppe(g, zyklus){
+  var kat = (g.kategorie || '').trim();
+  if(kat === 'CO2-Flaschen'){
+    var gr = pzCo2Groesse(g);
+    var grammSort = /kg/.test(gr) ? parseFloat(gr.replace(',', '.')) * 1000 : (parseFloat(gr) || 99999);
+    return { key: 'co2|' + gr, titel: 'CO2-Flaschen &ndash; ' + gr, farbe: '#455a64', sort: 100 + grammSort / 100000 };
+  }
+  var inh = (zyklus && zyklus.inhalt) || pzInhalt(g);
+  return inh === 'Bier'
+    ? { key: 'keg|Bier', titel: 'Keg-Behälter &ndash; Bier', farbe: '#b7791f', sort: 2 }
+    : { key: 'keg|Sodawasser', titel: 'Keg-Behälter &ndash; Sodawasser', farbe: '#1d5fa8', sort: 1 };
+}
 function pzStatistikZeilen(kundeId){
   var zeilen = [];
   state.geraete.forEach(function(g){
@@ -7531,36 +7559,57 @@ function pzSchnitt(werte){
   return Math.round(l.reduce(function(a, b){ return a + b; }, 0) / l.length * 10) / 10;
 }
 function buildPzStatistikHtml(kundeId){
-  var zeilen = pzStatistikZeilen(kundeId);
   var k = kundeId ? kundeById(kundeId) : null;
   var zahl = function(x){ return (x === null || x === undefined) ? '-' : String(x).replace('.', ','); };
+  // alle Faesser/Flaschen (fuer den Bestand) und alle Runden, nach Gruppe
+  var gruppen = {};
+  var gruppeHolen = function(gr){ return (gruppen[gr.key] = gruppen[gr.key] || { info: gr, geraete: [], runden: [] }); };
+  state.geraete.forEach(function(g){
+    if(g.ausgeschieden || !istFuellKategorie((g.kategorie || '').trim())) return;
+    if(kundeId && g.kundeId !== kundeId) return;
+    gruppeHolen(pzGruppe(g)).geraete.push(g);
+    pzZyklenVon(g).forEach(function(zy){ gruppeHolen(pzGruppe(g, zy)).runden.push({ g: g, z: zy, t: pzZyklusTage(zy) }); });
+  });
   var h = '<div class="bericht-brief">';
-  h += '<div style="display:flex; justify-content:space-between; align-items:flex-start;"><div><h2 style="margin:0;">Standzeiten Fässer</h2><div class="meta">Tage im Fass bis zum Anschluss &middot; Tage angeschlossen' + (k ? ' &middot; ' + escapeHtml(kundeAnzeigeName(k)) : '') + '</div><div class="meta">Stand: ' + fmtDate(new Date().toISOString()) + '</div></div><img src="' + LOGO_DATA + '" style="height:56px;"></div>';
-  if(!zeilen.length){
-    h += '<p style="margin-top:16px;">Noch keine Runden erfasst. Ab jetzt wird jede Runde (befüllt &rarr; angeschlossen &rarr; leer) automatisch gespeichert.</p></div>';
-    return h;
-  }
-  var fertig = zeilen.filter(function(r){ return r.z.leer; });
-  h += '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:14px 0;">';
-  var box = function(wert, txt, farbe){ return '<div style="border:1.5px solid ' + farbe + '; border-radius:10px; padding:8px; text-align:center;"><div style="font-size:22px; font-weight:800; color:' + farbe + ';">' + wert + '</div><div style="font-size:11px;">' + txt + '</div></div>'; };
-  h += box(zahl(pzSchnitt(zeilen.map(function(r){ return r.t.bisAnschluss; }))), '&Oslash; Tage im Fass bis Anschluss', '#1d5fa8');
-  h += box(zahl(pzSchnitt(zeilen.map(function(r){ return r.t.angeschlossen; }))), '&Oslash; Tage angeschlossen', '#1e8449');
-  h += box(fertig.length + ' / ' + zeilen.length, 'Runden abgeschlossen / gesamt', '#555');
-  h += '</div>';
-  // je Fass
-  var proFass = {};
-  zeilen.forEach(function(r){ (proFass[r.g.id] = proFass[r.g.id] || { g: r.g, l: [] }).l.push(r); });
-  h += '<h3 style="margin:14px 0 6px 0;">Je Fass</h3><table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Fass</th><th>SN</th><th>Runden</th><th>&Oslash; Tage bis Anschluss</th><th>&Oslash; Tage angeschlossen</th></tr></thead><tbody>';
-  Object.keys(proFass).map(function(id){ return proFass[id]; }).sort(function(a, b){ return (parseInt(a.g.nr, 10) || 0) - (parseInt(b.g.nr, 10) || 0); }).forEach(function(e){
-    h += '<tr><td class="pb-pos">' + escapeHtml(String(e.g.nr || '')) + '</td><td>' + escapeHtml(e.g.typ || '') + '</td><td>' + escapeHtml(e.g.seriennummer || '-') + '</td><td>' + e.l.length + '</td><td>' + zahl(pzSchnitt(e.l.map(function(r){ return r.t.bisAnschluss; }))) + '</td><td>' + zahl(pzSchnitt(e.l.map(function(r){ return r.t.angeschlossen; }))) + '</td></tr>';
+  h += '<div style="display:flex; justify-content:space-between; align-items:flex-start;"><div><h2 style="margin:0;">Standzeiten Keg-Behälter &amp; CO2-Flaschen</h2><div class="meta">Tage im Fass bis zum Anschluss &middot; Tage angeschlossen' + (k ? ' &middot; ' + escapeHtml(kundeAnzeigeName(k)) : '') + '</div><div class="meta">Stand: ' + fmtDate(new Date().toISOString()) + '</div></div><img src="' + LOGO_DATA + '" style="height:56px;"></div>';
+  var keys = Object.keys(gruppen).sort(function(a, b){ return gruppen[a].info.sort - gruppen[b].info.sort; });
+  if(!keys.length){ h += '<p>Keine Keg-Behälter oder CO2-Flaschen vorhanden.</p></div>'; return h; }
+  var box = function(wert, txt, farbe){ return '<div style="border:1.5px solid ' + farbe + '; border-radius:10px; padding:6px; text-align:center;"><div style="font-size:20px; font-weight:800; color:' + farbe + ';">' + wert + '</div><div style="font-size:10.5px;">' + txt + '</div></div>'; };
+  keys.forEach(function(key){
+    var gr = gruppen[key];
+    var best = { leer: 0, voll: 0, betrieb: 0 };
+    gr.geraete.forEach(function(g){ best[pzSpur(g)]++; });
+    h += '<div style="page-break-inside:avoid; margin-top:18px;">';
+    h += '<div style="background:' + gr.info.farbe + '; color:#fff; padding:7px 12px; border-radius:10px; font-weight:800; font-size:15px;">' + gr.info.titel + ' &middot; ' + gr.geraete.length + ' Stück</div>';
+    h += '<div style="display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin:8px 0;">';
+    h += box(best.voll, 'voll im Lager / befüllt', '#1d5fa8') + box(best.betrieb, 'angeschlossen', '#1e8449') + box(best.leer, 'leer im Lager', '#c23f12');
+    h += box(zahl(pzSchnitt(gr.runden.map(function(r){ return r.t.bisAnschluss; }))), '&Oslash; Tage im Fass bis Anschluss', '#1d5fa8');
+    h += box(zahl(pzSchnitt(gr.runden.map(function(r){ return r.t.angeschlossen; }))), '&Oslash; Tage angeschlossen', '#1e8449');
+    h += '</div>';
+    // Bestand jetzt: jedes Stueck mit Zustand
+    h += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Typ</th><th>SN</th><th>Zustand jetzt</th><th>Befüllt</th><th>Angeschlossen</th><th>Tage im Fass bis Anschluss</th><th>Tage angeschlossen</th></tr></thead><tbody>';
+    gr.geraete.slice().sort(function(a, b){ return (parseInt(a.nr, 10) || 0) - (parseInt(b.nr, 10) || 0); }).forEach(function(g){
+      var sp = pzSpur(g);
+      var zl = pzZyklenVon(g); var zy = zl.length ? zl[zl.length - 1] : null; var t = zy ? pzZyklusTage(zy) : {};
+      var heute = heuteLokalKurz();
+      var zText = sp === 'leer' ? '<b style="color:#c23f12;">leer (Lager)</b>' : (sp === 'betrieb' ? '<b style="color:#1e8449;">angeschlossen</b>' + (g.standort && !istLagerStandort(g.standort) ? '<br><span style="font-size:10px;">' + escapeHtml(g.standort) + '</span>' : '') : '<b style="color:#1d5fa8;">voll' + (istLagerStandort(g.standort) ? ' (Lager)' : '') + '</b>');
+      var bis = zy ? (zy.angeschlossen ? t.bisAnschluss : (sp === 'voll' ? 'seit ' + pzTageZwischen(zy.abgefuellt, heute) : '-')) : '-';
+      var an = zy && zy.angeschlossen ? (zy.leer ? t.angeschlossen : 'seit ' + pzTageZwischen(zy.angeschlossen, heute)) : '-';
+      h += '<tr><td class="pb-pos">' + escapeHtml(String(g.nr || '')) + '</td><td>' + escapeHtml(g.typ || '') + '</td><td>' + escapeHtml(g.seriennummer || '-') + '</td><td>' + zText + '</td><td>' + (zy ? fmtDate(zy.abgefuellt) : '-') + '</td><td>' + (zy && zy.angeschlossen ? fmtDate(zy.angeschlossen) : '-') + '</td><td style="text-align:center; font-weight:700; color:#1d5fa8;">' + zahl(bis) + '</td><td style="text-align:center; font-weight:700; color:#1e8449;">' + zahl(an) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    // abgeschlossene Runden (Verlauf)
+    var fertig = gr.runden.filter(function(r){ return r.z.leer; }).sort(function(a, b){ return String(b.z.abgefuellt).localeCompare(String(a.z.abgefuellt)); });
+    if(fertig.length){
+      h += '<div style="font-weight:700; margin:10px 0 4px 0;">Abgeschlossene Runden (befüllt &rarr; angeschlossen &rarr; leer)</div>';
+      h += '<table class="pb-tabelle"><thead><tr><th>Fass</th><th>Befüllt</th><th>Angeschlossen</th><th>Leer</th><th>Tage im Fass bis Anschluss</th><th>Tage angeschlossen</th><th>Wo</th></tr></thead><tbody>';
+      fertig.forEach(function(r){
+        h += '<tr><td><b>' + escapeHtml(String(r.g.nr || '')) + '</b> ' + escapeHtml(r.g.typ || '') + '</td><td>' + fmtDate(r.z.abgefuellt) + '</td><td>' + (r.z.angeschlossen ? fmtDate(r.z.angeschlossen) : '-') + '</td><td>' + fmtDate(r.z.leer) + '</td><td style="text-align:center; font-weight:700; color:#1d5fa8;">' + zahl(r.t.bisAnschluss) + '</td><td style="text-align:center; font-weight:700; color:#1e8449;">' + zahl(r.t.angeschlossen) + '</td><td>' + escapeHtml(r.z.ort || '-') + '</td></tr>';
+      });
+      h += '</tbody></table>';
+    }
+    h += '</div>';
   });
-  h += '</tbody></table>';
-  // alle Runden
-  h += '<h3 style="margin:16px 0 6px 0;">Alle Runden</h3><table class="pb-tabelle"><thead><tr><th>Fass</th><th>Befüllt</th><th>Angeschlossen</th><th>Leer</th><th>Tage im Fass bis Anschluss</th><th>Tage angeschlossen</th><th>Wo</th></tr></thead><tbody>';
-  zeilen.forEach(function(r){
-    h += '<tr><td><b>' + escapeHtml(String(r.g.nr || '')) + '</b> ' + escapeHtml(r.g.typ || '') + (r.g.seriennummer ? '<br><span style="font-size:10px; color:#777;">SN ' + escapeHtml(r.g.seriennummer) + '</span>' : '') + '</td><td>' + fmtDate(r.z.abgefuellt) + '</td><td>' + (r.z.angeschlossen ? fmtDate(r.z.angeschlossen) : '-') + '</td><td>' + (r.z.leer ? fmtDate(r.z.leer) : '-') + '</td><td style="text-align:center; font-weight:700; color:#1d5fa8;">' + zahl(r.t.bisAnschluss) + '</td><td style="text-align:center; font-weight:700; color:#1e8449;">' + (r.t.angeschlossen !== null ? r.t.angeschlossen : (r.z.angeschlossen ? 'läuft' : '-')) + '</td><td>' + escapeHtml(r.z.ort || '-') + '</td></tr>';
-  });
-  h += '</tbody></table>';
   h += '<div style="margin-top:12px; font-size:10px; color:#777;">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf</div>';
   h += '</div>';
   return h;
@@ -7621,6 +7670,10 @@ function pzZeileHtml(g, sp){
   var h = '<div style="padding:9px 12px; border-top:1px solid ' + sp.hell + '; background:#fff;">';
   h += '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">';
   h += '<div style="min-width:0;"><div style="font-weight:800; font-size:15px;"><span style="display:inline-block; min-width:24px; text-align:center; background:' + sp.hell + '; color:' + sp.farbe + '; border-radius:6px; padding:0 5px; margin-right:5px;">' + escapeHtml(String(g.nr || '')) + '</span>' + escapeHtml(g.typ || 'Fass') + '</div>';
+  if((g.kategorie || '').trim() !== 'CO2-Flaschen'){
+    var inh = pzInhalt(g);
+    h += '<span class="pzStop" data-pzinhalt="' + g.id + '" style="display:inline-block; margin:2px 0; padding:1px 9px; border-radius:20px; font-size:11.5px; font-weight:700; cursor:pointer; ' + (inh === 'Bier' ? 'background:#fdf3e1; color:#b7791f; border:1px solid #e9c98a;' : 'background:#e6eef8; color:#1d5fa8; border:1px solid #b9cdea;') + '">' + (inh === 'Bier' ? '&#127866; Bier' : '&#128167; Sodawasser') + ' &#8644;</span>';
+  }
   h += '<div class="meta" style="font-size:12.5px;">' + (sp.key === 'leer' ? '' : '&#128205; ' + escapeHtml(g.standort || '?') + ' &middot; ') + (g.seriennummer ? 'SN ' + escapeHtml(g.seriennummer) : '') + (info ? '<br>' + info : '') + '</div></div>';
   h += '<span style="flex-shrink:0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; white-space:nowrap; ' + (di.faellig ? 'background:#fdecea; color:#b3261e;' : 'background:#e0f2f1; color:#00695c;') + '">&#129532; ' + di.kurz + '</span>';
   h += '</div>';
@@ -7684,6 +7737,18 @@ function pzAktionenBinden(){
         g.desinfiziertAm = heute;
         dbPut('geraete', g, function(){ loadAll(function(){ render(); toast('Desinfektion eingetragen'); }); });
       }
+    };
+  });
+  document.querySelectorAll('[data-pzinhalt]').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      var g = geraetById(el.getAttribute('data-pzinhalt'));
+      if(!g) return;
+      g.inhalt = pzInhalt(g) === 'Bier' ? 'Sodawasser' : 'Bier';
+      // laufende Runde bekommt den neuen Inhalt mit
+      var zl = g.zyklen || [];
+      if(zl.length && !zl[zl.length - 1].leer) zl[zl.length - 1].inhalt = g.inhalt;
+      dbPut('geraete', g, function(){ loadAll(function(){ render(); toast('Inhalt: ' + g.inhalt); }); });
     };
   });
   document.querySelectorAll('[data-pzstat]').forEach(function(el){
@@ -19313,6 +19378,7 @@ function bindDynamic(){
     g.leer = !g.leer;
     g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
     if(g.leer) g.standort = 'Lager';
+    else if(!g.abfuelldatum || (g.letzterAnschluss && pzTag(g.abfuelldatum) <= pzTag(g.letzterAnschluss))) g.abfuelldatum = heuteLokalKurz();
     dbPut('geraete', g, function(){
       loadAll(function(){ render(); toast(g.leer ? 'Leer - zurück ins Lager' : 'Wieder als voll markiert'); });
     });
@@ -19684,8 +19750,9 @@ function bindDynamic(){
       g.leer = !g.leer;
       g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
       if(g.leer) g.standort = 'Lager';
+      else if(!g.abfuelldatum || (g.letzterAnschluss && pzTag(g.abfuelldatum) <= pzTag(g.letzterAnschluss))) g.abfuelldatum = heuteLokalKurz();
       dbPut('geraete', g, function(){
-        loadAll(function(){ render(); toast(g.leer ? 'Leer - zurück ins Lager' : 'Wieder als voll markiert'); });
+        loadAll(function(){ render(); toast(g.leer ? 'Leer - zurück ins Lager' : 'Wieder voll (befüllt heute)'); });
       });
     };
   });
