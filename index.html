@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 12:40';
-var APP_VERSION_TEXT = '21.11. 12:40';
+var APP_VERSION = '2026-11-21 14:50';
+var APP_VERSION_TEXT = '21.11. 14:50';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -737,6 +737,7 @@ setTimeout(function(){ if(navigator.onLine === false) offlineHinweisAktualisiere
 
 function dbPut(store, obj, cb){
   if(store === 'zeiten' && typeof zeitSchichtCache !== 'undefined') zeitSchichtCache.ref = null;
+  if(store === 'geraete' && obj && istFuellKategorie((obj.kategorie || '').trim())){ try{ pzZyklusPflegen(obj); }catch(eZ){} }
   if(DATEI_STORES.indexOf(store) > -1 && obj && obj.dataUrl){ dateiAuslagern(obj); }
   // Firestore meldet "fertig" erst, wenn der Server bestätigt hat. Bei schwachem Netz würde die App
   // sonst hängen bleiben -> nach 4 Sekunden geht es lokal weiter, der Server bekommt es automatisch nachgesendet.
@@ -5463,6 +5464,13 @@ function renderGeraetCheck(geraetId){
         html += '<div class="meta" style="margin-top:6px;">Frühere: ' + g.desinfektionen.slice(-6, -1).reverse().map(function(d){ return fmtDate(d.datum); }).join(', ') + '</div>';
       }
       html += '</div>';
+      // Wo ist das Fass gerade + naechster Schritt (gleiche Logik wie in der Fass-Uebersicht beim Kunden)
+      var spScan = PZ_SPUREN.filter(function(x){ return x.key === pzSpur(g); })[0];
+      if(spScan){
+        html += '<div style="margin-top:16px; background:' + spScan.farbe + '; color:#fff; border-radius:12px; padding:10px 14px; font-weight:800; font-size:15px;">' + spScan.icon + ' ' + spScan.titel + '</div>';
+        var diScan = pzDesinfInfo(g);
+        if(diScan.faellig) html += '<div style="margin-top:8px; background:#fdecea; color:#b3261e; border-radius:10px; padding:8px 12px; font-weight:700;">&#129532; ' + (g.desinfiziertAm ? 'Desinfektion fällig &ndash; zuletzt ' + fmtDate(g.desinfiziertAm) : 'Noch nie desinfiziert') + ' (mind. 1&times; im Jahr)</div>';
+      }
       html += '<button type="button" class="btn block" id="btnAbgefuellt" style="background:#1d5fa8; margin-top:16px;">&#128167; Abgefüllt (heute) &ndash; Wasser/CO2 neu befüllt</button>';
       html += '<button type="button" class="btn block" id="btnAngeschlossen" style="background:var(--ok); margin-top:10px;">&#10003; Angeschlossen &ndash; Flasche in Betrieb genommen</button>';
       if(g.leer && g.leerSeit){
@@ -7296,8 +7304,8 @@ function renderKundeDetail(kundeId){
       katZaehler1[katKey] = (katZaehler1[katKey] || 0) + 1;
       var katNr = g.nr || katZaehler1[katKey];
       if(istFuellKategorie(katKey) && !g.ausgeschieden){
-        if(katZaehler1[katKey] === 1) html += pzKopfHtml(katKey, geraeteSortiert.filter(function(x){ return (x.kategorie || 'Feuerlöscher').trim() === katKey && !x.ausgeschieden; }));
-        html += pzKarteHtml(g, katNr);
+        // Neue Uebersicht: alle Faesser/Flaschen dieser Kategorie auf einmal, nach "Wo ist was?" gruppiert
+        if(katZaehler1[katKey] === 1) html += pzUebersichtHtml(katKey, geraeteSortiert.filter(function(x){ return (x.kategorie || 'Feuerlöscher').trim() === katKey && !x.ausgeschieden; }));
         return;
       }
       var st = istFuellKategorie(katKey) ? statusFuerAbfuellAlter(g.abfuelldatum, g.leer) : statusForDate(g.naechstePruefung);
@@ -7423,6 +7431,277 @@ function pzTageText(von){
   if(t === 1) return 'gestern';
   return 'vor ' + t + ' Tagen';
 }
+// ---------- Faesser / Flaschen: Uebersicht nach Kreislauf ----------
+// Kreislauf: LEER (= im Lager Ketzergasse) -> desinfizieren (mind. 1x im Jahr) + abfuellen -> VOLL (befuellt, nicht angeschlossen)
+//            -> ANGESCHLOSSEN (haengt am Durchlaufkuehler) -> leer -> zurueck ins Lager
+var PZ_DESINF_TAGE = 365;
+function pzSpur(g){
+  if(g.leer) return 'leer';
+  return pzZustand(g).key === 'angeschlossen' ? 'betrieb' : 'voll';
+}
+function pzDesinfInfo(g){
+  if(!g.desinfiziertAm) return { faellig: true, tage: null, kurz: 'Desinfektion fehlt' };
+  var tage = Math.round((new Date() - new Date(String(g.desinfiziertAm).substring(0, 10) + 'T12:00:00')) / 86400000);
+  var faellig = tage > PZ_DESINF_TAGE;
+  return { faellig: faellig, tage: tage, kurz: faellig ? 'Desinfektion fällig' : 'desinf. ' + fmtDate(g.desinfiziertAm) };
+}
+var PZ_SPUREN = [
+  { key: 'leer', titel: 'Leer &ndash; im Lager', unter: 'desinfizieren &amp; abfüllen', farbe: '#c23f12', hell: '#fbe9e3', icon: '&#9675;' },
+  { key: 'voll', titel: 'Voll &ndash; befüllt, nicht angeschlossen', unter: 'bereit zum Anschließen', farbe: '#1d5fa8', hell: '#e6eef8', icon: '&#9679;' },
+  { key: 'betrieb', titel: 'Angeschlossen &ndash; am Durchlaufkühler', unter: '', farbe: '#1e8449', hell: '#e5f4ea', icon: '&#10003;' }
+];
+// ---------- Standzeiten: jede Runde eines Fasses (befuellt -> angeschlossen -> leer) ----------
+function pzTag(d){ return d ? String(d).substring(0, 10) : ''; }
+function pzTageZwischen(a, b){
+  if(!a || !b) return null;
+  var t = Math.round((new Date(pzTag(b) + 'T12:00:00') - new Date(pzTag(a) + 'T12:00:00')) / 86400000);
+  return t < 0 ? null : t;
+}
+function pzZyklusPflegen(g){
+  if(!g.zyklen) g.zyklen = [];
+  var z = g.zyklen;
+  var letzte = z.length ? z[z.length - 1] : null;
+  var abf = pzTag(g.abfuelldatum);
+  // neue Fuellung -> neue Runde
+  if(abf && (!letzte || pzTag(letzte.abgefuellt) !== abf)){
+    if(!letzte || abf > pzTag(letzte.abgefuellt)){
+      letzte = { abgefuellt: abf };
+      z.push(letzte);
+    }
+  }
+  if(!letzte) return;
+  var start = pzTag(letzte.abgefuellt);
+  // angeschlossen (nach der Fuellung)
+  var an = g.letzterAnschluss ? String(g.letzterAnschluss) : '';
+  if(an && pzTag(an) >= start){
+    if(!letzte.angeschlossen){ letzte.angeschlossen = an; if(g.standort && !istLagerStandort(g.standort)) letzte.ort = g.standort; }
+  } else if(letzte.angeschlossen){
+    delete letzte.angeschlossen; delete letzte.ort;   // Anschluss wurde rueckgaengig gemacht
+  }
+  if(letzte.angeschlossen && !letzte.ort && g.standort && !istLagerStandort(g.standort)) letzte.ort = g.standort;
+  // leer (nach der Fuellung)
+  if(g.leer && g.leerSeit && pzTag(g.leerSeit) >= start){
+    if(!letzte.leer) letzte.leer = String(g.leerSeit);
+  } else if(!g.leer && letzte.leer){
+    delete letzte.leer;   // "wieder voll" = Leer-Meldung zurueckgenommen
+  }
+  if(z.length > 200) g.zyklen = z.slice(-200);
+}
+// Runden eines Fasses - bei Faessern ohne gespeicherte Runden aus dem aktuellen Stand abgeleitet
+function pzZyklenVon(g){
+  if(g.zyklen && g.zyklen.length) return g.zyklen;
+  var kopie = { abfuelldatum: g.abfuelldatum, letzterAnschluss: g.letzterAnschluss, leer: g.leer, leerSeit: g.leerSeit, standort: g.standort, zyklen: [] };
+  try{ pzZyklusPflegen(kopie); }catch(e){}
+  return kopie.zyklen;
+}
+function pzZyklusTage(zy){
+  return {
+    bisAnschluss: pzTageZwischen(zy.abgefuellt, zy.angeschlossen),
+    angeschlossen: pzTageZwischen(zy.angeschlossen, zy.leer),
+    gesamt: pzTageZwischen(zy.abgefuellt, zy.leer)
+  };
+}
+function pzZyklusText(g){
+  var z = pzZyklenVon(g);
+  var heute = heuteLokalKurz();
+  // aktuelle Runde
+  var akt = z.length ? z[z.length - 1] : null;
+  if(!akt) return '';
+  var t = pzZyklusTage(akt);
+  var teile = [];
+  if(akt.angeschlossen) teile.push('<b>' + t.bisAnschluss + '</b> Tage im Fass bis Anschluss');
+  else teile.push('seit <b>' + pzTageZwischen(akt.abgefuellt, heute) + '</b> Tagen im Fass');
+  if(akt.angeschlossen && akt.leer) teile.push('<b>' + t.angeschlossen + '</b> Tage angeschlossen');
+  else if(akt.angeschlossen) teile.push('seit <b>' + pzTageZwischen(akt.angeschlossen, heute) + '</b> Tagen angeschlossen');
+  return teile.join(' &middot; ');
+}
+function pzStatistikZeilen(kundeId){
+  var zeilen = [];
+  state.geraete.forEach(function(g){
+    if(g.ausgeschieden || !istFuellKategorie((g.kategorie || '').trim())) return;
+    if(kundeId && g.kundeId !== kundeId) return;
+    pzZyklenVon(g).forEach(function(zy){ zeilen.push({ g: g, z: zy, t: pzZyklusTage(zy) }); });
+  });
+  zeilen.sort(function(a, b){ return String(b.z.abgefuellt).localeCompare(String(a.z.abgefuellt)); });
+  return zeilen;
+}
+function pzSchnitt(werte){
+  var l = werte.filter(function(x){ return x !== null && x !== undefined; });
+  if(!l.length) return null;
+  return Math.round(l.reduce(function(a, b){ return a + b; }, 0) / l.length * 10) / 10;
+}
+function buildPzStatistikHtml(kundeId){
+  var zeilen = pzStatistikZeilen(kundeId);
+  var k = kundeId ? kundeById(kundeId) : null;
+  var zahl = function(x){ return (x === null || x === undefined) ? '-' : String(x).replace('.', ','); };
+  var h = '<div class="bericht-brief">';
+  h += '<div style="display:flex; justify-content:space-between; align-items:flex-start;"><div><h2 style="margin:0;">Standzeiten Fässer</h2><div class="meta">Tage im Fass bis zum Anschluss &middot; Tage angeschlossen' + (k ? ' &middot; ' + escapeHtml(kundeAnzeigeName(k)) : '') + '</div><div class="meta">Stand: ' + fmtDate(new Date().toISOString()) + '</div></div><img src="' + LOGO_DATA + '" style="height:56px;"></div>';
+  if(!zeilen.length){
+    h += '<p style="margin-top:16px;">Noch keine Runden erfasst. Ab jetzt wird jede Runde (befüllt &rarr; angeschlossen &rarr; leer) automatisch gespeichert.</p></div>';
+    return h;
+  }
+  var fertig = zeilen.filter(function(r){ return r.z.leer; });
+  h += '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:14px 0;">';
+  var box = function(wert, txt, farbe){ return '<div style="border:1.5px solid ' + farbe + '; border-radius:10px; padding:8px; text-align:center;"><div style="font-size:22px; font-weight:800; color:' + farbe + ';">' + wert + '</div><div style="font-size:11px;">' + txt + '</div></div>'; };
+  h += box(zahl(pzSchnitt(zeilen.map(function(r){ return r.t.bisAnschluss; }))), '&Oslash; Tage im Fass bis Anschluss', '#1d5fa8');
+  h += box(zahl(pzSchnitt(zeilen.map(function(r){ return r.t.angeschlossen; }))), '&Oslash; Tage angeschlossen', '#1e8449');
+  h += box(fertig.length + ' / ' + zeilen.length, 'Runden abgeschlossen / gesamt', '#555');
+  h += '</div>';
+  // je Fass
+  var proFass = {};
+  zeilen.forEach(function(r){ (proFass[r.g.id] = proFass[r.g.id] || { g: r.g, l: [] }).l.push(r); });
+  h += '<h3 style="margin:14px 0 6px 0;">Je Fass</h3><table class="pb-tabelle"><thead><tr><th>Nr.</th><th>Fass</th><th>SN</th><th>Runden</th><th>&Oslash; Tage bis Anschluss</th><th>&Oslash; Tage angeschlossen</th></tr></thead><tbody>';
+  Object.keys(proFass).map(function(id){ return proFass[id]; }).sort(function(a, b){ return (parseInt(a.g.nr, 10) || 0) - (parseInt(b.g.nr, 10) || 0); }).forEach(function(e){
+    h += '<tr><td class="pb-pos">' + escapeHtml(String(e.g.nr || '')) + '</td><td>' + escapeHtml(e.g.typ || '') + '</td><td>' + escapeHtml(e.g.seriennummer || '-') + '</td><td>' + e.l.length + '</td><td>' + zahl(pzSchnitt(e.l.map(function(r){ return r.t.bisAnschluss; }))) + '</td><td>' + zahl(pzSchnitt(e.l.map(function(r){ return r.t.angeschlossen; }))) + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  // alle Runden
+  h += '<h3 style="margin:16px 0 6px 0;">Alle Runden</h3><table class="pb-tabelle"><thead><tr><th>Fass</th><th>Befüllt</th><th>Angeschlossen</th><th>Leer</th><th>Tage im Fass bis Anschluss</th><th>Tage angeschlossen</th><th>Wo</th></tr></thead><tbody>';
+  zeilen.forEach(function(r){
+    h += '<tr><td><b>' + escapeHtml(String(r.g.nr || '')) + '</b> ' + escapeHtml(r.g.typ || '') + (r.g.seriennummer ? '<br><span style="font-size:10px; color:#777;">SN ' + escapeHtml(r.g.seriennummer) + '</span>' : '') + '</td><td>' + fmtDate(r.z.abgefuellt) + '</td><td>' + (r.z.angeschlossen ? fmtDate(r.z.angeschlossen) : '-') + '</td><td>' + (r.z.leer ? fmtDate(r.z.leer) : '-') + '</td><td style="text-align:center; font-weight:700; color:#1d5fa8;">' + zahl(r.t.bisAnschluss) + '</td><td style="text-align:center; font-weight:700; color:#1e8449;">' + (r.t.angeschlossen !== null ? r.t.angeschlossen : (r.z.angeschlossen ? 'läuft' : '-')) + '</td><td>' + escapeHtml(r.z.ort || '-') + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  h += '<div style="margin-top:12px; font-size:10px; color:#777;">Wolfgang Janiba Brandschutztechnik GmbH &middot; Ketzergasse 299, 2380 Perchtoldsdorf</div>';
+  h += '</div>';
+  return h;
+}
+function modalPzStatistik(kundeId){
+  var html = '<div class="modal-head"><h3>Standzeiten</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="overflow-x:auto;">' + buildPzStatistikHtml(kundeId) + '</div>';
+  html += '<button type="button" class="btn block" id="pzStatDruck" style="margin-top:12px;">Drucken / Als PDF teilen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('pzStatDruck').onclick = function(){ bsvDruckenOderTeilen(buildPzStatistikHtml(kundeId), 'Standzeiten-Faesser.pdf'); };
+}
+
+function pzUebersichtHtml(kat, liste){
+  var gruppen = { leer: [], voll: [], betrieb: [] };
+  var desinf = [];
+  liste.forEach(function(g){ gruppen[pzSpur(g)].push(g); if(pzDesinfInfo(g).faellig) desinf.push(g); });
+  var h = '<div style="padding:6px 0 4px 0;">';
+  h += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style="font-weight:800; font-size:16px;">' + escapeHtml(kat) + ' &middot; ' + liste.length + ' Stück</div><button type="button" class="btn small secondary pzStop" data-pzstat="' + (liste[0] ? liste[0].kundeId : '') + '" style="margin:0; padding:6px 10px;">&#128202; Standzeiten</button></div>';
+  // Zaehler-Leiste
+  var kachel = function(n, txt, farbe, hell){ return '<div style="background:' + hell + '; border-radius:10px; padding:6px 4px; text-align:center;"><div style="font-size:22px; font-weight:800; color:' + farbe + '; line-height:1.1;">' + n + '</div><div style="font-size:11px; color:' + farbe + '; font-weight:700;">' + txt + '</div></div>'; };
+  h += '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:8px;">';
+  h += kachel(gruppen.leer.length, 'leer', '#c23f12', '#fbe9e3') + kachel(gruppen.voll.length, 'voll', '#1d5fa8', '#e6eef8') + kachel(gruppen.betrieb.length, 'angeschl.', '#1e8449', '#e5f4ea') + kachel(desinf.length, 'Desinf. fällig', desinf.length ? '#b3261e' : '#00695c', desinf.length ? '#fdecea' : '#e0f2f1');
+  h += '</div>';
+  // Desinfektion faellig - immer ganz oben
+  if(desinf.length){
+    h += '<div style="margin-top:6px; border-radius:12px; overflow:hidden; border:1.5px solid #f5c6c2;">';
+    h += '<div style="background:#00897b; color:#fff; padding:7px 12px; font-weight:800; font-size:14px; display:flex; justify-content:space-between;"><span>&#129532; Desinfektion fällig (mind. 1&times; im Jahr)</span><span style="background:rgba(255,255,255,.25); border-radius:20px; padding:0 9px;">' + desinf.length + '</span></div>';
+    desinf.forEach(function(g){
+      var di = pzDesinfInfo(g);
+      h += '<div style="padding:8px 12px; border-top:1px solid #e0f2f1; background:#fff; display:flex; align-items:center; gap:8px;">';
+      h += '<div style="flex:1; min-width:0;"><b>' + escapeHtml(String(g.nr || '')) + ' &middot; ' + escapeHtml(g.typ || 'Fass') + '</b><div class="meta" style="font-size:12px;">' + (g.desinfiziertAm ? 'zuletzt ' + fmtDate(g.desinfiziertAm) + ' (vor ' + di.tage + ' Tagen)' : 'noch nie eingetragen') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div></div>';
+      h += '<button type="button" class="btn small pzStop" data-pzaktion="desinf" data-gid="' + g.id + '" style="background:#00897b; border-color:#00897b; margin:0; white-space:nowrap;">&#129532; Desinfiziert</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  PZ_SPUREN.forEach(function(sp){
+    var l = gruppen[sp.key];
+    if(!l.length) return;
+    h += '<div style="margin-top:10px; border-radius:12px; overflow:hidden; border:1.5px solid ' + sp.hell + ';">';
+    h += '<div style="background:' + sp.farbe + '; color:#fff; padding:7px 12px; font-weight:800; font-size:14px; display:flex; justify-content:space-between; align-items:center;"><span>' + sp.icon + ' ' + sp.titel + (sp.unter ? '<span style="font-weight:600; opacity:.85;"> &middot; ' + sp.unter + '</span>' : '') + '</span><span style="background:rgba(255,255,255,.25); border-radius:20px; padding:0 9px;">' + l.length + '</span></div>';
+    l.forEach(function(g){ h += pzZeileHtml(g, sp); });
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+function pzZeileHtml(g, sp){
+  var di = pzDesinfInfo(g);
+  var anschluss = g.letzterAnschluss || g.letztePruefung || '';
+  var info = '';
+  if(sp.key === 'betrieb' && anschluss) info = 'befüllt ' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '?') + ' &middot; angeschlossen ' + fmtDate(anschluss);
+  else if(sp.key === 'leer') info = g.leerSeit ? 'leer seit ' + fmtDate(g.leerSeit) : 'leer';
+  else if(g.abfuelldatum) info = 'befüllt ' + fmtDate(g.abfuelldatum);
+  var zyTxt = pzZyklusText(g);
+  if(zyTxt) info += (info ? '<br>' : '') + '<span style="color:#3a332b;">' + (sp.key === 'leer' ? 'letzte Runde: ' : '') + zyTxt + '</span>';
+  var h = '<div style="padding:9px 12px; border-top:1px solid ' + sp.hell + '; background:#fff;">';
+  h += '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">';
+  h += '<div style="min-width:0;"><div style="font-weight:800; font-size:15px;"><span style="display:inline-block; min-width:24px; text-align:center; background:' + sp.hell + '; color:' + sp.farbe + '; border-radius:6px; padding:0 5px; margin-right:5px;">' + escapeHtml(String(g.nr || '')) + '</span>' + escapeHtml(g.typ || 'Fass') + '</div>';
+  h += '<div class="meta" style="font-size:12.5px;">' + (sp.key === 'leer' ? '' : '&#128205; ' + escapeHtml(g.standort || '?') + ' &middot; ') + (g.seriennummer ? 'SN ' + escapeHtml(g.seriennummer) : '') + (info ? '<br>' + info : '') + '</div></div>';
+  h += '<span style="flex-shrink:0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; white-space:nowrap; ' + (di.faellig ? 'background:#fdecea; color:#b3261e;' : 'background:#e0f2f1; color:#00695c;') + '">&#129532; ' + di.kurz + '</span>';
+  h += '</div>';
+  var b = function(attr, farbe, text, sek){ return '<button type="button" class="btn small' + (sek ? ' secondary' : '') + '" ' + attr + ' style="flex:1 1 0; min-width:0; padding:8px 4px; font-size:13px; margin:0;' + (sek ? '' : ' background:' + farbe + '; border-color:' + farbe + ';') + '">' + text + '</button>'; };
+  h += '<div class="pzStop" style="display:flex; gap:6px; margin-top:8px;">';
+  if(sp.key === 'leer'){
+    h += b('data-pzaktion="desinf" data-gid="' + g.id + '"', '#00897b', '&#129532; Desinfiziert', !di.faellig);
+    h += b('data-nurAbfuellBtn="' + g.id + '"', '#1d5fa8', '&#128167; Befüllt');
+  }
+  if(sp.key === 'voll') h += b('data-pzaktion="ausliefern" data-gid="' + g.id + '"', '#1e8449', '&#10003; Angeschlossen &hellip;');
+  if(sp.key === 'betrieb') h += b('data-pzaktion="leer" data-gid="' + g.id + '"', '#c23f12', 'Leer &rarr; Lager');
+  h += b('data-pzdetail="' + g.id + '"', '#666', 'Mehr &hellip;', true);
+  h += '</div>';
+  h += '<div class="pzDetailBox" data-gid="' + g.id + '" style="display:' + (state.pzDetailOffen === g.id ? 'block' : 'none') + ';">' + pzKarteHtml(g, g.nr || '') + '</div>';
+  h += '</div>';
+  return h;
+}
+function modalPzAusliefern(gid){
+  var g = geraetById(gid);
+  if(!g) return;
+  var orte = {};
+  state.geraete.forEach(function(x){ if(istFuellKategorie((x.kategorie || '').trim()) && x.standort && !istLagerStandort(x.standort)) orte[x.standort] = true; });
+  var h = '<div class="modal-head"><h3>Angeschlossen</h3><button class="close" id="mClose">&times;</button></div>';
+  h += '<div class="meta">' + escapeHtml(g.typ || 'Flasche') + (g.seriennummer ? ' &middot; SN ' + escapeHtml(g.seriennummer) : '') + '</div>';
+  h += '<label>Wo hängt es am Durchlaufkühler? (Kunde / Standort)</label><input type="text" id="pzZiel" list="pzZielListe" autocomplete="off" value="' + escapeHtml(istLagerStandort(g.standort) ? '' : (g.standort || '')) + '" placeholder="z.B. Firma Krogger"><datalist id="pzZielListe">' + Object.keys(orte).sort().map(function(o){ return '<option value="' + escapeHtml(o) + '">'; }).join('') + '</datalist>';
+  h += '<input type="checkbox" id="pzGleichAn" checked style="display:none;">';
+  h += '<button class="btn block" id="pzAusOk" style="margin-top:12px;">Speichern</button>';
+  openModal(h);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('pzAusOk').onclick = function(){
+    var ziel = document.getElementById('pzZiel').value.trim();
+    if(!ziel){ toast('Bitte eintragen, wohin'); return; }
+    g.standort = ziel;
+    var an = document.getElementById('pzGleichAn').checked;
+    dbPut('geraete', g, function(){
+      closeModal();
+      if(an) schnellErgebnisSetzen(gid, 'in_ordnung', null);
+      else loadAll(function(){ render(); toast('Ausgeliefert: ' + ziel); });
+    });
+  };
+}
+function pzAktionenBinden(){
+  document.querySelectorAll('[data-pzaktion]').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      var g = geraetById(el.getAttribute('data-gid'));
+      if(!g) return;
+      var akt = el.getAttribute('data-pzaktion');
+      if(akt === 'ausliefern'){ modalPzAusliefern(g.id); return; }
+      if(akt === 'leer' || akt === 'abholen'){
+        g.leer = true;
+        g.leerSeit = jetztLokalDatumZeit();
+        g.standort = 'Lager';
+        dbPut('geraete', g, function(){ loadAll(function(){ render(); toast('Leer - zurück ins Lager'); }); });
+        return;
+      }
+      if(akt === 'desinf'){
+        var heute = heuteLokalKurz();
+        if(!g.desinfektionen) g.desinfektionen = [];
+        g.desinfektionen.push({ datum: heute, eingetragen: jetztLokalDatumZeit(), von: (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || '')) });
+        g.desinfiziertAm = heute;
+        dbPut('geraete', g, function(){ loadAll(function(){ render(); toast('Desinfektion eingetragen'); }); });
+      }
+    };
+  });
+  document.querySelectorAll('[data-pzstat]').forEach(function(el){
+    el.onclick = function(e){ e.stopPropagation(); modalPzStatistik(el.getAttribute('data-pzstat') || null); };
+  });
+  document.querySelectorAll('[data-pzdetail]').forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation();
+      var gid = el.getAttribute('data-pzdetail');
+      var box = document.querySelector('.pzDetailBox[data-gid="' + gid + '"]');
+      if(!box) return;
+      var auf = box.style.display === 'none';
+      box.style.display = auf ? 'block' : 'none';
+      state.pzDetailOffen = auf ? gid : null;
+    };
+  });
+}
+
 function pzKopfHtml(kat, liste){
   var anz = { angeschlossen: 0, voll: 0, leer: 0 };
   liste.forEach(function(g){ anz[pzZustand(g).key]++; });
@@ -7913,7 +8192,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
       var istRWA = (kat === 'RWA-Anlage');
       html += '<h3 style="margin:18px 0 6px 0; font-size:15px;">' + escapeHtml(kat) + '</h3>';
       var standardSpalten = zeigtInnenrevision ? '<th>Baujahr</th><th>Letzte Innenrevision</th><th>Prüfdatum</th><th>nä. Prüfung</th><th>Innenrevision-Status</th>' : (istRauchmelder ? '<th>Baujahr</th><th>Ablauf (10 Jahre)</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : (istRWA ? '<th>Baujahr</th><th>Letzter Akkutausch</th><th>Nächster Akkutausch</th><th>Prüfdatum</th><th>nä. Prüfung</th>' : '<th>Baujahr</th><th>Prüfdatum</th><th>nä. Prüfung</th>'));
-      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th><th>Desinfiziert</th><th>Zusatzdaten / Bemerkung</th>' : (istBegehung ? '<th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
+      html += '<table class="pb-tabelle"><thead><tr><th>Nr.</th><th>' + (istBegehung ? 'Begehung' : 'Typ') + '</th><th>Standort</th>' + (istBegehung ? '' : '<th>Serien-Nr.</th>') + (istPZ ? '<th>Abfülldatum</th><th>Angeschlossen</th><th>Zeitspanne</th><th>Leer</th><th>Desinfiziert</th><th>Zusatzdaten / Bemerkung</th>' : (istBegehung ? '<th>Rhythmus</th><th>Letzte Begehung</th><th>Nächste Begehung</th><th>Mängel</th>' : standardSpalten)) + '<th style="text-align:center;">&#10003;</th></tr></thead><tbody>';
       gruppen[kat].sort(function(a, b){ return geraeteSortierVergleich(a, b); });
       gruppen[kat].forEach(function(g, i){
         var bjStatus = (!istPZ && !istBegehung && g.baujahr && zeigtInnenrevision && istInnenrevisionspflichtig(g)) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null;
@@ -7927,7 +8206,9 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
           }
           mittelspalten = '<td>' + (g.abfuelldatum ? fmtDate(g.abfuelldatum) : '-') + '</td><td>' + (g.letzterAnschluss ? fmtDate(g.letzterAnschluss) : '-') + '</td><td>' + zeitspanneText + '</td><td>' + (g.leer ? 'Ja' : 'Nein') + '</td><td>' + (g.desinfiziertAm ? fmtDate(g.desinfiziertAm) : '-') + '</td><td>' + ([g.zusatzdaten, g.bemerkung].filter(function(x){ return x; }).map(escapeHtml).join(' / ') || '-') + '</td>';
         } else if(istBegehung){
-          mittelspalten = '<td>' + (g.maengel ? escapeHtml(g.maengel) : '-') + '</td>';
+          var rhyM = parseInt(g.intervallMonate, 10) || 0;
+          var rhyText = rhyM === 1 ? 'monatlich' : (rhyM === 3 ? 'vierteljährlich' : (rhyM === 6 ? 'halbjährlich' : (rhyM === 12 ? 'jährlich' : (rhyM ? 'alle ' + rhyM + ' Monate' : '-'))));
+          mittelspalten = '<td>' + rhyText + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td><td>' + (g.maengel ? escapeHtml(g.maengel) : (g.letztePruefung ? 'keine' : '-')) + '</td>';
         } else if(zeigtInnenrevision){
           mittelspalten = '<td>' + ausstZelle(g.baujahr) + '</td><td>' + (g.letzteInnenrevision ? fmtDate(g.letzteInnenrevision) : '-') + '</td><td>' + (g.letztePruefung ? fmtDate(g.letztePruefung) : '-') + '</td><td>' + (g.naechstePruefung ? fmtDate(g.naechstePruefung) : '-') + '</td>' + statusSpalte;
         } else if(istRauchmelder){
@@ -7941,7 +8222,7 @@ function buildGeraeteuebersichtHtml(kundeId, nurKategorie){
         }
         var zeilenStil = '';
         if(bjStatus && bjStatus.cls === 'warn') zeilenStil = ' style="background:#fbdcd2; color:#8a2a10;"';
-        html += '<tr' + zeilenStil + '><td class="pb-pos">' + geraeteNummerWert(g) + '</td><td>' + escapeHtml(g.typ || '-') + bioHinweisHtml(g) + '</td><td>' + (istPZ || istBegehung ? escapeHtml(g.standort||'-') : ausstZelle(g.standort)) + '</td>' + (istBegehung ? '' : ('<td>' + (istPZ ? escapeHtml(g.seriennummer||'-') : ausstZelle(g.seriennummer)) + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
+        html += '<tr' + zeilenStil + '><td class="pb-pos">' + geraeteNummerWert(g) + '</td><td>' + (istBegehung ? escapeHtml(g.typ || 'Brandschutzbegehung') : escapeHtml(g.typ || '-')) + bioHinweisHtml(g) + '</td><td>' + (istBegehung ? escapeHtml(g.standort || (k && k.objekt ? String(k.objekt).replace(/^\s*objekt\s*:?\s*/i, '') : '') || 'ganzes Objekt') : (istPZ ? escapeHtml(g.standort||'-') : ausstZelle(g.standort))) + '</td>' + (istBegehung ? '' : ('<td>' + (istPZ ? escapeHtml(g.seriennummer||'-') : ausstZelle(g.seriennummer)) + '</td>')) + mittelspalten + '<td style="text-align:center;"><span style="display:inline-block; width:16px; height:16px; border:1.5px solid #333;"></span></td></tr>';
       });
       html += '</tbody></table>';
       if(zeigtInnenrevision) html += irLegendeHtml();
@@ -10099,8 +10380,9 @@ function customConfirm(nachricht, aufJa){
   document.getElementById('cNo').onclick = closeModal;
 }
 
+// Lager = Firmensitz Ketzergasse (299), Perchtoldsdorf
 function istLagerStandort(standort){
-  return /lager/i.test(standort || '');
+  return /lager|ketzergasse/i.test(standort || '');
 }
 
 function kategorieFarbe(kat){
@@ -11304,6 +11586,7 @@ function modalFuellhistorieListe(kundeId){
     html += '<div class="flKacheln">' + kachel('', anz.gesamt, 'Alle', 'alle') + kachel('angeschlossen', anz.angeschlossen, 'Angeschlossen', 'gruen') + kachel('voll', anz.befuellt + anz.lager, 'Voll / Lager', 'blau') + kachel('leer', anz.leer, 'Leer', 'rot') + '</div>';
 
     html += '<div style="display:flex; gap:8px; margin:12px 0;">';
+    html += '<button type="button" class="btn small" id="fuellStandzeitBtn" style="flex:1; background:#1e8449;">&#128202; Standzeiten</button>';
     html += '<button type="button" class="btn small" id="fuellUebersichtBtn" style="flex:1;">Übersicht drucken</button>';
     html += '<button type="button" class="btn small secondary" id="fuellDruckenBtn" style="flex:1;">Mengen drucken</button>';
     html += '</div>';
@@ -11356,6 +11639,7 @@ function modalFuellhistorieListe(kundeId){
     document.querySelectorAll('[data-zfilter]').forEach(function(b){
       b.onclick = function(){ zustandFilter = b.getAttribute('data-zfilter') || ''; neuZeichnen(suchtext, katFilter); };
     });
+    document.getElementById('fuellStandzeitBtn').onclick = function(){ modalPzStatistik(kundeId || null); };
     document.getElementById('fuellUebersichtBtn').onclick = function(){
       bsvDruckenOderTeilen(buildFlaschenUebersichtHtml(gefiltert, katFilter), 'Flaschen-Uebersicht.pdf');
     };
@@ -19028,8 +19312,9 @@ function bindDynamic(){
     zischBemerkungUebernehmen(g);
     g.leer = !g.leer;
     g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
+    if(g.leer) g.standort = 'Lager';
     dbPut('geraete', g, function(){
-      loadAll(function(){ render(); toast(g.leer ? 'Als leer markiert' : 'Wieder als voll markiert'); });
+      loadAll(function(){ render(); toast(g.leer ? 'Leer - zurück ins Lager' : 'Wieder als voll markiert'); });
     });
   };
   var btnReparatur = document.getElementById('btnReparatur');
@@ -19380,6 +19665,7 @@ function bindDynamic(){
     };
   });
 
+  pzAktionenBinden();
   document.querySelectorAll('[data-nurAbfuellBtn]').forEach(function(el){
     el.onclick = function(e){
       e.stopPropagation();
@@ -19397,8 +19683,9 @@ function bindDynamic(){
       if(!g) return;
       g.leer = !g.leer;
       g.leerSeit = g.leer ? jetztLokalDatumZeit() : null;
+      if(g.leer) g.standort = 'Lager';
       dbPut('geraete', g, function(){
-        loadAll(function(){ render(); toast(g.leer ? 'Als leer markiert' : 'Wieder als voll markiert'); });
+        loadAll(function(){ render(); toast(g.leer ? 'Leer - zurück ins Lager' : 'Wieder als voll markiert'); });
       });
     };
   });
