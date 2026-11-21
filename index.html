@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 16:20';
-var APP_VERSION_TEXT = '21.11. 16:20';
+var APP_VERSION = '2026-11-21 16:45';
+var APP_VERSION_TEXT = '21.11. 16:45';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7310,6 +7310,12 @@ function renderKundeDetail(kundeId){
         if(katZaehler1[katKey] === 1) html += pzUebersichtHtml(katKey, geraeteSortiert.filter(function(x){ return (x.kategorie || 'Feuerlöscher').trim() === katKey && !x.ausgeschieden; }));
         return;
       }
+      if(katKey === 'RWA-Anlage' && !g.ausgeschieden){
+        var rwaKey = rwaPaketSchluessel(g);
+        var rwaTeile = geraeteSortiert.filter(function(x){ return (x.kategorie || '').trim() === 'RWA-Anlage' && !x.ausgeschieden && rwaPaketSchluessel(x) === rwaKey; });
+        if(rwaTeile[0] === g) html += rwaPaketHtml(kundeId, rwaKey, rwaTeile);
+        if(!(state.rwaPaketOffen && state.rwaPaketOffen[kundeId + '|' + rwaKey])) return;
+      }
       var st = istFuellKategorie(katKey) ? statusFuerAbfuellAlter(g.abfuelldatum, g.leer) : statusForDate(g.naechstePruefung);
       var bj = (istInnenrevisionspflichtig(g) ? baujahrStatus(g.baujahr, g.letzteInnenrevision, g) : null);
       html += '<div class="device-item" data-gid="' + g.id + '" style="flex-direction:column; align-items:stretch;">';
@@ -7413,6 +7419,122 @@ function renderKundeDetail(kundeId){
   html += '<button class="btn block secondary" style="margin-top:10px;" id="qrKundeBtn">QR-Code für Kunde anzeigen</button>';
 
   return html;
+}
+
+// ---------- RWA-Anlage: alle Bauteile einer Stiege als ein Paket pruefen ----------
+function rwaPaketSchluessel(g){
+  return rwaGruppeAusStandort(g.standort) || String(g.standort || '').trim() || 'RWA-Anlage';
+}
+function rwaPaketHtml(kundeId, key, teile){
+  var offen = !!(state.rwaPaketOffen && state.rwaPaketOffen[kundeId + '|' + key]);
+  var naechste = '', letzte = '', alleHeute = true, repAnz = 0;
+  for(var i = 0; i < teile.length; i++){
+    var t = teile[i];
+    if(t.naechstePruefung && (!naechste || t.naechstePruefung < naechste)) naechste = t.naechstePruefung;
+    if(t.letztePruefung && (!letzte || t.letztePruefung > letzte)) letzte = t.letztePruefung;
+    if(!letzteErledigungInnerhalb24h(t.id)) alleHeute = false;
+    var lp = letztePruefungFuerGeraet(t.id);
+    if(lp && lp.ergebnis === 'Reparatur nötig') repAnz++;
+  }
+  var st = statusForDate(naechste);
+  var heute = new Date();
+  var heuteIso = heute.getFullYear() + '-' + ('0' + (heute.getMonth() + 1)).slice(-2) + '-' + ('0' + heute.getDate()).slice(-2);
+  var datumWert = (state.schnellDatumWerte && state.schnellDatumWerte['rwa|' + key]) || heuteIso;
+  var keyAttr = escapeHtml(key);
+  var h = '';
+  h += '<div class="device-item rwa-paket" style="flex-direction:column; align-items:stretch; border-left:5px solid #c23f12; background:#fff8f4;">';
+  h += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
+  h += '<div style="flex:1; min-width:0;"><strong>&#128293; RWA-Anlage &middot; ' + escapeHtml(key) + '</strong><br><span class="meta">' + teile.length + ' Bauteil' + (teile.length === 1 ? '' : 'e') + ' (Zentrale, Notstrom, Taster, Öffnungen &hellip;) als ein Paket</span></div>';
+  h += '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">';
+  h += '<span class="badge ' + st.cls + '">' + st.label + '</span>';
+  if(repAnz) h += '<span class="badge soon">' + repAnz + '&times; Reparatur</span>';
+  h += '</div></div>';
+  if(alleHeute) h += '<div class="meta" style="margin-top:6px; color:var(--ok); font-weight:600;">&#10003; Ganze Anlage bereits geprüft</div>';
+  if(letzte || naechste) h += '<div class="meta" style="margin-top:6px; font-size:12px;">' + (letzte ? 'Zuletzt geprüft: <b>' + fmtDate(letzte) + '</b>' : '') + (letzte && naechste ? ' &middot; ' : '') + (naechste ? 'Nächste: <b>' + fmtDate(naechste) + '</b>' : '') + '</div>';
+  h += '<div style="display:flex; align-items:center; gap:6px; margin-top:6px;">';
+  h += '<label style="font-size:11px; color:var(--muted); flex-shrink:0;">Prüfung eintragen am</label>';
+  h += '<input type="date" class="rwaPaketDatum" data-rwakey="' + keyAttr + '" value="' + datumWert + '" style="flex:1; min-width:0; padding:4px 6px; font-size:12px; box-sizing:border-box;">';
+  h += '</div>';
+  h += '<div style="display:flex; gap:6px; margin-top:8px;">';
+  h += '<button type="button" class="btn small" style="flex:1; background:var(--ok); color:#fff;" data-rwapaket="' + keyAttr + '" data-erg="in_ordnung">Alles in Ordnung</button>';
+  h += '<button type="button" class="btn small secondary" style="flex:1;" data-rwapaket="' + keyAttr + '" data-erg="reparatur">Mängel / Reparatur</button>';
+  h += '</div>';
+  h += '<button type="button" class="btn small secondary" style="margin-top:6px; width:100%;" data-rwapaketauf="' + keyAttr + '">' + (offen ? '&#9650; Bauteile ausblenden' : '&#9660; Bauteile einzeln anzeigen (' + teile.length + ')') + '</button>';
+  h += '</div>';
+  return h;
+}
+function rwaPaketTeile(kundeId, key){
+  return state.geraete.filter(function(x){ return x.kundeId === kundeId && (x.kategorie || '').trim() === 'RWA-Anlage' && !x.ausgeschieden && rwaPaketSchluessel(x) === key; })
+    .sort(function(a, b){ return geraeteSortierVergleich(a, b); });
+}
+// Speichert das Ergebnis fuer mehrere Bauteile nacheinander, am Ende einmal neu laden
+function rwaPaketSpeichern(teile, reparaturIds, datumKurz, fertig){
+  var heuteKurz = new Date().toISOString().substring(0, 10);
+  var rueck = datumKurz && datumKurz !== heuteKurz;
+  var i = 0;
+  function weiter(){
+    if(i >= teile.length){ fertig(); return; }
+    var g = teile[i++];
+    var istRep = reparaturIds.indexOf(g.id) !== -1;
+    var jetztIso = (datumKurz || heuteKurz) + 'T' + (rueck ? '12:00:00' : new Date().toISOString().substring(11));
+    var p = state.pruefungen.filter(function(x){ return x.geraetId === g.id && !x.erledigt; })[0];
+    if(!p) p = { id: uid(), kundeId: g.kundeId, geraetId: g.id, typ: g.typ, datum: jetztIso.substring(0, 10), erledigt: false };
+    p.erledigt = true;
+    p.erledigtAm = jetztIso;
+    p.erledigtVon = (state.rolle === 'chef' ? 'Chef' : (state.mitarbeiterName || 'Mitarbeiter'));
+    p.bericht = true;
+    p.ergebnis = istRep ? 'Reparatur nötig' : 'In Ordnung';
+    p.rwaPaket = true;
+    dbPut('pruefungen', p, function(){
+      if(istRep){ weiter(); return; }
+      g.letztePruefung = jetztIso.substring(0, 10);
+      g.naechstePruefung = naechsterTerminBeiAbschluss(g, jetztIso);
+      dbPut('geraete', g, function(){ neuenOffenenTerminAnlegen(g, weiter); });
+    });
+  }
+  weiter();
+}
+function rwaPaketPruefen(kundeId, key, erg){
+  var teile = rwaPaketTeile(kundeId, key);
+  if(!teile.length){ toast('Keine Bauteile gefunden'); return; }
+  var dEl = null;
+  document.querySelectorAll('.rwaPaketDatum').forEach(function(x){ if(x.getAttribute('data-rwakey') === key) dEl = x; });
+  var datum = dEl ? dEl.value : '';
+  if(state.schnellDatumWerte) delete state.schnellDatumWerte['rwa|' + key];
+  var abschluss = function(repIds){
+    rwaPaketSpeichern(teile, repIds, datum, function(){
+      loadAll(function(){
+        render();
+        toast('RWA-Anlage ' + key + ' gespeichert: ' + (repIds.length ? (teile.length - repIds.length) + ' in Ordnung, ' + repIds.length + ' Reparatur' : 'alle ' + teile.length + ' Bauteile in Ordnung'));
+      });
+    });
+  };
+  if(erg === 'in_ordnung'){
+    var schon = teile.filter(function(t){ return letzteErledigungInnerhalb24h(t.id); }).length;
+    if(schon === teile.length){
+      customConfirm('Die RWA-Anlage ' + escapeHtml(key) + ' wurde bereits geprüft. Trotzdem nochmal speichern?', function(){ abschluss([]); });
+      return;
+    }
+    abschluss([]);
+    return;
+  }
+  // Maengel: Bauteile mit Reparaturbedarf ankreuzen, der Rest ist in Ordnung
+  var m = '<div class="modal-head"><h3>RWA-Anlage &middot; ' + escapeHtml(key) + '</h3></div>';
+  m += '<div class="meta" style="margin-bottom:10px;">Welche Bauteile brauchen eine Reparatur? Alle anderen werden als &bdquo;In Ordnung&ldquo; gespeichert.</div>';
+  teile.forEach(function(t){
+    m += '<label style="display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line);"><input type="checkbox" class="rwaRepCb" value="' + t.id + '" style="width:20px; height:20px;"><span><b>Nr. ' + escapeHtml(String(t.nr || '')) + ' &middot; ' + escapeHtml(t.typ || '') + '</b><br><span class="meta">' + escapeHtml(t.standort || '') + '</span></span></label>';
+  });
+  m += '<button class="btn block" id="rwaRepOk" style="margin-top:14px;">Speichern</button>';
+  m += '<button class="btn block secondary" id="rwaRepAbbr" style="margin-top:8px;">Abbrechen</button>';
+  openModal(m);
+  document.getElementById('rwaRepAbbr').onclick = closeModal;
+  document.getElementById('rwaRepOk').onclick = function(){
+    var ids = [];
+    document.querySelectorAll('.rwaRepCb').forEach(function(c){ if(c.checked) ids.push(c.value); });
+    if(!ids.length){ toast('Bitte mindestens ein Bauteil ankreuzen'); return; }
+    closeModal();
+    abschluss(ids);
+  };
 }
 
 // ---------- Perchtl Zisch / CO2: kompakte Flaschen-Karte beim Kunden ----------
@@ -19670,6 +19792,7 @@ function bindDynamic(){
   if(nummernReparieren) nummernReparieren.onclick = function(){ nummernNeuOrdnen(state.activeKundeId); };
 
   document.querySelectorAll('.device-item').forEach(function(d){
+    if(!d.getAttribute('data-gid')) return;
     d.onclick = function(){ modalGeraetBearbeiten(d.getAttribute('data-gid')); };
   });
 
@@ -19811,6 +19934,29 @@ function bindDynamic(){
       var datumOverride = datumInput ? datumInput.value : null;
       if(state.schnellDatumWerte) delete state.schnellDatumWerte[gid];
       schnellErgebnisSetzen(gid, erg, datumOverride);
+    };
+  });
+
+  document.querySelectorAll('[data-rwapaket]').forEach(function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      rwaPaketPruefen(state.activeKundeId, b.getAttribute('data-rwapaket'), b.getAttribute('data-erg'));
+    };
+  });
+  document.querySelectorAll('[data-rwapaketauf]').forEach(function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      if(!state.rwaPaketOffen) state.rwaPaketOffen = {};
+      var k = state.activeKundeId + '|' + b.getAttribute('data-rwapaketauf');
+      state.rwaPaketOffen[k] = !state.rwaPaketOffen[k];
+      render();
+    };
+  });
+  document.querySelectorAll('.rwaPaketDatum').forEach(function(inp){
+    inp.onclick = function(e){ e.stopPropagation(); };
+    inp.onchange = function(){
+      if(!state.schnellDatumWerte) state.schnellDatumWerte = {};
+      state.schnellDatumWerte['rwa|' + inp.getAttribute('data-rwakey')] = inp.value;
     };
   });
 
