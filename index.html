@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-22 09:20';
-var APP_VERSION_TEXT = '22.11. 09:20';
+var APP_VERSION = '2026-11-22 09:35';
+var APP_VERSION_TEXT = '22.11. 09:35';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7663,8 +7663,21 @@ function pzZyklusText(g){
 }
 // Inhalt eines Keg-Behaelters (Perchtl Zisch): Sodawasser oder Bier
 function pzInhalt(g){
-  if(g.inhalt) return g.inhalt;
-  return /bier/i.test(g.typ || '') ? 'Bier' : 'Sodawasser';
+  // Der Name gewinnt: steht "Bier" oder "Soda" im Typ, gilt das
+  var t = String(g.typ || '');
+  if(/bier/i.test(t)) return 'Bier';
+  if(/soda/i.test(t)) return 'Sodawasser';
+  return g.inhalt || 'Sodawasser';
+}
+// Inhalt wechseln und den Namen gleich mit umbenennen
+function pzInhaltWechseln(g){
+  var neu = pzInhalt(g) === 'Bier' ? 'Sodawasser' : 'Bier';
+  var t = String(g.typ || '');
+  if(neu === 'Bier') t = /sodawasser|soda/i.test(t) ? t.replace(/sodawasser|soda/i, 'Bier') : ('Bier ' + t).trim();
+  else t = /bier/i.test(t) ? t.replace(/bier/i, 'Sodawasser') : ('Sodawasser ' + t).trim();
+  g.typ = t;
+  g.inhalt = neu;
+  return neu;
 }
 // CO2-Flaschengroesse vereinheitlichen: 425 g, 600 g, 2 kg, 6 kg, 10 kg
 function pzCo2Groesse(g){
@@ -7970,7 +7983,7 @@ function modalPzMehr(gid){
     speichern('Desinfektion eingetragen');
   };
   if((el = document.getElementById('pmInhalt'))) el.onclick = function(){
-    g.inhalt = pzInhalt(g) === 'Bier' ? 'Sodawasser' : 'Bier';
+    pzInhaltWechseln(g);
     var zl = g.zyklen || [];
     if(zl.length && !zl[zl.length - 1].leer) zl[zl.length - 1].inhalt = g.inhalt;
     speichern('Inhalt: ' + g.inhalt);
@@ -8058,7 +8071,7 @@ function pzAktionenBinden(){
       e.stopPropagation();
       var g = geraetById(el.getAttribute('data-pzinhalt'));
       if(!g) return;
-      g.inhalt = pzInhalt(g) === 'Bier' ? 'Sodawasser' : 'Bier';
+      pzInhaltWechseln(g);
       // laufende Runde bekommt den neuen Inhalt mit
       var zl = g.zyklen || [];
       if(zl.length && !zl[zl.length - 1].leer) zl[zl.length - 1].inhalt = g.inhalt;
