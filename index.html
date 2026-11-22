@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-22 09:35';
-var APP_VERSION_TEXT = '22.11. 09:35';
+var APP_VERSION = '2026-11-22 22:45';
+var APP_VERSION_TEXT = '22.11. 22:45';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -12796,7 +12796,15 @@ function modalRwaSet(kundeId){
   var heute = new Date().toISOString().substring(0, 10);
   var h = '<div class="modal-head"><h3>RWA-Anlage anlegen</h3><button class="close" id="mClose">&times;</button></div>';
   h += '<div class="meta">Legt die Bauteile für jede Stiege auf einmal an (wie im RWA-Prüfbericht: Pos. 1&ndash;6 Stiege 1, dann dasselbe für Stiege 2 usw.).</div>';
-  h += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Anzahl Stiegen</label><input type="number" inputmode="numeric" id="rsAnz" value="2" min="1" max="20"></div>';
+  // naechste freie Stiegen-Nummer vorschlagen (gibt es Stiege 1 schon -> 2)
+  var startVorschlag = 1;
+  state.geraete.forEach(function(g){
+    if(g.kundeId !== kundeId || g.ausgeschieden || (g.kategorie || '').trim() !== 'RWA-Anlage') return;
+    var m = String(g.standort || '').match(/(\d+)/);
+    if(m && parseInt(m[1], 10) >= startVorschlag) startVorschlag = parseInt(m[1], 10) + 1;
+  });
+  h += '<div style="display:flex; gap:8px;"><div style="flex:1;"><label>Anzahl Stiegen</label><input type="number" inputmode="numeric" id="rsAnz" value="1" min="1" max="20"></div>';
+  h += '<div style="flex:1;"><label>Beginnt bei Nr.</label><input type="number" inputmode="numeric" id="rsStart" value="' + startVorschlag + '" min="1" max="99"></div>';
   h += '<div style="flex:1.3;"><label>Bezeichnung</label><input type="text" id="rsName" value="Stiege" autocomplete="off"></div></div>';
   h += '<label>Bauteile je Stiege</label>';
   RWA_SET_TEILE.forEach(function(t){
@@ -12815,8 +12823,9 @@ function modalRwaSet(kundeId){
     var gewaehlt = {};
     document.querySelectorAll('.rsTeil').forEach(function(cb){ if(cb.checked) gewaehlt[cb.getAttribute('data-key')] = true; });
     var zentraleTyp = document.getElementById('rsZentrale').value.trim() || 'Steuerzentrale elektrisch lt. TRVB 111';
+    var start = Math.max(1, parseInt(document.getElementById('rsStart').value, 10) || 1);
     var out = [];
-    for(var st = 1; st <= anz; st++){
+    for(var st = start; st < start + anz; st++){
       RWA_SET_TEILE.forEach(function(t){
         if(!gewaehlt[t.key]) return;
         out.push({ typ: t.key === 'zentrale' ? zentraleTyp : t.typ, standort: name + ' ' + st + t.zusatz, notstrom: t.key === 'notstrom' });
@@ -12826,14 +12835,37 @@ function modalRwaSet(kundeId){
   };
   var vorschau = function(){
     var l = liste();
-    var vorhanden = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && ((g.kategorie || '').trim()) === 'RWA-Anlage'; }).length;
-    document.getElementById('rsVorschau').innerHTML = '<b>' + l.length + ' Bauteile</b> werden angelegt' + (vorhanden ? ' &middot; <span style="color:#c23f12;">Achtung: beim Kunden gibt es schon ' + vorhanden + ' RWA-Geräte</span>' : '') + '<br>' + l.slice(0, 8).map(function(x, i){ return (i + 1) + '. ' + escapeHtml(x.typ) + ' &ndash; ' + escapeHtml(x.standort); }).join('<br>') + (l.length > 8 ? '<br>&hellip;' : '');
+    var vorhListe = state.geraete.filter(function(g){ return g.kundeId === kundeId && !g.ausgeschieden && ((g.kategorie || '').trim()) === 'RWA-Anlage'; });
+    var vorhanden = vorhListe.length;
+    var anlagenNamen = {};
+    vorhListe.forEach(function(g){ anlagenNamen[rwaPaketSchluessel(g)] = true; });
+    var anlagenTxt = Object.keys(anlagenNamen).join(', ');
+    var anlagenAnz = Object.keys(anlagenNamen).length;
+    document.getElementById('rsVorschau').innerHTML = '<b>' + l.length + ' Bauteile</b> werden angelegt' + (vorhanden ? ' &middot; <span style="color:#c23f12;">Achtung: beim Kunden gibt es schon ' + (anlagenAnz === 1 ? 'eine RWA-Anlage' : anlagenAnz + ' RWA-Anlagen') + ' (' + escapeHtml(anlagenTxt) + ', zusammen ' + vorhanden + (vorhanden === 1 ? ' Bauteil' : ' Bauteile') + ')</span>' : '') + '<div style="margin-top:8px; font-weight:700; color:var(--text);">Bauteile &ndash; Name und Standort kannst du hier noch ändern:</div>';
+    var z = '';
+    l.forEach(function(x, i){
+      z += '<div style="border:1px solid var(--line); border-radius:10px; padding:6px 8px; margin-top:6px; background:#fff;">';
+      z += '<div style="display:flex; align-items:center; gap:6px;"><input type="checkbox" class="rsZeileAn" data-i="' + i + '" checked style="width:20px; height:20px; flex-shrink:0;"><b style="flex-shrink:0;">' + (i + 1) + '.</b><input type="text" class="rsZeileTyp" data-i="' + i + '" value="' + escapeHtml(x.typ) + '" autocomplete="off" style="flex:1; min-width:0; margin:0; padding:6px 8px; font-size:14px;"></div>';
+      z += '<input type="text" class="rsZeileOrt" data-i="' + i + '" value="' + escapeHtml(x.standort) + '" autocomplete="off" placeholder="Standort" style="margin:6px 0 0 0; padding:6px 8px; font-size:14px;">';
+      z += '</div>';
+    });
+    document.getElementById('rsVorschau').innerHTML += z;
   };
-  ['rsAnz', 'rsName', 'rsZentrale'].forEach(function(id){ document.getElementById(id).oninput = vorschau; });
+  ['rsAnz', 'rsStart', 'rsName', 'rsZentrale'].forEach(function(id){ document.getElementById(id).oninput = vorschau; });
   document.querySelectorAll('.rsTeil').forEach(function(cb){ cb.onchange = vorschau; });
   vorschau();
   document.getElementById('rsAnlegen').onclick = function(){
+    // Werte aus der bearbeitbaren Liste uebernehmen
     var l = liste();
+    l.forEach(function(x, i){
+      var t = document.querySelector('.rsZeileTyp[data-i="' + i + '"]');
+      var o = document.querySelector('.rsZeileOrt[data-i="' + i + '"]');
+      var an = document.querySelector('.rsZeileAn[data-i="' + i + '"]');
+      if(t && t.value.trim()) x.typ = t.value.trim();
+      if(o) x.standort = o.value.trim();
+      if(an && !an.checked) x.weg = true;
+    });
+    l = l.filter(function(x){ return !x.weg; });
     if(!l.length){ toast('Keine Bauteile ausgewählt'); return; }
     var btn = document.getElementById('rsAnlegen');
     btn.disabled = true; btn.textContent = 'Legt an ...';
@@ -16891,7 +16923,7 @@ function modalSammelbericht(kundeId){
   var einzelErgebnisse = {};
   geraeteSortiert.forEach(function(g){
     if(((g.kategorie || 'Feuerlöscher').trim()) === 'RWA-Anlage'){
-      einzelErgebnisse[g.id] = dienstleistungenFuerGeraet('RWA-Anlage', g.typ).map(function(text){ return { text: text, ok: true }; });
+      einzelErgebnisse[g.id] = dienstleistungenFuerGeraet('RWA-Anlage', g.typ).map(function(text){ return { text: text, ok: true, stufe: 'ok', notiz: '' }; });
     }
   });
 
@@ -16928,7 +16960,8 @@ function modalSammelbericht(kundeId){
         html += '<div style="flex:1;"><label style="margin-top:6px;">Baujahr</label><input type="text" inputmode="numeric" id="sbRwaBj_' + g.id + '" value="' + escapeHtml(g.baujahr ? String(g.baujahr) : '') + '" placeholder="z.B. 2025" autocomplete="off"></div></div>';
         html += '<div style="margin-top:10px;">';
         einzelErgebnisse[g.id].forEach(function(d, dIdx){
-          html += '<div class="pos-dienst" style="padding:6px 0;"><span class="dname" style="flex:1; padding-right:8px;">' + escapeHtml(d.text) + '</span><button type="button" class="btn small sbDienstBtn" data-gid="' + g.id + '" data-didx="' + dIdx + '" style="background:var(--ok); min-width:78px;">OK</button></div>';
+          html += '<div style="padding:6px 0; border-bottom:1px solid var(--line);"><div class="pos-dienst" style="padding:0;"><span class="dname" style="flex:1; padding-right:8px;">' + escapeHtml(d.text) + '</span><button type="button" class="btn small sbDienstBtn" data-gid="' + g.id + '" data-didx="' + dIdx + '" style="background:var(--ok); color:#fff; min-width:96px;">OK</button></div>';
+          html += '<input type="text" class="sbDienstNotiz" data-gid="' + g.id + '" data-didx="' + dIdx + '" placeholder="Was ist los? (z.B. Einschlagscheibe gebrochen)" autocomplete="off" style="display:none; margin-top:6px; font-size:14px;"></div>';
         });
         html += '</div>';
         html += '<label style="margin-top:6px;">Prüfdatum</label><input type="date" id="sbPruefdatum_' + g.id + '" value="' + heuteLokalKurz() + '">';
@@ -17016,9 +17049,21 @@ function modalSammelbericht(kundeId){
       var gid = b.getAttribute('data-gid');
       var dIdx = parseInt(b.getAttribute('data-didx'), 10);
       var d = einzelErgebnisse[gid][dIdx];
-      d.ok = !d.ok;
-      b.textContent = d.ok ? 'OK' : 'nicht OK';
-      b.style.background = d.ok ? 'var(--ok)' : '#c23f12';
+      // OK -> Mangel (gelb) -> schwerer Mangel (rot) -> OK
+      d.stufe = d.stufe === 'mangel' ? 'schwer' : (d.stufe === 'schwer' ? 'ok' : 'mangel');
+      d.ok = d.stufe === 'ok';
+      b.textContent = d.stufe === 'ok' ? 'OK' : (d.stufe === 'mangel' ? 'Mangel' : 'schwerer Mangel');
+      b.style.background = d.stufe === 'ok' ? 'var(--ok)' : (d.stufe === 'mangel' ? '#f9d71c' : '#c62828');
+      b.style.color = d.stufe === 'mangel' ? '#3a2f00' : '#fff';
+      var inp = null;
+      document.querySelectorAll('.sbDienstNotiz').forEach(function(x){ if(x.getAttribute('data-gid') === gid && x.getAttribute('data-didx') === String(dIdx)) inp = x; });
+      if(inp){ inp.style.display = d.ok ? 'none' : 'block'; if(!d.ok) inp.focus(); }
+    };
+  });
+  document.querySelectorAll('.sbDienstNotiz').forEach(function(inp){
+    inp.oninput = function(){
+      var d = einzelErgebnisse[inp.getAttribute('data-gid')][parseInt(inp.getAttribute('data-didx'), 10)];
+      d.notiz = inp.value;
     };
   });
 
@@ -17231,7 +17276,7 @@ function modalSammelbericht(kundeId){
             letzteInnenrevision: g.letzteInnenrevision || null,
             akkuTausch: akkuVal || null,
             maengel: g.maengel || null,
-            dienstErgebnisse: istRWA ? einzelErgebnisse[g.id].map(function(d){ return { text: d.text, ok: d.ok }; }) : null,
+            dienstErgebnisse: istRWA ? einzelErgebnisse[g.id].map(function(d){ return { text: d.text, ok: d.ok, stufe: d.stufe || (d.ok ? 'ok' : 'mangel'), notiz: d.ok ? '' : String(d.notiz || '').trim() }; }) : null,
             ersatzteile: (istRWA && document.getElementById('sbRwaErsatz_' + g.id)) ? document.getElementById('sbRwaErsatz_' + g.id).value.split('\n').map(function(z){ return z.trim(); }).filter(function(z){ return z; }) : null
           });
           idx++;
@@ -17306,7 +17351,7 @@ function buildRwaBerichtHtml(sb, k){
   var kopf = '<table style="margin-top:12px; font-weight:700; border-bottom:1.5px solid #000;"><tr><td style="width:30px;">Pos</td><td>Gerät</td><td style="width:150px;">Gerätestandort</td><td style="width:100px;">Seriennummer</td><td style="width:55px;">Baujahr</td><td style="width:75px;">Prüfdatum</td><td style="width:85px;">nä. Prüfung</td><td style="width:140px;">Bemerkungen</td></tr></table>';
   h += kopf;
   var gruppeAlt = null;
-  var mangelGesamt = false;
+  var mangelGesamt = false, schwerGesamt = false;
   (sb.geraeteSnapshot || []).forEach(function(g, i){
     var gr = rwaGruppeAusStandort(g.standort);
     if(gr && gr !== gruppeAlt){ h += '<div style="font-size:13px; font-weight:700; margin:10px 0 4px 0;">' + escapeHtml(gr) + '</div>'; gruppeAlt = gr; }
@@ -17314,18 +17359,22 @@ function buildRwaBerichtHtml(sb, k){
     h += '<div class="rblock"><table>';
     h += '<tr class="rk"><td style="width:30px; text-align:center;">' + (i + 1) + '</td><td>' + escapeHtml(g.typ || 'RWA-Bauteil') + '</td><td style="width:150px;">' + escapeHtml(g.standort || '') + '</td><td style="width:100px;">' + escapeHtml(g.seriennummer || '') + '</td><td style="width:55px;">' + escapeHtml(g.baujahr ? String(g.baujahr) : '') + '</td><td style="width:75px;">' + (g.letztePruefung ? fmtDate(g.letztePruefung) : fmtDate(sb.datum)) + '</td><td style="width:85px;">' + escapeHtml(monatJahr(g.naechstePruefung)) + '</td><td style="width:140px;">' + escapeHtml(g.ergebnis === 'Ausscheiden' ? 'ausgeschieden' : '') + '</td></tr>';
     punkte.forEach(function(d){
-      if(!d.ok) mangelGesamt = true;
-      h += '<tr class="rd"><td></td><td colspan="6" style="padding:0;"><table><tr><td style="background:#d6eef8; width:110px;">Dienstleistung:</td><td>' + escapeHtml(d.text) + '</td></tr></table></td><td style="background:' + (d.ok ? '#92e39a' : '#f28b82') + '; font-weight:700; text-align:right; width:110px;">Ergebnis: ' + (d.ok ? 'i.O.' : 'n.i.O.') + '</td></tr>';
+      var stufe = d.stufe || (d.ok === false ? 'mangel' : 'ok');
+      if(stufe !== 'ok') mangelGesamt = true;
+      if(stufe === 'schwer') schwerGesamt = true;
+      var ergFarbe = stufe === 'ok' ? '#92e39a' : (stufe === 'mangel' ? '#fff176' : '#f28b82');
+      var ergText = stufe === 'ok' ? 'i.O.' : (stufe === 'mangel' ? 'Mangel' : 'schw. Mangel');
+      h += '<tr class="rd"><td></td><td colspan="6" style="padding:0;"><table><tr><td style="background:' + (stufe === 'ok' ? '#d6eef8' : ergFarbe) + '; width:110px;">Dienstleistung:</td><td>' + escapeHtml(d.text) + (d.notiz ? '<div style="font-weight:700; color:' + (stufe === 'schwer' ? '#b71c1c' : '#7a5c00') + ';">&rarr; ' + escapeHtml(d.notiz) + '</div>' : '') + '</td></tr></table></td><td style="background:' + ergFarbe + '; font-weight:700; text-align:right; width:110px;">Ergebnis: ' + ergText + '</td></tr>';
     });
     (g.ersatzteile || []).forEach(function(et){
       var me = String(et).match(/^(\d+)\s*(?:x|Stk\.?|St\.?)?\s+(.*)$/i);
-      h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:#fff59d; width:110px;">Ersatzteil:</td><td style="width:30px;">' + escapeHtml(me ? me[1] : '1') + '</td><td>' + escapeHtml(me ? me[2] : et) + '</td></tr></table></td></tr>';
+      h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:#d6eef8; width:110px;">Ersatzteil:</td><td style="width:30px;">' + escapeHtml(me ? me[1] : '1') + '</td><td>' + escapeHtml(me ? me[2] : et) + '</td></tr></table></td></tr>';
     });
     if(g.akkuTausch){
-      h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:#fff59d; width:110px;">Ersatzteil:</td><td>1 &nbsp; Akku getauscht am ' + fmtDate(g.akkuTausch) + '</td></tr></table></td></tr>';
+      h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:#d6eef8; width:110px;">Ersatzteil:</td><td>1 &nbsp; Akku getauscht am ' + fmtDate(g.akkuTausch) + '</td></tr></table></td></tr>';
     }
     if(g.notiz || g.maengel){
-      h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:#ffe0b2; width:110px;">Bemerkung:</td><td>' + escapeHtml([g.maengel, g.notiz].filter(function(x){ return x; }).join(' / ')) + '</td></tr></table></td></tr>';
+      h += '<tr class="rd"><td></td><td colspan="7" style="padding:0;"><table><tr><td style="background:' + (g.maengel ? '#fff176' : '#d6eef8') + '; width:110px;">Bemerkung:</td><td>' + escapeHtml([g.maengel, g.notiz].filter(function(x){ return x; }).join(' / ')) + '</td></tr></table></td></tr>';
     }
     h += '</table></div>';
   });
@@ -17336,12 +17385,12 @@ function buildRwaBerichtHtml(sb, k){
     (sb.geraeteSnapshot || []).forEach(function(g){ if(g.naechstePruefung && String(g.naechstePruefung) > naechsteMax) naechsteMax = String(g.naechstePruefung); });
     h += '<div class="rblock"><table>';
     h += '<tr class="rk"><td style="width:30px; text-align:center;">' + (anzPos + 1) + '</td><td>Wartung RWA/DBA/BRV</td><td style="width:150px;"></td><td style="width:100px;"></td><td style="width:55px;"></td><td style="width:75px;">' + fmtDate(sb.datum) + '</td><td style="width:85px;">' + escapeHtml(monatJahr(naechsteMax)) + '</td><td style="width:140px;"></td></tr>';
-    h += '<tr class="rd"><td></td><td colspan="6" style="padding:0;"><table><tr><td style="background:#d6eef8; width:110px;">Dienstleistung:</td><td>Wartung RWA/DBA/BRV</td></tr></table></td><td style="background:' + (mangelGesamt ? '#f28b82' : '#92e39a') + '; font-weight:700; text-align:right; width:110px;">Ergebnis: ' + (mangelGesamt ? 'n.i.O.' : 'i.O.') + '</td></tr>';
+    h += '<tr class="rd"><td></td><td colspan="6" style="padding:0;"><table><tr><td style="background:#d6eef8; width:110px;">Dienstleistung:</td><td>Wartung RWA/DBA/BRV</td></tr></table></td><td style="background:' + (schwerGesamt ? '#f28b82' : (mangelGesamt ? '#fff176' : '#92e39a')) + '; font-weight:700; text-align:right; width:110px;">Ergebnis: ' + (schwerGesamt ? 'schw. Mangel' : (mangelGesamt ? 'Mangel' : 'i.O.')) + '</td></tr>';
     h += '</table></div>';
   }
   // Bemerkungen + Unterschriften
   h += '<div class="rblock" style="margin-top:16px;"><div style="font-weight:700;">allgemeine Bemerkungen</div><div style="min-height:28px; border-bottom:1px solid #999; padding:4px 0;">' + escapeHtml(sb.notiz || sb.bemerkung || '') + '</div>';
-  h += '<div style="margin-top:6px; font-weight:700; color:' + (mangelGesamt ? '#c62828' : '#1e7b34') + ';">' + (mangelGesamt ? 'Es wurden Mängel festgestellt (siehe n.i.O.).' : 'Die Anlage ist zum Zeitpunkt der Prüfung in einem ordnungsgemäßen und funktionsfähigen Zustand.') + '</div>';
+  h += '<div style="margin-top:6px; font-weight:700; color:' + (schwerGesamt ? '#c62828' : (mangelGesamt ? '#8a6d00' : '#1e7b34')) + ';">' + (schwerGesamt ? 'Es wurden schwere Mängel festgestellt &ndash; die Anlage ist nicht voll funktionsfähig.' : (mangelGesamt ? 'Es wurden Mängel festgestellt (siehe gelb markierte Punkte).' : 'Die Anlage ist zum Zeitpunkt der Prüfung in einem ordnungsgemäßen und funktionsfähigen Zustand.')) + '</div>';
   h += '<div style="display:flex; justify-content:flex-end; gap:50px; margin-top:20px;">';
   h += '<div style="width:250px; text-align:center;"><div style="height:62px; display:flex; align-items:flex-end; justify-content:center;">' + (sb.unterschriftTechniker ? '<img src="' + sb.unterschriftTechniker + '" style="max-height:60px;">' : '') + '</div><div style="border-top:1.5px solid #000; padding-top:3px;">Unterschrift Techniker' + (sb.erstelltVon ? '<br>(' + escapeHtml(sb.erstelltVon) + ')' : '') + '</div></div>';
   h += '<div style="width:250px; text-align:center;"><div style="height:62px; display:flex; align-items:flex-end; justify-content:center;">' + (sb.unterschriftKunde ? '<img src="' + sb.unterschriftKunde + '" style="max-height:60px;">' : sigKundeFehltHtml(60)) + '</div><div style="border-top:1.5px solid #000; padding-top:3px;">Unterschrift Kunde</div></div>';
@@ -17427,7 +17476,8 @@ function buildSammelberichtHtml(sb, k){
       if(g.dienstErgebnisse && g.dienstErgebnisse.length){
         g.dienstErgebnisse.forEach(function(d){
           var dOk = d.ok !== false;
-          html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(d.text) + '</span><span class="' + (dOk ? 'pb-ok' : 'pb-rot') + '">Ergebnis: ' + (dOk ? 'OK' : 'nicht OK') + '</span></div>';
+          var dSt = d.stufe || (dOk ? 'ok' : 'mangel');
+          html += '<div class="pos-dienst"><span class="dname">' + escapeHtml(d.text) + (d.notiz ? '<br><b>&rarr; ' + escapeHtml(d.notiz) + '</b>' : '') + '</span><span class="' + (dSt === 'ok' ? 'pb-ok' : 'pb-rot') + '"' + (dSt === 'mangel' ? ' style="background:#fff176; color:#3a2f00;"' : '') + '>Ergebnis: ' + (dSt === 'ok' ? 'OK' : (dSt === 'mangel' ? 'Mangel' : 'schwerer Mangel')) + '</span></div>';
         });
       } else if(istFuellKategorie(kat)){
         var neufuellPrefix = (kat === 'CO2-Flaschen') ? 'Neufüllung Gasflasche am ' : 'Neufüllung Sodawasser am ';
