@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-22 22:45';
-var APP_VERSION_TEXT = '22.11. 22:45';
+var APP_VERSION = '2026-11-22 23:05';
+var APP_VERSION_TEXT = '22.11. 23:05';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -16996,7 +16996,12 @@ function modalSammelbericht(kundeId){
 
   var hatRwaSB = geraeteSortiert.some(function(g){ return ((g.kategorie || '').trim()) === 'RWA-Anlage'; });
   if(hatRwaSB){
-    html += '<label style="margin-top:4px;">RWA-Anlage (Art / Spannung, kommt in den Berichtskopf)</label><input type="text" id="sbRwaAnlage" value="' + escapeHtml(k.rwaAnlage || 'RWA | 24 Volt') + '" placeholder="z.B. RWA | 24 Volt" autocomplete="off">';
+    var objektVorschlag = k.rwaObjekt || [k.objekt ? String(k.objekt).replace(/^\s*objekt\s*:?\s*/i, '') : '', k.objektAdresse || ''].filter(function(x){ return x; }).join(', ');
+    html += '<div style="margin-top:8px; padding:10px; border:1px solid var(--line); border-radius:12px; background:#fff;"><div style="font-weight:700; margin-bottom:4px;">Kasten rechts neben dem Kunden (wie RM-Technik)</div>';
+    html += '<label style="margin-top:4px;">Projekt-Nr. (optional)</label><input type="text" id="sbRwaProjekt" value="' + escapeHtml(k.rwaProjektNr || '') + '" placeholder="z.B. 110200318" autocomplete="off">';
+    html += '<label style="margin-top:4px;">Objekt / Adresse der Anlage</label><textarea id="sbRwaObjekt" rows="2" placeholder="z.B. Wiener Gasse 23-25, 2380 Perchtoldsdorf">' + escapeHtml(objektVorschlag) + '</textarea>';
+    html += '<label style="margin-top:4px;">RWA-Anlage (Art / Spannung)</label><input type="text" id="sbRwaAnlage" value="' + escapeHtml(k.rwaAnlage || 'RWA | 24 Volt') + '" placeholder="z.B. RWA | 24 Volt" autocomplete="off">';
+    html += '</div>';
     html += '<label style="display:flex; align-items:center; gap:8px; font-weight:400; margin-top:6px;"><input type="checkbox" id="sbRwaGesamt" checked style="width:20px; height:20px;"> Position &bdquo;Wartung RWA/DBA/BRV&ldquo; am Ende anfügen</label>';
   }
   html += '<label style="margin-top:4px;">Allgemeine Bemerkung (optional)</label><textarea id="sbBemerkung" rows="2" placeholder="z.B. Alle Geräte kontrolliert, keine Auffälligkeiten"></textarea>';
@@ -17106,7 +17111,14 @@ function modalSammelbericht(kundeId){
         var rwaAnlageText = rwaAnlageEl ? rwaAnlageEl.value.trim() : '';
         var rwaGesamtEl = document.getElementById('sbRwaGesamt');
         var rwaGesamt = rwaGesamtEl ? !!rwaGesamtEl.checked : false;
-        if(rwaAnlageEl && rwaAnlageText !== (k.rwaAnlage || '')){ k.rwaAnlage = rwaAnlageText; dbPut('kunden', k, function(){}); }
+        var rwaProjektEl = document.getElementById('sbRwaProjekt');
+        var rwaProjektText = rwaProjektEl ? rwaProjektEl.value.trim() : '';
+        var rwaObjektEl = document.getElementById('sbRwaObjekt');
+        var rwaObjektText = rwaObjektEl ? rwaObjektEl.value.trim() : '';
+        if(rwaAnlageEl && (rwaAnlageText !== (k.rwaAnlage || '') || rwaProjektText !== (k.rwaProjektNr || '') || rwaObjektText !== (k.rwaObjekt || ''))){
+          k.rwaAnlage = rwaAnlageText; k.rwaProjektNr = rwaProjektText; k.rwaObjekt = rwaObjektText;
+          dbPut('kunden', k, function(){});
+        }
         var sigKundeData = sigBild(sigKunde);
         var sigTechnikerData = sigBild(sigTechniker);
 
@@ -17136,6 +17148,8 @@ function modalSammelbericht(kundeId){
             geraeteSnapshot: geraeteNeuNummeriert,
             bemerkung: allgemeineBemerkung,
             rwaAnlage: kat === 'RWA-Anlage' ? rwaAnlageText : null,
+            rwaProjektNr: kat === 'RWA-Anlage' ? rwaProjektText : null,
+            rwaObjekt: kat === 'RWA-Anlage' ? rwaObjektText : null,
             rwaGesamtwartung: kat === 'RWA-Anlage' ? rwaGesamt : null,
             unterschriftKunde: sigKundeData,
             unterschriftTechniker: sigTechnikerData,
@@ -17341,9 +17355,13 @@ function buildRwaBerichtHtml(sb, k){
   h += '<div><div style="font-size:18px; font-weight:700;">Prüfergebnisbericht</div><div style="font-size:14px; font-weight:700; margin-top:4px;">RWA, DBA, BRV</div><div style="font-size:10px; margin-top:1px;">Rauch- und Wärmeabzug &middot; Druckbelüftung &middot; Brandrauchverdünnung</div><div style="font-size:10px; font-weight:700; margin-top:2px;">nach ÖNORM F 3075 unter Berücksichtigung der TRVB 111 S</div><div style="font-weight:700; margin-top:8px;">Prüfbericht Nr.: ' + escapeHtml(nr) + '</div>';
   h += '<div style="display:flex; gap:12px; margin-top:6px;">';
   h += '<div style="border:1px solid #000; padding:4px 8px; min-width:200px;"><div style="font-weight:700; border-bottom:1px solid #000; margin-bottom:3px;">Kunden Nr.: ' + escapeHtml(k && k.kundennummer ? k.kundennummer : '-') + '</div>' + escapeHtml(k ? kundeAnzeigeName(k) : '') + '<br>' + escapeHtml(adr).replace(/,\s*/g, '<br>') + '</div>';
-  if(k && (k.objekt || k.objektAdresse || sb.rwaAnlage)){
-    h += '<div style="border:1px solid #000; padding:4px 8px; min-width:200px;"><div style="font-weight:700; border-bottom:1px solid #000; margin-bottom:3px;">Objekt / Anlage</div>' + (k.objekt ? escapeHtml(String(k.objekt).replace(/^\s*objekt\s*:?\s*/i, '')) + '<br>' : '') + (sb.rwaAnlage ? escapeHtml(sb.rwaAnlage) + '<br>' : '') + (k.objektAdresse ? escapeHtml(k.objektAdresse).replace(/,\s*/g, '<br>') : '') + '</div>';
-  }
+  // Kasten rechts: Projekt / Objekt / Anlage (immer, wie beim RM-Technik-Bericht)
+  var objTxt = sb.rwaObjekt || (k ? (k.rwaObjekt || [k.objekt ? String(k.objekt).replace(/^\s*objekt\s*:?\s*/i, '') : '', k.objektAdresse || ''].filter(function(x){ return x; }).join(', ')) : '');
+  if(!objTxt) objTxt = adr;
+  var projNr = sb.rwaProjektNr || (k && k.rwaProjektNr) || '';
+  var anlTxt = sb.rwaAnlage || (k && k.rwaAnlage) || 'RWA | 24 Volt';
+  var objZeilen = String(objTxt).split(/\n|,\s*/).map(function(x){ return x.trim(); }).filter(function(x){ return x; });
+  h += '<div style="border:1px solid #000; padding:4px 8px; min-width:220px;"><div style="font-weight:700; border-bottom:1px solid #000; margin-bottom:3px;">' + (projNr ? 'Projekt Nr.: ' + escapeHtml(projNr) : 'Objekt / Anlage') + '</div>' + (objZeilen[0] ? escapeHtml(objZeilen[0]) + '<br>' : '') + escapeHtml(anlTxt) + (objZeilen.length > 1 ? '<br>' + objZeilen.slice(1).map(escapeHtml).join('<br>') : '') + '</div>';
   h += '</div></div>';
   h += '<div style="text-align:right; font-size:11px; line-height:1.45;"><img src="' + LOGO_DATA + '" style="height:58px; margin-bottom:6px;"><br><b>Wolfgang Janiba Brandschutztechnik GmbH</b><br>Ketzergasse 299<br>2380 Perchtoldsdorf<br>Tel. 0676 / 305 83 98<br>info@loeschtechnik.at<br>www.brandschutztechnik-janiba.at</div>';
   h += '</div>';
@@ -17395,7 +17413,7 @@ function buildRwaBerichtHtml(sb, k){
   h += '<div style="width:250px; text-align:center;"><div style="height:62px; display:flex; align-items:flex-end; justify-content:center;">' + (sb.unterschriftTechniker ? '<img src="' + sb.unterschriftTechniker + '" style="max-height:60px;">' : '') + '</div><div style="border-top:1.5px solid #000; padding-top:3px;">Unterschrift Techniker' + (sb.erstelltVon ? '<br>(' + escapeHtml(sb.erstelltVon) + ')' : '') + '</div></div>';
   h += '<div style="width:250px; text-align:center;"><div style="height:62px; display:flex; align-items:flex-end; justify-content:center;">' + (sb.unterschriftKunde ? '<img src="' + sb.unterschriftKunde + '" style="max-height:60px;">' : sigKundeFehltHtml(60)) + '</div><div style="border-top:1.5px solid #000; padding-top:3px;">Unterschrift Kunde</div></div>';
   h += '</div></div>';
-  h += '<div style="margin-top:14px; border-top:1px solid #999; padding-top:4px; font-size:9px; display:flex; justify-content:space-between;"><span>Wolfgang Janiba Brandschutztechnik GmbH</span><span>Prüfbericht Nr.: ' + escapeHtml(nr) + (k && k.kundennummer ? ' / Kd.Nr.: ' + escapeHtml(k.kundennummer) : '') + '</span><span>Druckdatum: ' + fmtDate(new Date().toISOString()) + ' &middot; Leistungsdatum: ' + fmtDate(sb.datum) + '</span></div>';
+  h += '<div style="margin-top:14px; border-top:1px solid #999; padding-top:4px; font-size:9px; display:flex; justify-content:space-between;"><span>Wolfgang Janiba Brandschutztechnik GmbH</span><span><b>Prüfbericht Nr.: ' + escapeHtml(nr) + (k && k.kundennummer ? ' / Kd.Nr.: ' + escapeHtml(k.kundennummer) : '') + ((sb.rwaProjektNr || (k && k.rwaProjektNr)) ? ' / Projekt Nr.: ' + escapeHtml(sb.rwaProjektNr || k.rwaProjektNr) : '') + '</b></span><span>Druckdatum: ' + fmtDate(new Date().toISOString()) + ' &middot; Leistungsdatum: ' + fmtDate(sb.datum) + '</span></div>';
   h += '<div style="font-size:9px; text-align:center; margin-top:3px;">Die geprüfte(n) Anlage(n) ist/sind zum Zeitpunkt der Prüfung in einem ordnungsgemäßen und funktionsfähigen Zustand, sofern im Prüfergebnis &bdquo;i.O.&ldquo; vermerkt ist.</div>';
   h += '</div></div>';
   return h;
