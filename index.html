@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-21 19:00';
-var APP_VERSION_TEXT = '21.11. 19:00';
+var APP_VERSION = '2026-11-21 23:30';
+var APP_VERSION_TEXT = '21.11. 23:30';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -7858,13 +7858,17 @@ function pzZeileHtml(g, sp){
   if(!di.keine) h += '<div style="margin-top:4px;">' + pzDesinfPill(g) + '</div>';
   // Genau EIN Knopf fuer den naechsten Schritt + "..." fuer alles andere
   var haupt = '';
-  var bs = function(f){ return 'flex:1; margin:0; padding:9px 6px; background:' + f + '; border-color:' + f + '; color:#fff;'; };
-  // Knopf hat die Farbe des Zustands, in den das Fass danach kommt
-  if(sp.key === 'leer') haupt = '<button type="button" class="btn small" data-nurAbfuellBtn="' + g.id + '" style="' + bs(PZ_FARBE.voll) + '">&#128167; Befüllt</button>';
-  if(sp.key === 'voll') haupt = '<button type="button" class="btn small" data-pzaktion="ausliefern" data-gid="' + g.id + '" style="' + bs(PZ_FARBE.betrieb) + '">&#10003; Anschließen &hellip;</button>';
-  if(sp.key === 'betrieb') haupt = '<button type="button" class="btn small" data-pzaktion="leer" data-gid="' + g.id + '" style="' + bs(PZ_FARBE.leer) + '">Fass ist leer</button>';
-  if(sp.key === 'leer' && !di.keine && di.faellig) haupt = '<button type="button" class="btn small" data-pzaktion="desinf" data-gid="' + g.id + '" style="' + bs('#00897b') + '">&#129532; Desinfiziert</button>' + haupt;
-  h += '<div class="pzStop" style="display:flex; gap:8px; margin-top:8px;">' + haupt + '<button type="button" class="btn small secondary" data-pzbearbknopf="' + g.id + '" style="flex:0 0 48px; margin:0; padding:9px 4px;" title="Bearbeiten">&#9999;&#65039;</button><button type="button" class="btn small secondary" data-pzdetail="' + g.id + '" style="flex:0 0 48px; margin:0; padding:9px 4px; font-weight:800;">&middot;&middot;&middot;</button></div>';
+  // Ein grosser Knopf fuer den naechsten Schritt, darunter drei gleich grosse helle Knoepfe
+  var gross = function(attr, f, txt){ return '<button type="button" class="btn" ' + attr + ' style="display:block; width:100%; margin:10px 0 0 0; padding:12px 8px; font-size:15px; font-weight:800; border-radius:12px; background:' + f + '; border:none; color:#fff; box-shadow:0 2px 0 rgba(0,0,0,.15);">' + txt + '</button>'; };
+  var klein = function(attr, txt, aktiv){ return '<button type="button" class="btn small secondary" ' + attr + ' style="flex:1 1 0; min-width:0; margin:0; padding:8px 4px; font-size:13px; font-weight:700; border-radius:10px; background:#fff; border:1.5px solid ' + (aktiv ? '#00897b' : '#d9d1c4') + '; color:' + (aktiv ? '#00897b' : '#3a332b') + ';">' + txt + '</button>'; };
+  if(sp.key === 'leer') h += gross('data-nurAbfuellBtn="' + g.id + '"', PZ_FARBE.voll, '&#128167; Befüllt eintragen');
+  if(sp.key === 'voll') h += gross('data-pzaktion="ausliefern" data-gid="' + g.id + '"', PZ_FARBE.betrieb, '&#10003; Angeschlossen eintragen');
+  if(sp.key === 'betrieb') h += gross('data-pzaktion="leer" data-gid="' + g.id + '"', PZ_FARBE.leer, 'Leer eintragen');
+  h += '<div class="pzStop" style="display:flex; gap:6px; margin-top:6px;">';
+  if(!di.keine) h += klein('data-pzaktion="desinf" data-gid="' + g.id + '"', '&#129532; Desinfiziert', di.faellig);
+  h += klein('data-pzbearbknopf="' + g.id + '"', '&#9999;&#65039; Bearbeiten', false);
+  h += klein('data-pzdetail="' + g.id + '"', 'Mehr &hellip;', false);
+  h += '</div>';
   h += '</div>';
   return h;
 }
