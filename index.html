@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-23 16:35';
-var APP_VERSION_TEXT = '23.11. 16:35';
+var APP_VERSION = '2026-11-23 17:00';
+var APP_VERSION_TEXT = '23.11. 17:00';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -1747,6 +1747,7 @@ function statusFuerBaldFaellig(iso){
 
 // ---------- Render Router ----------
 function render(){
+  try { treueUmstellungAuto(); } catch(eU){}
   try {
     renderInner();
   } catch(err){
@@ -4973,6 +4974,80 @@ function modalTreueVorratZuordnen(){
   zeigen();
 }
 // --- Uebersicht (Mehr -> Treueprogramm) ---
+// ---------- Umstellung alte Punkte (10/5/3 je Euro) -> 1 Punkt je Euro ----------
+var TREUE_UMSTELLUNG_REF = 'umstellung-1pe';
+var TREUE_UMSTELLUNG_BIS = '2026-11-23T14:00:00.000Z'; // Buchungen davor wurden nach altem System gerechnet
+function treueAlterTeiler(b){
+  var t = String(b.t || '').toLowerCase();
+  if(/bonus|willkommen|pünktlich|puenktlich|wirbt|aktion|geschenk/.test(t)) return 10;
+  var co2 = /co2/.test(t);
+  var dienst = /prüfung|pruefung|revision|arbeitszeit|fahrt/.test(t);
+  if(co2 && !dienst) return 10;
+  if(co2 && dienst) return 7;
+  if(dienst) return 5;
+  return 3;
+}
+// liefert {alt, neu, diff} fuer einen Kunden oder null, wenn nichts umzurechnen ist
+function treueUmstellungRechnen(k){
+  var b = (k && k.treueBuchungen) || [];
+  if(b.some(function(x){ return x.ref === TREUE_UMSTELLUNG_REF; })) return null;
+  var altPos = 0, neuPos = 0, altNeg = 0;
+  b.forEach(function(x){
+    if(!(String(x.d || '') < TREUE_UMSTELLUNG_BIS) || x.ref === 'erstanmeldung') return;
+    var p = Number(x.p) || 0;
+    if(p > 0){ altPos += p; neuPos += p / treueAlterTeiler(x); }
+    else altNeg += p;
+  });
+  if(!altPos && !altNeg) return null;
+  var faktor = altPos ? neuPos / altPos : 0.1;
+  var altStand = altPos + altNeg;
+  var neuStand = Math.max(0, Math.round(altStand * faktor));
+  var diff = neuStand - altStand;
+  if(!diff) return null;
+  return { alt: altStand, neu: neuStand, diff: diff };
+}
+// Automatisch: sobald der Chef angemeldet ist und Kunden geladen sind, einmal umrechnen
+var treueUmstellungErledigt = false;
+function treueUmstellungAuto(){
+  if(treueUmstellungErledigt || state.rolle !== 'chef' || !state.kunden || !state.kunden.length) return;
+  treueUmstellungErledigt = true;
+  var liste = state.kunden.filter(function(k){ return k && k.treueBuchungen && k.treueBuchungen.length; })
+    .map(function(k){ return { k: k, r: treueUmstellungRechnen(k) }; }).filter(function(x){ return x.r; });
+  liste.forEach(function(x){
+    treueBuchungAnhaengen(x.k, x.r.diff, 'Umstellung auf 1 Punkt pro Euro (alt ' + treuePunkteText(x.r.alt) + ' Punkte)', TREUE_UMSTELLUNG_REF);
+    dbPut('kunden', x.k, function(){ treuePortalSync(x.k); });
+  });
+  if(liste.length) setTimeout(function(){ toast('Treuepunkte auf 1 Punkt pro Euro umgerechnet (' + liste.length + ' Kunde' + (liste.length === 1 ? '' : 'n') + ')'); }, 800);
+}
+function modalTreueUmstellung(){
+  var liste = state.kunden.filter(function(k){ return k && k.treueBuchungen && k.treueBuchungen.length; })
+    .map(function(k){ return { k: k, r: treueUmstellungRechnen(k) }; }).filter(function(x){ return x.r; });
+  var html = '<div class="modal-head"><h3>Alte Punkte umrechnen</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div class="meta" style="margin-bottom:10px;">Punkte, die vor der Umstellung gesammelt wurden (10 / 5 / 3 Punkte je Euro), werden auf <b>1 Punkt je Euro</b> umgerechnet. Pro Kunde kommt eine Buchung &bdquo;Umstellung auf 1 Punkt pro Euro&ldquo; dazu &ndash; nichts wird gelöscht. Geht nur einmal je Kunde.</div>';
+  if(!liste.length){
+    html += '<div class="meta">Nichts umzurechnen &ndash; alle Kunden sind schon umgestellt.</div>';
+  } else {
+    html += '<table style="width:100%; border-collapse:collapse; font-size:14px;"><tr><th style="text-align:left; padding:4px;">Kunde</th><th style="text-align:right; padding:4px;">alt</th><th style="text-align:right; padding:4px;">neu</th></tr>';
+    liste.forEach(function(x){ html += '<tr><td style="padding:4px; border-top:1px solid var(--line);">' + escapeHtml(kundeAnzeigeName(x.k)) + '</td><td style="padding:4px; text-align:right; border-top:1px solid var(--line);">' + treuePunkteText(x.r.alt) + '</td><td style="padding:4px; text-align:right; border-top:1px solid var(--line);"><b>' + treuePunkteText(x.r.neu) + '</b></td></tr>'; });
+    html += '</table>';
+    html += '<button class="btn block" id="tuUmJa" style="margin-top:14px;">' + liste.length + ' Kunden jetzt umrechnen</button>';
+  }
+  html += '<button class="btn block secondary" id="tuUmNein" style="margin-top:8px;">Schließen</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  document.getElementById('tuUmNein').onclick = closeModal;
+  var ja = document.getElementById('tuUmJa');
+  if(ja) ja.onclick = function(){
+    ja.disabled = true; ja.textContent = 'Rechnet um ...';
+    var i = 0;
+    (function weiter(){
+      if(i >= liste.length){ closeModal(); render(); toast(liste.length + ' Kunden auf 1 Punkt pro Euro umgestellt'); return; }
+      var x = liste[i++];
+      treueBuchungAnhaengen(x.k, x.r.diff, 'Umstellung auf 1 Punkt pro Euro (alt ' + treuePunkteText(x.r.alt) + ' Punkte)', TREUE_UMSTELLUNG_REF);
+      dbPut('kunden', x.k, function(){ treuePortalSync(x.k); weiter(); });
+    })();
+  };
+}
 function modalTreueUebersicht(){
   var liste = state.kunden.filter(treueAktiv).map(function(k){ return { k: k, p: treuePunkte(k) }; }).sort(function(a, b){ return b.p - a.p; });
   var reg = treueKartenDaten();
@@ -4980,6 +5055,8 @@ function modalTreueUebersicht(){
   var html = '<div class="modal-head"><h3>Treueprogramm</h3><button class="close" id="mClose">&times;</button></div>';
   html += treueAktionBannerHtml();
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
+  var umAnz = state.kunden.filter(function(k){ return k && k.treueBuchungen && treueUmstellungRechnen(k); }).length;
+  if(umAnz) html += '<button type="button" class="btn block" id="tuUmstellung" style="margin-top:8px; background:#c23f12; border-color:#c23f12;">&#9888;&#65039; ' + umAnz + ' Kunden haben noch alte Punkte &ndash; jetzt umrechnen</button>';
   html += '<div class="meta" style="margin-top:6px;">1 Punkt je 1 &euro; netto (für alles) &middot; Erstanmeldung +' + TREUE_ERSTANMELDUNG_BONUS + ' Punkte. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
   html += '<div class="card" style="margin-top:12px; padding:10px 12px;"><div style="font-weight:700;">Leere Karten auf Vorrat drucken</div><div class="meta">Wie viele Karten? (auch nur 1 St\u00fcck m\u00f6glich)</div>';
   html += '<div class="row" style="gap:8px; margin-top:8px; align-items:center;"><button type="button" class="btn secondary" id="tuMinus" style="margin:0; width:48px; font-size:22px; padding:6px 0;">&minus;</button><div id="tuAnzZ" style="min-width:44px; text-align:center; font-size:26px; font-weight:800;">1</div><button type="button" class="btn" id="tuPlus" style="margin:0; width:48px; font-size:22px; padding:6px 0;">+</button>';
@@ -5035,6 +5112,7 @@ function modalTreueUebersicht(){
   html += '</div>';
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
+  var tuUm = document.getElementById('tuUmstellung'); if(tuUm) tuUm.onclick = function(){ closeModal(); modalTreueUmstellung(); };
   document.getElementById('tuDruck').onclick = function(){
     var n = Math.max(1, Math.min(100, parseInt(document.getElementById('tuAnz').value, 10) || 1));
     customConfirm((n === 1 ? '1 neue, leere Treuekarte' : n + ' neue, leere Treuekarten') + ' anlegen und drucken?', function(){
