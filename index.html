@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-23 17:55';
-var APP_VERSION_TEXT = '23.11. 17:55';
+var APP_VERSION = '2026-11-23 18:05';
+var APP_VERSION_TEXT = '23.11. 18:05';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -5104,6 +5104,15 @@ var treueUmstellungErledigt = false;
 function treueUmstellungAuto(){
   if(treueUmstellungErledigt || state.rolle !== 'chef' || !state.kunden || !state.kunden.length) return;
   treueUmstellungErledigt = true;
+  // nach jedem Update: Kundenseiten (QR-Code der Karte) mit den aktuellen Praemien neu befuellen
+  var syncSchon = '';
+  try{ syncSchon = localStorage.getItem('bsvTreueSyncVersion') || ''; }catch(eS){}
+  if(syncSchon !== APP_VERSION){
+    setTimeout(function(){
+      state.kunden.filter(treueAktiv).forEach(function(k){ try{ treuePortalSync(k); }catch(eP){} });
+      try{ localStorage.setItem('bsvTreueSyncVersion', APP_VERSION); }catch(eS2){}
+    }, 1500);
+  }
   var liste = state.kunden.filter(function(k){ return k && k.treueBuchungen && k.treueBuchungen.length; })
     .map(function(k){ return { k: k, r: treueUmstellungRechnen(k) }; }).filter(function(x){ return x.r; });
   liste.forEach(function(x){
