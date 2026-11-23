@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-23 07:40';
-var APP_VERSION_TEXT = '23.11. 07:40';
+var APP_VERSION = '2026-11-23 15:55';
+var APP_VERSION_TEXT = '23.11. 15:55';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -4099,28 +4099,31 @@ function modalStempelKarten(){
 }
 
 // ---------- Treueprogramm (nur Privatkunden mit Haekchen "Treueprogramm") ----------
-var TREUE_PUNKTE_PRO_EURO = 10; // Punkte je 1 EUR netto bei CO2-Fuellungen
-var TREUE_PPE_WAREN = 3;   // Neukauf, Waren, Material, Betrag-Feld
-var TREUE_PPE_DIENST = 5;  // Ueberpruefung, Innenrevision, Arbeitszeit, Fahrt
+// Seit 23.11.2026: einheitlich 1 Punkt je 1 EUR netto (fuer alles)
+var TREUE_PUNKTE_PRO_EURO = 1; // CO2-Fuellungen
+var TREUE_PPE_WAREN = 1;   // Neukauf, Waren, Material, Betrag-Feld
+var TREUE_PPE_DIENST = 1;  // Ueberpruefung, Innenrevision, Arbeitszeit, Fahrt
+// Willkommensbonus bei der Erstanmeldung (einmalig, nur fuer neue Teilnehmer)
+var TREUE_ERSTANMELDUNG_BONUS = 100;
 // Punkte je 1 EUR netto fuer einen Artikel (eigener Wert aus der Preisliste, sonst nach Art)
 function treuePPE(a){
   if(!a) return TREUE_PPE_WAREN;
-  if(a.ppe > 0) return a.ppe;
+  // einheitlich 1 Punkt je Euro - alte Einzelwerte aus der Preisliste gelten nicht mehr
   if(a.co2) return TREUE_PUNKTE_PRO_EURO;
   if(/pr\u00fcfung|innenrevision|arbeitszeit|fahrt/i.test(a.name || '')) return TREUE_PPE_DIENST;
   return TREUE_PPE_WAREN;
 }
 function treueArtikelPunkte(a){ return Math.round((a.netto || 0) * treuePPE(a)); }
 var TREUE_PRAEMIEN = [
-  { id: 'co2', name: 'CO2-Füllung', punkte: 1000 },
-  { id: 'pruef', name: 'Überprüfung eines Feuerlöschers', punkte: 3000 },
-  { id: 'decke', name: 'Löschdecke P100', punkte: 7000 },
-  { id: 'melder', name: 'Rauchmelder Senys2', punkte: 9000 },
-  { id: 'p2g', name: 'Autolöscher P2G', punkte: 10000 }
+  { id: 'co2', name: 'CO2-Füllung', punkte: 100 },
+  { id: 'pruef', name: 'Überprüfung eines Feuerlöschers', punkte: 300 },
+  { id: 'decke', name: 'Löschdecke P100', punkte: 700 },
+  { id: 'melder', name: 'Rauchmelder Senys2', punkte: 900 },
+  { id: 'p2g', name: 'Autolöscher P2G', punkte: 1000 }
 ];
 var TREUE_BONUS = [
-  { name: 'Pünktlicher Prüftermin', punkte: 200 },
-  { name: 'Kunde wirbt Kunde', punkte: 1000 }
+  { name: 'Pünktlicher Prüftermin', punkte: 20 },
+  { name: 'Kunde wirbt Kunde', punkte: 100 }
 ];
 // Netto-Preis je CO2-Fuellung nach Groesse (Gramm) - nur diese Groessen bringen Punkte
 var TREUE_CO2_NETTO = { 425: 5.75 };
@@ -4280,7 +4283,8 @@ var TREUE_VERFALL_JAHRE = 3;
 var TREUE_EINLOESEN_NAMEN = ['Holakovsky Manuela'];
 var TREUE_BEDINGUNGEN = [
   'Das Treueprogramm gilt für Privatkunden der Wolfgang Janiba Brandschutztechnik GmbH. Die Teilnahme ist kostenlos und freiwillig.',
-  'Punkte gibt es für bezahlte Leistungen und Einkäufe. Maßgeblich ist der Nettobetrag. Die Punkte werden beim Bezahlen gutgeschrieben.',
+  'Punkte gibt es für bezahlte Leistungen und Einkäufe: 1 Punkt je 1 Euro (netto). Die Punkte werden beim Bezahlen gutgeschrieben.',
+  'Bei der Erstanmeldung erhalten neue Teilnehmer einmalig ' + TREUE_ERSTANMELDUNG_BONUS + ' Punkte Willkommensbonus.',
   'Punkte und Prämien sind nicht übertragbar und können nicht in Bargeld abgelöst werden.',
   'Prämien werden beim nächsten Besuch oder Auftrag eingelöst. Die Punkte der Prämie werden dabei abgezogen, die restlichen Punkte bleiben erhalten.',
   'Die Punkte verfallen, wenn ' + TREUE_VERFALL_JAHRE + ' Jahre lang keine neuen Punkte gesammelt wurden.',
@@ -4290,7 +4294,7 @@ var TREUE_BEDINGUNGEN = [
 ];
 // --- Aktionen (z.B. Weihnachtsaktion): Zeitraum, Punkte-Faktor, Startbonus, Geschenk-Bonus ---
 var TREUE_AKTION_ID = 'treueaktion';
-var TREUE_AKTION_STANDARD = { id: TREUE_AKTION_ID, aktiv: true, aid: 'weihnachten2026', name: 'Weihnachtsaktion', von: '2026-12-01', bis: '2026-12-24', faktor: 2, startBonus: 300, geschenkBonus: 500 };
+var TREUE_AKTION_STANDARD = { id: TREUE_AKTION_ID, aktiv: true, aid: 'weihnachten2026', name: 'Weihnachtsaktion', von: '2026-12-01', bis: '2026-12-24', faktor: 2, startBonus: 0, geschenkBonus: 50 };
 function treueAktion(){
   var e = (state.einstellungen || []).filter(function(x){ return x && x.id === TREUE_AKTION_ID; })[0];
   return e || TREUE_AKTION_STANDARD;
@@ -4310,12 +4314,23 @@ function treueAktionKurz(a){
 }
 function treueIstGeschenkArtikel(a){ return !!a && /rauchmelder|löschdecke|loeschdecke/i.test(a.name || '') && !/batterie/i.test(a.name || ''); }
 // Startbonus nur fuer neue Teilnehmer waehrend der Aktion, nur einmal (haengt die Buchung an, Speichern macht der Aufrufer)
+// Erstanmeldung: 100 Punkte einmalig, nur wenn der Kunde noch nie Punkte hatte
+function treueErstanmeldungAnhaengen(k){
+  if(!k || !(TREUE_ERSTANMELDUNG_BONUS > 0)) return false;
+  var b = k.treueBuchungen || [];
+  if(b.some(function(x){ return x.ref === 'erstanmeldung'; })) return false;
+  if(b.length) return false;
+  treueBuchungAnhaengen(k, TREUE_ERSTANMELDUNG_BONUS, 'Willkommensbonus Erstanmeldung', 'erstanmeldung');
+  return true;
+}
 function treueStartbonusAnhaengen(k){
+  var erst = treueErstanmeldungAnhaengen(k);
   var a = treueAktionJetzt();
+  if(!a || !(a.startBonus > 0) || !k) return erst;
   if(!a || !(a.startBonus > 0) || !k) return false;
   var ref = 'start-' + (a.aid || a.von);
-  var alt = (k.treueBuchungen || []).some(function(b){ return b.ref === ref || treueTagKey(b.d) < a.von; });
-  if(alt) return false;
+  var alt = (k.treueBuchungen || []).some(function(b){ return b.ref === ref || (b.ref !== 'erstanmeldung' && treueTagKey(b.d) < a.von); });
+  if(alt) return erst;
   treueBuchungAnhaengen(k, a.startBonus, 'Startbonus ' + (a.name || 'Aktion'), ref);
   return true;
 }
@@ -4963,7 +4978,7 @@ function modalTreueUebersicht(){
   var html = '<div class="modal-head"><h3>Treueprogramm</h3><button class="close" id="mClose">&times;</button></div>';
   html += treueAktionBannerHtml();
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
-  html += '<div class="meta" style="margin-top:6px;">Punkte je 1 &euro; netto: CO2-F\u00fcllung ' + TREUE_PUNKTE_PRO_EURO + ', \u00dcberpr\u00fcfung/Arbeit ' + TREUE_PPE_DIENST + ', Waren/Einkauf ' + TREUE_PPE_WAREN + '. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
+  html += '<div class="meta" style="margin-top:6px;">1 Punkt je 1 &euro; netto (für alles) &middot; Erstanmeldung +' + TREUE_ERSTANMELDUNG_BONUS + ' Punkte. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
   html += '<div class="card" style="margin-top:12px; padding:10px 12px;"><div style="font-weight:700;">Leere Karten auf Vorrat drucken</div><div class="meta">Wie viele Karten? (auch nur 1 St\u00fcck m\u00f6glich)</div>';
   html += '<div class="row" style="gap:8px; margin-top:8px; align-items:center;"><button type="button" class="btn secondary" id="tuMinus" style="margin:0; width:48px; font-size:22px; padding:6px 0;">&minus;</button><div id="tuAnzZ" style="min-width:44px; text-align:center; font-size:26px; font-weight:800;">1</div><button type="button" class="btn" id="tuPlus" style="margin:0; width:48px; font-size:22px; padding:6px 0;">+</button>';
   html += '<div style="display:flex; gap:6px; margin-left:auto;">' + [1, 5, 10].map(function(n){ return '<button type="button" class="btn small secondary tuSchnell" data-n="' + n + '" style="margin:0;">' + n + '</button>'; }).join('') + '</div></div>';
