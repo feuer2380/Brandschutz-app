@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-23 18:25';
-var APP_VERSION_TEXT = '23.11. 18:25';
+var APP_VERSION = '2026-11-23 18:40';
+var APP_VERSION_TEXT = '23.11. 18:40';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -4685,7 +4685,7 @@ function modalTreueKarteZuordnen(code){
           r2.karten[code].ausgegeben = new Date().toISOString().substring(0, 10);
           treueKartenSpeichern(r2, function(){
             var sb = treueStartbonusAnhaengen(k);
-            var weiter = function(){ treuePortalSync(k); toast('Karte Nr. ' + kt.nr + ' zugeordnet' + (sb ? ' + Startbonus' : '')); modalTreueKunde(k.id); };
+            var weiter = function(){ treuePortalSync(k); toast('Karte Nr. ' + kt.nr + ' zugeordnet' + (sb ? ' + Startbonus' : '')); modalTreueKunde(k.id, k); };
             if(!k.treueAktiv || sb){ k.treueAktiv = true; dbPut('kunden', k, weiter); } else weiter();
           });
         });
@@ -4713,8 +4713,12 @@ function treueFortschrittHtml(punkte, gross){
   });
   return h;
 }
-function modalTreueKunde(kundeId){
-  var k = kundeById(kundeId);
+function modalTreueKunde(kundeId, kAlt){
+  var k = kundeById(kundeId) || ((kAlt && kAlt.id === kundeId) ? kAlt : null);
+  if(!k && kAlt && state.kunden){
+    // Kunde kurz nicht in der Liste (z.B. waehrend der Abgleich laeuft) -> mit dem bekannten Kunden weitermachen
+    k = kAlt;
+  }
   if(!k){ toast('Kunde nicht gefunden'); return; }
   var punkte = treuePunkte(k);
   var html = '<div class="modal-head"><h3>Treuekarte</h3><button class="close" id="mClose">&times;</button></div>';
@@ -4782,7 +4786,7 @@ function modalTreueKunde(kundeId){
   document.getElementById('tkPortal').onclick = function(){ treuePortalSync(k, true); };
   var tkW = document.getElementById('tkWillkommen');
   if(tkW) tkW.onclick = function(){
-    treueBuchen(k, TREUE_ERSTANMELDUNG_BONUS, 'Willkommensbonus Erstanmeldung', 'erstanmeldung', function(){ toast('+' + TREUE_ERSTANMELDUNG_BONUS + ' Willkommensbonus'); modalTreueKunde(k.id); });
+    treueBuchen(k, TREUE_ERSTANMELDUNG_BONUS, 'Willkommensbonus Erstanmeldung', 'erstanmeldung', function(){ toast('+' + TREUE_ERSTANMELDUNG_BONUS + ' Willkommensbonus'); modalTreueKunde(k.id, k); });
   };
   // Buchung antippen -> aendern oder loeschen
   document.querySelectorAll('.tkBuchung').forEach(function(el){
@@ -4799,8 +4803,8 @@ function modalTreueKunde(kundeId){
       m += '<button class="btn block" id="tbOk" style="margin-top:14px;">Speichern</button>';
       m += '<button class="btn block secondary" id="tbDel" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">Buchung löschen</button>';
       openModal(m);
-      var zurueck = function(t){ dbPut('kunden', k, function(){ treuePortalSync(k); toast(t); modalTreueKunde(k.id); }); };
-      document.getElementById('mClose').onclick = function(){ modalTreueKunde(k.id); };
+      var zurueck = function(t){ dbPut('kunden', k, function(){ treuePortalSync(k); toast(t); modalTreueKunde(k.id, k); }); };
+      document.getElementById('mClose').onclick = function(){ modalTreueKunde(k.id, k); };
       document.getElementById('tbWill').onclick = function(){
         document.getElementById('tbText').value = 'Willkommensbonus Erstanmeldung';
         document.getElementById('tbP').value = String(TREUE_ERSTANMELDUNG_BONUS);
@@ -4823,7 +4827,7 @@ function modalTreueKunde(kundeId){
     };
   });
   document.getElementById('tkZumKunden').onclick = function(){ closeModal(); state.activeKundeId = k.id; state.tab = 'kundeDetail'; render(); window.scrollTo(0, 0); };
-  var neuZeigen = function(){ modalTreueKunde(k.id); if(state.tab === 'kundeDetail') render(); };
+  var neuZeigen = function(){ modalTreueKunde(k.id, k); if(state.tab === 'kundeDetail') render(); };
   var tkAuswahl = {};
   var tkZahl = function(id){
     var roh = String(document.getElementById(id).value || '').replace(/\s/g, '').replace(/[^0-9,.]/g, '');
@@ -4963,7 +4967,7 @@ function treueKundenKarteHtml(k){
 function bindTreueKunde(){
   var k = kundeById(state.activeKundeId);
   if(!k) return;
-  var o = document.getElementById('tkOeffnen'); if(o) o.onclick = function(){ modalTreueKunde(k.id); };
+  var o = document.getElementById('tkOeffnen'); if(o) o.onclick = function(){ modalTreueKunde(k.id, k); };
   var rk = document.getElementById('tkRueck'); if(rk) rk.onclick = function(){ modalRueckseiten(1); };
   var an = document.getElementById('tkAnmeldung'); if(an) an.onclick = function(){ modalTreueAnmeldung(k.id); };
   var d = document.getElementById('tkKarteDruck');
