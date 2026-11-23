@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-23 17:00';
-var APP_VERSION_TEXT = '23.11. 17:00';
+var APP_VERSION = '2026-11-23 17:55';
+var APP_VERSION_TEXT = '23.11. 17:55';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -4116,13 +4116,13 @@ function treuePPE(a){
 }
 function treueArtikelPunkte(a){ return Math.round((a.netto || 0) * treuePPE(a)); }
 var TREUE_PRAEMIEN = [
-  { id: 'co2', name: 'CO2-Füllung', punkte: 50 },
-  { id: 'pruef', name: 'Überprüfung eines Feuerlöschers', punkte: 150 },
-  { id: 'decke', name: 'Löschdecke P100', punkte: 350 },
-  { id: 'melder', name: 'Rauchmelder Senys2', punkte: 450 },
-  { id: 'ir_pulver', name: 'Innenrevision Pulverlöscher', punkte: 450 },
-  { id: 'p2g', name: 'Autolöscher P2G', punkte: 500 },
-  { id: 'ir_schaum', name: 'Innenrevision Schaumlöscher', punkte: 650 }
+  { id: 'co2', name: 'CO2-Füllung', punkte: 250 },
+  { id: 'pruef', name: 'Überprüfung eines Feuerlöschers', punkte: 400 },
+  { id: 'decke', name: 'Löschdecke P100', punkte: 600 },
+  { id: 'melder', name: 'Rauchmelder Senys2', punkte: 800 },
+  { id: 'ir_pulver', name: 'Innenrevision Pulverlöscher', punkte: 800 },
+  { id: 'p2g', name: 'Autolöscher P2G', punkte: 1000 },
+  { id: 'ir_schaum', name: 'Innenrevision Schaumlöscher', punkte: 1200 }
 ];
 var TREUE_BONUS = [
   { name: 'Pünktlicher Prüftermin', punkte: 50 },
@@ -4912,6 +4912,7 @@ function treueKundenKarteHtml(k){
   h += '<button type="button" class="btn small" id="tkOeffnen">Punkte buchen / Prämien</button>';
   h += '<button type="button" class="btn small secondary" id="tkKarteDruck">Neue Karte drucken</button>';
   h += '<button type="button" class="btn small secondary" id="tkRueck">R\u00fcckseite</button>';
+  h += '<button type="button" class="btn small secondary" id="tkAnmeldung">&#128221; Anmeldeformular' + (k.treueAnmeldung ? ' &#10003;' : '') + '</button>';
   if(karten.some(function(c){ return !c.gesperrt; })) h += '<button type="button" class="btn small secondary" id="tkSperren" style="color:#c23f12;">Karte verloren / sperren</button>';
   h += '</div></div>';
   return h;
@@ -4921,6 +4922,7 @@ function bindTreueKunde(){
   if(!k) return;
   var o = document.getElementById('tkOeffnen'); if(o) o.onclick = function(){ modalTreueKunde(k.id); };
   var rk = document.getElementById('tkRueck'); if(rk) rk.onclick = function(){ modalRueckseiten(1); };
+  var an = document.getElementById('tkAnmeldung'); if(an) an.onclick = function(){ modalTreueAnmeldung(k.id); };
   var d = document.getElementById('tkKarteDruck');
   if(d) d.onclick = function(){
     customConfirm('Neue Treuekarte für ' + kundeAnzeigeName(k) + ' anlegen und drucken?', function(){
@@ -4974,6 +4976,97 @@ function modalTreueVorratZuordnen(){
   zeigen();
 }
 // --- Uebersicht (Mehr -> Treueprogramm) ---
+// ---------- Anmeldeformular Treuekarte (leer zum Drucken oder ausgefuellt mit Unterschrift) ----------
+var TREUE_DATENSCHUTZ = 'Ihre Daten verwenden wir nur für das Treueprogramm und Ihre Aufträge. Sie werden nicht an Dritte weitergegeben. Sie können die Teilnahme jederzeit beenden; dann löschen wir die Daten des Treueprogramms.';
+function buildTreueAnmeldungHtml(k, a){
+  a = a || {};
+  var leer = !k;
+  var e = function(v){ return v ? escapeHtml(String(v)) : ''; };
+  var box = function(an){ return '<span style="display:inline-block; width:13px; height:13px; border:1.5px solid #000; text-align:center; line-height:12px; font-size:12px; font-weight:900; margin-right:6px; vertical-align:-2px;">' + (an ? '&#10003;' : '') + '</span>'; };
+  var adr1 = k ? (k.strasse || String(k.adresse || '').split(',')[0] || '') : '';
+  var adr2 = k ? ((k.plz || k.ort) ? ((k.plz || '') + ' ' + (k.ort || '')).trim() : String(k.adresse || '').split(',').slice(1).join(',').trim()) : '';
+  var karten = k ? treueKartenVonKunde(k.id).filter(function(c){ return !c.gesperrt; }) : [];
+  var td = 'border:1px solid #999; padding:7px 8px; font-size:12px;';
+  var tl = td + ' width:34%; background:#f3efe8; font-weight:700;';
+  var h = '<div class="bericht-brief nur-hochformat" style="font-family:Arial,Helvetica,sans-serif; color:#000; font-size:12px;">';
+  h += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;"><div><div style="font-size:20px; font-weight:800;">Anmeldung Treueprogramm</div><div style="font-size:14px; font-weight:700; color:#c23f12; margin-top:2px;">Kundenkarte</div></div>';
+  h += '<div style="text-align:right; font-size:10.5px; line-height:1.45;"><img src="' + LOGO_DATA + '" style="height:46px;"><br><b>Wolfgang Janiba Brandschutztechnik GmbH</b><br>Ketzergasse 299 &middot; 2380 Perchtoldsdorf<br>Tel. 0676 / 305 83 98 &middot; info@loeschtechnik.at</div></div>';
+  h += '<div style="margin:12px 0; padding:8px 10px; background:#fbe9df; border-left:4px solid #c23f12; font-size:12.5px;">Mit der Kundenkarte sammeln Sie bei jedem Einkauf Punkte: <b>1 Punkt je 1 Euro (netto)</b>. Zur Anmeldung schenken wir Ihnen <b>' + TREUE_ERSTANMELDUNG_BONUS + ' Punkte Willkommensbonus</b>. Die Teilnahme ist kostenlos.</div>';
+  h += '<div style="font-weight:800; font-size:13px; margin:10px 0 4px;">Ihre Daten' + (leer ? ' <span style="font-weight:400; font-size:11px;">(bitte in Blockbuchstaben)</span>' : '') + '</div>';
+  h += '<table style="width:100%; border-collapse:collapse;">';
+  [['Vorname, Nachname', k ? kundeAnzeigeName(k) : ''], ['Straße, Hausnummer', adr1], ['PLZ, Ort', adr2], ['Telefon', a.telefon || (k && k.telefon)], ['E-Mail', a.email || (k && k.email)], ['Geburtsjahr (freiwillig)', a.geburtsjahr]].forEach(function(z){
+    h += '<tr><td style="' + tl + '">' + z[0] + '</td><td style="' + td + ' height:' + (leer ? '22' : '16') + 'px;">' + e(z[1]) + '</td></tr>';
+  });
+  h += '</table>';
+  h += '<div style="font-weight:800; font-size:13px; margin:12px 0 4px;">Vom Betrieb auszufüllen</div><table style="width:100%; border-collapse:collapse;">';
+  h += '<tr><td style="' + tl + '">Kartennummer</td><td style="' + td + '">' + (karten.length ? 'Nr. ' + karten.map(function(c){ return c.nr; }).join(', ') : '') + '</td><td style="' + tl + '">Kundennummer</td><td style="' + td + '">' + e(k && k.kundennummer) + '</td></tr>';
+  h += '<tr><td style="' + tl + '">Ausgegeben am</td><td style="' + td + '">' + (a.datum ? fmtDate(a.datum) : '') + '</td><td style="' + tl + '">Willkommensbonus gebucht</td><td style="' + td + '">' + box(!!a.bonus) + 'ja</td></tr>';
+  h += '</table>';
+  h += '<div style="display:flex; gap:16px; margin-top:12px;"><div style="flex:1;"><div style="font-weight:800; font-size:13px; margin-bottom:4px;">Prämien</div><table style="width:100%; border-collapse:collapse;">';
+  TREUE_PRAEMIEN.forEach(function(pr){ h += '<tr><td style="border-bottom:1px solid #ddd; padding:3px 4px; font-size:11.5px;">' + escapeHtml(pr.name) + '</td><td style="border-bottom:1px solid #ddd; padding:3px 4px; font-size:11.5px; text-align:right; font-weight:700; white-space:nowrap;">' + treuePunkteText(pr.punkte) + ' P.</td></tr>'; });
+  h += '</table><div style="font-size:11px; margin-top:4px;">Extra: ' + TREUE_BONUS.map(function(b){ return '+' + treuePunkteText(b.punkte) + ' ' + escapeHtml(b.name); }).join(' &middot; ') + '</div></div>';
+  h += '<div style="flex:1.25;"><div style="font-weight:800; font-size:13px; margin-bottom:4px;">Teilnahmebedingungen</div><ol style="margin:0 0 0 16px; padding:0; font-size:10.5px; line-height:1.35;">' + TREUE_BEDINGUNGEN.map(function(t){ return '<li style="margin-bottom:2px;">' + escapeHtml(t) + '</li>'; }).join('') + '</ol></div></div>';
+  h += '<div style="font-weight:800; font-size:13px; margin:12px 0 4px;">Datenschutz und Einverständnis</div><div style="font-size:11px; line-height:1.4;">' + escapeHtml(TREUE_DATENSCHUTZ) + '</div>';
+  h += '<div style="margin-top:6px; font-size:12px;">' + box(!!a.bedingungen) + 'Ich habe die Teilnahmebedingungen gelesen und bin einverstanden.</div>';
+  h += '<div style="margin-top:4px; font-size:12px;">' + box(!!a.info) + 'Ich möchte über Prüftermine und Aktionen per Telefon, SMS oder E-Mail informiert werden (freiwillig, jederzeit widerrufbar).</div>';
+  h += '<div style="display:flex; gap:24px; margin-top:22px; align-items:flex-end;">';
+  h += '<div style="flex:1;"><div style="height:44px; display:flex; align-items:flex-end; font-size:12px; padding-bottom:3px;">' + (a.datum ? 'Perchtoldsdorf, ' + fmtDate(a.datum) : '') + '</div><div style="border-top:1px solid #000; font-size:10.5px; padding-top:2px;">Ort, Datum</div></div>';
+  h += '<div style="flex:1;"><div style="height:44px; display:flex; align-items:flex-end;">' + (a.sig ? '<img src="' + a.sig + '" style="max-height:44px; max-width:100%;">' : '') + '</div><div style="border-top:1px solid #000; font-size:10.5px; padding-top:2px;">Unterschrift Kunde</div></div>';
+  h += '</div></div>';
+  return h;
+}
+function modalTreueAnmeldung(kundeId){
+  var k = kundeById(kundeId);
+  if(!k) return;
+  var a = k.treueAnmeldung || {};
+  var html = '<div class="modal-head"><h3>Anmeldeformular Treuekarte</h3><button class="close" id="mClose">&times;</button></div>';
+  html += '<div style="font-weight:800; font-size:17px;">' + escapeHtml(kundeAnzeigeName(k)) + '</div>';
+  html += '<div class="meta">' + escapeHtml(k.adresse || '') + '</div>';
+  if(a.datum) html += '<div style="margin-top:8px; padding:8px 10px; border-radius:10px; background:#e4f2e8; color:#1e7b34; font-weight:700;">&#10003; Angemeldet am ' + fmtDate(a.datum) + (a.sig ? ', unterschrieben' : '') + '</div>';
+  html += '<label>Telefon</label><input type="tel" id="taTel" value="' + escapeHtml(a.telefon || k.telefon || '') + '" autocomplete="off">';
+  html += '<label>E-Mail</label><input type="email" id="taMail" value="' + escapeHtml(a.email || k.email || '') + '" autocomplete="off">';
+  html += '<label>Geburtsjahr (freiwillig)</label><input type="text" inputmode="numeric" id="taGeb" value="' + escapeHtml(a.geburtsjahr || '') + '" placeholder="z.B. 1975" autocomplete="off">';
+  html += '<label style="display:flex; align-items:flex-start; gap:8px; font-weight:400; margin-top:12px;"><input type="checkbox" id="taBed"' + (a.bedingungen || !a.datum ? ' checked' : '') + ' style="width:22px; height:22px; flex-shrink:0;"> Teilnahmebedingungen gelesen und einverstanden</label>';
+  html += '<label style="display:flex; align-items:flex-start; gap:8px; font-weight:400; margin-top:8px;"><input type="checkbox" id="taInfo"' + (a.info ? ' checked' : '') + ' style="width:22px; height:22px; flex-shrink:0;"> Möchte über Prüftermine und Aktionen informiert werden (Telefon, SMS, E-Mail)</label>';
+  html += '<details style="margin-top:8px;"><summary class="meta" style="cursor:pointer;">Bedingungen und Datenschutz anzeigen</summary><ol style="font-size:13px; margin:6px 0 0 18px; padding:0;">' + TREUE_BEDINGUNGEN.map(function(t){ return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ol><div class="meta" style="margin-top:6px;">' + escapeHtml(TREUE_DATENSCHUTZ) + '</div></details>';
+  html += '<label style="margin-top:12px;">Unterschrift Kunde</label><canvas class="sig" id="sigPadTreue"></canvas>';
+  html += '<button type="button" class="btn small secondary" id="taSigLeer" style="margin-top:4px;">Unterschrift löschen</button>';
+  html += '<button class="btn block" id="taSpeichern" style="margin-top:14px;">Speichern &amp; PDF erstellen</button>';
+  if(a.datum) html += '<button class="btn block secondary" id="taPdf" style="margin-top:8px;">Gespeichertes Formular als PDF</button>';
+  openModal(html);
+  document.getElementById('mClose').onclick = closeModal;
+  var cv = initSigPad('sigPadTreue');
+  document.getElementById('taSigLeer').onclick = function(){ if(cv){ var c = cv.getContext('2d'); c.clearRect(0, 0, cv.width, cv.height); } };
+  var pdf = function(daten){ bsvDruckenOderTeilen(buildTreueAnmeldungHtml(k, daten), 'Treue-Anmeldung_' + String(kundeAnzeigeName(k)).replace(/[^A-Za-z0-9\u00c0-\u017f]+/g, '_') + '.pdf'); };
+  var alt = document.getElementById('taPdf'); if(alt) alt.onclick = function(){ closeModal(); pdf(a); };
+  document.getElementById('taSpeichern').onclick = function(){
+    if(!document.getElementById('taBed').checked){ toast('Bitte Teilnahmebedingungen bestätigen'); return; }
+    var sig = sigBild(cv) || a.sig || null;
+    var neu = {
+      datum: a.datum || heuteLokalKurz(),
+      telefon: document.getElementById('taTel').value.trim(),
+      email: document.getElementById('taMail').value.trim(),
+      geburtsjahr: document.getElementById('taGeb').value.trim(),
+      bedingungen: true,
+      info: document.getElementById('taInfo').checked,
+      sig: sig,
+      von: lagerAktuellerBenutzer()
+    };
+    k.treueAnmeldung = neu;
+    if(neu.telefon && !k.telefon) k.telefon = neu.telefon;
+    if(neu.email && !k.email) k.email = neu.email;
+    var bonus = treueErstanmeldungAnhaengen(k);
+    neu.bonus = bonus || (k.treueBuchungen || []).some(function(b){ return b.ref === 'erstanmeldung'; });
+    if(!k.treueAktiv) k.treueAktiv = true;
+    dbPut('kunden', k, function(){
+      treuePortalSync(k);
+      closeModal();
+      render();
+      toast('Anmeldung gespeichert' + (bonus ? ' + ' + TREUE_ERSTANMELDUNG_BONUS + ' Punkte Willkommensbonus' : ''));
+      pdf(neu);
+    });
+  };
+}
 // ---------- Umstellung alte Punkte (10/5/3 je Euro) -> 1 Punkt je Euro ----------
 var TREUE_UMSTELLUNG_REF = 'umstellung-1pe';
 var TREUE_UMSTELLUNG_BIS = '2026-11-23T14:00:00.000Z'; // Buchungen davor wurden nach altem System gerechnet
@@ -5056,6 +5149,7 @@ function modalTreueUebersicht(){
   html += treueAktionBannerHtml();
   html += '<div class="meta">' + liste.length + ' Kunden im Treueprogramm &middot; ' + frei + ' leere Karten auf Vorrat</div>';
   var umAnz = state.kunden.filter(function(k){ return k && k.treueBuchungen && treueUmstellungRechnen(k); }).length;
+  html += '<button type="button" class="btn block secondary" id="tuAnmLeer" style="margin-top:8px;">&#128221; Leeres Anmeldeformular drucken</button>';
   if(umAnz) html += '<button type="button" class="btn block" id="tuUmstellung" style="margin-top:8px; background:#c23f12; border-color:#c23f12;">&#9888;&#65039; ' + umAnz + ' Kunden haben noch alte Punkte &ndash; jetzt umrechnen</button>';
   html += '<div class="meta" style="margin-top:6px;">1 Punkt je 1 &euro; netto (für alles) &middot; Erstanmeldung +' + TREUE_ERSTANMELDUNG_BONUS + ' Punkte. Prämien: ' + TREUE_PRAEMIEN.map(function(p){ return treuePunkteText(p.punkte) + ' = ' + escapeHtml(p.name); }).join(' &middot; ') + '</div>';
   html += '<div class="card" style="margin-top:12px; padding:10px 12px;"><div style="font-weight:700;">Leere Karten auf Vorrat drucken</div><div class="meta">Wie viele Karten? (auch nur 1 St\u00fcck m\u00f6glich)</div>';
@@ -5113,6 +5207,7 @@ function modalTreueUebersicht(){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   var tuUm = document.getElementById('tuUmstellung'); if(tuUm) tuUm.onclick = function(){ closeModal(); modalTreueUmstellung(); };
+  var tuAl = document.getElementById('tuAnmLeer'); if(tuAl) tuAl.onclick = function(){ closeModal(); bsvDruckenOderTeilen(buildTreueAnmeldungHtml(null, null), 'Anmeldeformular-Treuekarte.pdf'); };
   document.getElementById('tuDruck').onclick = function(){
     var n = Math.max(1, Math.min(100, parseInt(document.getElementById('tuAnz').value, 10) || 1));
     customConfirm((n === 1 ? '1 neue, leere Treuekarte' : n + ' neue, leere Treuekarten') + ' anlegen und drucken?', function(){
