@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-23 18:05';
-var APP_VERSION_TEXT = '23.11. 18:05';
+var APP_VERSION = '2026-11-23 18:25';
+var APP_VERSION_TEXT = '23.11. 18:25';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -4761,6 +4761,7 @@ function modalTreueKunde(kundeId){
   if(istVollsicht()){
     html += '<div style="font-weight:700; margin-top:14px;">Bonus / Korrektur</div>';
     html += '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">';
+    if(!(k.treueBuchungen || []).some(function(x){ return x.ref === 'erstanmeldung'; })) html += '<button type="button" class="btn small" id="tkWillkommen" style="background:#1e8449;">+' + TREUE_ERSTANMELDUNG_BONUS + ' Willkommensbonus</button>';
     TREUE_BONUS.forEach(function(b, i){ html += '<button type="button" class="btn small secondary tkBonus" data-i="' + i + '">+' + treuePunkteText(b.punkte) + ' ' + escapeHtml(b.name) + '</button>'; });
     html += '</div>';
     html += '<div class="row" style="gap:6px; margin-top:8px;"><input type="text" inputmode="numeric" id="tkManP" placeholder="Punkte, z.B. 500 oder -200" style="flex:1; min-width:0;"><input type="text" id="tkManT" placeholder="Grund" style="flex:1; min-width:0;"><button type="button" class="btn small" id="tkMan" style="flex:0 0 auto;">OK</button></div>';
@@ -4769,7 +4770,7 @@ function modalTreueKunde(kundeId){
   if(buch.length){
     html += '<div style="font-weight:700; margin-top:14px;">Letzte Buchungen</div>';
     buch.forEach(function(b){
-      html += '<div class="row" style="padding:5px 0; border-bottom:1px solid var(--line); font-size:13px;"><div style="flex:1;">' + fmtDate(b.d) + ' &middot; ' + escapeHtml(b.t || '') + '</div><b style="color:' + (b.p < 0 ? '#c23f12' : '#1e8449') + ';">' + (b.p > 0 ? '+' : '') + treuePunkteText(b.p) + '</b></div>';
+      html += '<div class="row tkBuchung" data-bid="' + escapeHtml(String(b.id || '')) + '" style="padding:7px 0; border-bottom:1px solid var(--line); font-size:13px; cursor:pointer;"><div style="flex:1;">' + fmtDate(b.d) + ' &middot; ' + escapeHtml(b.t || '') + '</div><b style="color:' + (b.p < 0 ? '#c23f12' : '#1e8449') + ';">' + (b.p > 0 ? '+' : '') + treuePunkteText(b.p) + '</b></div>';
     });
   }
   var tkKarten = treueKartenVonKunde(k.id);
@@ -4779,6 +4780,48 @@ function modalTreueKunde(kundeId){
   openModal(html);
   document.getElementById('mClose').onclick = closeModal;
   document.getElementById('tkPortal').onclick = function(){ treuePortalSync(k, true); };
+  var tkW = document.getElementById('tkWillkommen');
+  if(tkW) tkW.onclick = function(){
+    treueBuchen(k, TREUE_ERSTANMELDUNG_BONUS, 'Willkommensbonus Erstanmeldung', 'erstanmeldung', function(){ toast('+' + TREUE_ERSTANMELDUNG_BONUS + ' Willkommensbonus'); modalTreueKunde(k.id); });
+  };
+  // Buchung antippen -> aendern oder loeschen
+  document.querySelectorAll('.tkBuchung').forEach(function(el){
+    el.onclick = function(){
+      var bid = el.getAttribute('data-bid');
+      var b = (k.treueBuchungen || []).filter(function(x){ return String(x.id || '') === bid; })[0];
+      if(!b || !bid){ toast('Diese Buchung kann nicht geändert werden'); return; }
+      if(!treueDarfEinloesen()){ toast('Ändern darf nur der Chef / die Chefsekretärin'); return; }
+      var m = '<div class="modal-head"><h3>Buchung ändern</h3><button class="close" id="mClose">&times;</button></div>';
+      m += '<div class="meta">' + fmtDate(b.d) + '</div>';
+      m += '<label>Text</label><input type="text" id="tbText" value="' + escapeHtml(b.t || '') + '" autocomplete="off">';
+      m += '<label>Punkte</label><input type="text" inputmode="numeric" id="tbP" value="' + (Number(b.p) || 0) + '">';
+      m += '<button type="button" class="btn small secondary" id="tbWill" style="margin-top:8px;">Als Willkommensbonus übernehmen</button>';
+      m += '<button class="btn block" id="tbOk" style="margin-top:14px;">Speichern</button>';
+      m += '<button class="btn block secondary" id="tbDel" style="margin-top:8px; color:#c23f12; border-color:#e6b19d;">Buchung löschen</button>';
+      openModal(m);
+      var zurueck = function(t){ dbPut('kunden', k, function(){ treuePortalSync(k); toast(t); modalTreueKunde(k.id); }); };
+      document.getElementById('mClose').onclick = function(){ modalTreueKunde(k.id); };
+      document.getElementById('tbWill').onclick = function(){
+        document.getElementById('tbText').value = 'Willkommensbonus Erstanmeldung';
+        document.getElementById('tbP').value = String(TREUE_ERSTANMELDUNG_BONUS);
+      };
+      document.getElementById('tbOk').onclick = function(){
+        var p = parseInt(String(document.getElementById('tbP').value).replace(/[^0-9-]/g, ''), 10);
+        if(isNaN(p)){ toast('Bitte Punkte eingeben'); return; }
+        b.t = document.getElementById('tbText').value.trim() || b.t;
+        b.p = p;
+        if(/willkommensbonus/i.test(b.t)) b.ref = 'erstanmeldung';
+        b.geaendert = new Date().toISOString();
+        zurueck('Buchung geändert');
+      };
+      document.getElementById('tbDel').onclick = function(){
+        customConfirm('Buchung „' + (b.t || '') + '“ (' + b.p + ' Punkte) wirklich löschen?', function(){
+          k.treueBuchungen = (k.treueBuchungen || []).filter(function(x){ return x !== b; });
+          zurueck('Buchung gelöscht');
+        });
+      };
+    };
+  });
   document.getElementById('tkZumKunden').onclick = function(){ closeModal(); state.activeKundeId = k.id; state.tab = 'kundeDetail'; render(); window.scrollTo(0, 0); };
   var neuZeigen = function(){ modalTreueKunde(k.id); if(state.tab === 'kundeDetail') render(); };
   var tkAuswahl = {};
