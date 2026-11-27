@@ -54,8 +54,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
 // Versionsnummer dieser Datei (bei jeder neuen Version aendern)
-var APP_VERSION = '2026-11-23 18:40';
-var APP_VERSION_TEXT = '23.11. 18:40';
+var APP_VERSION = '2026-11-27 11:15';
+var APP_VERSION_TEXT = '27.11. 11:15';
 // Offline-Speicher einschalten (sw.js): App startet auch ohne Netz, mit Netz kommt immer die neueste Version
 try {
   if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
@@ -3238,8 +3238,10 @@ function darfStundenSehen(){
   return !!(m && (m.stundenSehen || m.stundenVoll));
 }
 // Voller Zugriff auf die Zeiterfassung (ansehen + korrigieren/nachtragen), wie der Chef
+// -> nur Chef und Manuela Holakovsky (ZEIT_AENDERN_NAMEN)
 function darfStundenVoll(){
   if(state.rolle === 'chef') return true;
+  if(typeof ZEIT_AENDERN_NAMEN !== 'undefined' && ZEIT_AENDERN_NAMEN.indexOf(state.mitarbeiterName) === -1) return false;
   var m = MITARBEITER_LISTE.filter(function(x){ return x.name === state.mitarbeiterName; })[0];
   return !!(m && m.stundenVoll);
 }
@@ -13445,7 +13447,13 @@ function zeitStatus(name){
   return { key: 'arbeit', label: tw ? 'Im Teleworking' : 'Bei der Arbeit', farbe: tw ? '#6a4fb0' : 'var(--ok)', liste: liste };
 }
 
+// Zeiten aendern (andere Uhrzeit stempeln, nachtragen, loeschen) duerfen nur der Chef und Manuela Holakovsky
+var ZEIT_AENDERN_NAMEN = ['Holakovsky Manuela'];
+function zeitDarfAendern(){
+  return state.rolle === 'chef' || ZEIT_AENDERN_NAMEN.indexOf(state.mitarbeiterName) !== -1;
+}
 function zeitStempeln(name, typ, ortWert, notiz, cb, uhrzeit){
+  if(uhrzeit && !zeitDarfAendern()) uhrzeit = ''; // Mitarbeiter stempeln immer mit der echten Uhrzeit
   var o = zeitOrtAusWert(ortWert);
   var jetztD = new Date();
   var zeitD = jetztD;
@@ -13519,9 +13527,14 @@ function zeitAktionenHtml(name, st){
   var letzteOrt = st.liste.length ? st.liste[st.liste.length - 1] : null;
   var vorwahl = letzteOrt && letzteOrt.ort ? (letzteOrt.ort === 'Bad' ? 'bad' : (letzteOrt.ort === 'Eislaufplatz' ? 'eislauf' : '')) || (letzteOrt.ort === 'Kunde' ? 'k:' + letzteOrt.kundeId : (letzteOrt.ort === 'Lager' ? 'lager' : (letzteOrt.ort === 'Teleworking' ? 'teleworking' : (letzteOrt.ort === 'Arzt' ? 'arzt' : 'sonst')))) : '';
   if(vorwahl === 'arzt') vorwahl = '';
-  h += '<details style="margin-top:12px;"><summary class="meta" style="cursor:pointer; padding:6px 0;">Uhrzeit ändern / Wo war ich? / Notiz (optional)</summary>';
-  h += '<label style="margin-top:8px;">Uhrzeit (nur ausfüllen, wenn du das Stempeln vergessen hast)</label>';
-  h += '<input type="time" data-zeitzeit="' + escapeHtml(name) + '">';
+  var uhrOk = zeitDarfAendern();
+  h += '<details style="margin-top:12px;"><summary class="meta" style="cursor:pointer; padding:6px 0;">' + (uhrOk ? 'Uhrzeit ändern / ' : '') + 'Wo war ich? / Notiz (optional)</summary>';
+  if(uhrOk){
+    h += '<label style="margin-top:8px;">Uhrzeit (nur ausfüllen, wenn das Stempeln vergessen wurde)</label>';
+    h += '<input type="time" data-zeitzeit="' + escapeHtml(name) + '">';
+  } else {
+    h += '<div class="meta" style="margin-top:8px;">Gestempelt wird immer mit der aktuellen Uhrzeit. Vergessen? Bitte beim Chef oder bei Manuela melden &ndash; nur sie dürfen Zeiten ändern.</div>';
+  }
   h += '<label style="margin-top:8px;">Wo? (Kunde / Lager / Teleworking / Arzt)</label>';
   h += '<select data-zeitort="' + escapeHtml(name) + '"><option value="">– nicht angegeben –</option>' + zeitOrtOptionenHtml(vorwahl) + '</select>';
   h += '<label style="margin-top:8px;">Notiz: wo war ich? (frei eintragen)</label>';
@@ -13613,7 +13626,7 @@ function renderZeit(){
     var zukunft = zeitEintraege(name, null).filter(zeitIstZukunft);
     zukunft.forEach(function(z){
       var d = new Date(z.zeit);
-      html += '<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#fbe9e3; color:#c23f12; font-size:13px; display:flex; gap:8px; align-items:center;"><span style="flex:1;">&#9888; Stempel in der Zukunft: <b>' + ZEIT_TYPEN[z.typ] + ' ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '. ' + zeitUhr(z.zeit) + '</b> &ndash; wahrscheinlich falsche Uhrzeit</span><button type="button" class="btn small" data-zeitzukunftdel="' + escapeHtml(z.id) + '" style="margin:0; background:#c23f12;">Löschen</button></div>';
+      html += '<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#fbe9e3; color:#c23f12; font-size:13px; display:flex; gap:8px; align-items:center;"><span style="flex:1;">&#9888; Stempel in der Zukunft: <b>' + ZEIT_TYPEN[z.typ] + ' ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '. ' + zeitUhr(z.zeit) + '</b> &ndash; wahrscheinlich falsche Uhrzeit</span>' + (zeitDarfAendern() ? '<button type="button" class="btn small" data-zeitzukunftdel="' + escapeHtml(z.id) + '" style="margin:0; background:#c23f12;">Löschen</button>' : '<span style="font-size:11px;">bitte Chef/Manuela melden</span>') + '</div>';
     });
     html += '<div style="margin-top:6px;">' + zeitAktionenHtml(name, st) + '</div>';
     html += '</div>';
